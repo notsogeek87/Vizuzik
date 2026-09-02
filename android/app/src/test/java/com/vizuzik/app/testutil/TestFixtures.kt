@@ -1,13 +1,12 @@
 package com.vizuzik.app.testutil
 
-import android.net.Uri
 import com.vizuzik.app.domain.model.MusicSourceType
 import com.vizuzik.app.domain.model.Track
 
 /**
- * Ces tests JVM tournent sans Robolectric : [Uri.EMPTY] est le seul usage
- * d'[android.net.Uri] toléré (aucun test n'appelle de méthode dessus, seul
- * un remplissage de champ non-nul est nécessaire).
+ * Aucune dépendance au framework Android : le modèle de domaine porte des
+ * URIs sous forme de chaînes, donc ces tests tournent en JVM pur, sans
+ * Robolectric ni android.jar mocké.
  */
 fun testTrack(
     id: String,
@@ -28,7 +27,7 @@ fun testTrack(
     albumId = "local:album:${album.hashCode()}",
     albumArtist = artist,
     duration = 200_000L,
-    uri = Uri.EMPTY,
+    uri = "content://media/external/audio/media/$id",
     artworkUri = null,
     trackNumber = trackNumber,
     discNumber = discNumber,

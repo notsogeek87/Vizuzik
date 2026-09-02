@@ -1,6 +1,5 @@
 package com.vizuzik.app.data.local.db.entity
 
-import android.net.Uri
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.vizuzik.app.domain.model.MusicSourceType
@@ -40,8 +39,8 @@ fun Track.toEntity(): TrackEntity = TrackEntity(
     albumId = albumId,
     albumArtist = albumArtist,
     duration = duration,
-    uri = uri.toString(),
-    artworkUri = artworkUri?.toString(),
+    uri = uri,
+    artworkUri = artworkUri,
     trackNumber = trackNumber,
     discNumber = discNumber,
     year = year,
@@ -59,8 +58,8 @@ fun TrackEntity.toDomain(): Track = Track(
     albumId = albumId,
     albumArtist = albumArtist,
     duration = duration,
-    uri = Uri.parse(uri),
-    artworkUri = artworkUri?.let { Uri.parse(it) },
+    uri = uri,
+    artworkUri = artworkUri,
     trackNumber = trackNumber,
     discNumber = discNumber,
     year = year,

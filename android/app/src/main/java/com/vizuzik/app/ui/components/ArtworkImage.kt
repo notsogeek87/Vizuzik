@@ -1,6 +1,5 @@
 package com.vizuzik.app.ui.components
 
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +24,7 @@ import coil.compose.SubcomposeAsyncImage
  */
 @Composable
 fun ArtworkImage(
-    uri: Uri?,
+    uri: String?,
     modifier: Modifier = Modifier,
     cornerRadius: Int = 8,
     fallbackIcon: ImageVector = Icons.Filled.MusicNote,

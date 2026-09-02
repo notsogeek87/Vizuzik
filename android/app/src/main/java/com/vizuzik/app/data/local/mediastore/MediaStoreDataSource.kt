@@ -2,9 +2,7 @@ package com.vizuzik.app.data.local.mediastore
 
 import android.content.ContentUris
 import android.content.Context
-import android.net.Uri
 import android.provider.MediaStore
-import androidx.core.net.toUri
 import com.vizuzik.app.R
 import com.vizuzik.app.di.IoDispatcher
 import com.vizuzik.app.domain.model.MusicSourceType
@@ -81,7 +79,7 @@ class MediaStoreDataSource @Inject constructor(
                     albumId = "${MusicSourceType.LOCAL.idPrefix}:album:$albumId",
                     albumArtist = albumArtist,
                     duration = cursor.getLong(durationCol),
-                    uri = ContentUris.withAppendedId(collection, id),
+                    uri = ContentUris.withAppendedId(collection, id).toString(),
                     artworkUri = albumArtUri(albumId),
                     trackNumber = if (rawTrackNumber >= 1000) rawTrackNumber % 1000 else rawTrackNumber,
                     discNumber = if (rawTrackNumber >= 1000) rawTrackNumber / 1000 else 1,
@@ -94,6 +92,6 @@ class MediaStoreDataSource @Inject constructor(
         tracks
     }
 
-    private fun albumArtUri(albumId: Long): Uri =
-        "content://media/external/audio/albumart/$albumId".toUri()
+    private fun albumArtUri(albumId: Long): String =
+        "content://media/external/audio/albumart/$albumId"
 }

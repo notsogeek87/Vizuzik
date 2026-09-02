@@ -1,5 +1,6 @@
 package com.vizuzik.app.player
 
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.vizuzik.app.domain.model.RepeatMode
@@ -22,7 +23,7 @@ fun Track.toMediaItem(): MediaItem =
                 .setArtist(artist)
                 .setAlbumTitle(album)
                 .setAlbumArtist(albumArtist)
-                .setArtworkUri(artworkUri)
+                .setArtworkUri(artworkUri?.toUri())
                 .setTrackNumber(trackNumber.takeIf { it > 0 })
                 .setDiscNumber(discNumber.takeIf { it > 0 })
                 .setRecordingYear(year.takeIf { it > 0 })

@@ -1,6 +1,5 @@
 package com.vizuzik.app.testutil
 
-import android.net.Uri
 import com.vizuzik.app.domain.model.MusicSourceType
 import com.vizuzik.app.domain.model.Track
 
@@ -24,7 +23,7 @@ fun testTrack(
     albumId = "local:album:${album.hashCode()}",
     albumArtist = artist,
     duration = 200_000L,
-    uri = Uri.EMPTY,
+    uri = "content://media/external/audio/media/$id",
     artworkUri = null,
     trackNumber = 1,
     discNumber = 1,
