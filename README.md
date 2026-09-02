@@ -8,10 +8,21 @@ intégration Deezer n'existe dans cette version.**
 
 ## Stack
 
-Kotlin · Jetpack Compose · Material 3 · Media3/ExoPlayer (lecture + `MediaSession`) ·
-Hilt · Room · DataStore · Coroutines/Flow · Coil.
+`minSdk 26` (Android 8.0+) · `compileSdk`/`targetSdk 36` · AGP 8.13.0 · Gradle 8.14.3 · JDK 17/21.
 
-`minSdk 26` (Android 8.0+) · `compileSdk`/`targetSdk 36`.
+| Brique | Version |
+|---|---|
+| Kotlin | 2.0.21 — **pas 2.1.x** : kapt (Room/Hilt) ne lit pas encore les métadonnées 2.1 |
+| Compose (BOM) | 2024.12.01 + Material 3 |
+| Media3 / ExoPlayer | 1.5.0 (`media3-exoplayer`, `media3-session`) |
+| Hilt | 2.52 |
+| Room | 2.6.1 |
+| DataStore Preferences | 1.1.1 |
+| Coroutines | 1.9.0 |
+| Coil (pochettes) | 2.7.0 |
+
+Versions volontairement conservatrices et vérifiées en CI ; à monter d'un bloc lors
+d'une prochaine itération (passer de kapt à KSP débloquerait Kotlin 2.1+).
 
 ## Architecture
 
@@ -56,6 +67,14 @@ bibliothèque ne dépend jamais de `MediaStore` en dehors de `LocalMusicSource`.
 - Visualiseur : analyseur de spectre simple (FFT via `Visualizer`).
 - 3 skins (Modern, Winamp Classic, Dark), changement dynamique et persisté.
 - Recherche insensible à la casse/aux accents.
+
+### Limites connues
+
+- Les tests instrumentés Compose (`androidTest/`) sont écrits mais pas exécutés en CI :
+  ça demanderait un émulateur dans le workflow.
+- Les pochettes passent par l'URI historique `content://media/external/audio/albumart/<id>`,
+  avec repli sur une icône quand elle est absente ou refusée par le système.
+- APK signé avec la clé de debug uniquement — pas de clé de release configurée.
 
 ### Volontairement laissé pour une itération suivante
 
