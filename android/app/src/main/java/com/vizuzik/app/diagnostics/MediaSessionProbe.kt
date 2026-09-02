@@ -30,7 +30,15 @@ data class SessionReport(
     val declaredActions: List<String>,
     val decisiveActions: List<String>,
     val queueSize: Int?,
+    val queueItems: List<QueueEntry>,
     val customActions: List<String>,
+)
+
+/** Un élément de la file exposée par l'autre app, avec ses identifiants natifs. */
+data class QueueEntry(
+    val queueId: Long,
+    val mediaId: String?,
+    val title: String?,
 )
 
 @Singleton
@@ -66,6 +74,13 @@ class MediaSessionProbe @Inject constructor(
             declaredActions = declared,
             decisiveActions = declared.filter { it in DECISIVE },
             queueSize = controller.queue?.size,
+            queueItems = controller.queue.orEmpty().take(6).map { item ->
+                QueueEntry(
+                    queueId = item.queueId,
+                    mediaId = item.description.mediaId,
+                    title = item.description.title?.toString(),
+                )
+            },
             customActions = playback?.customActions?.map { "${it.action} (${it.name})" }.orEmpty(),
         )
     }
@@ -102,11 +117,17 @@ class MediaSessionProbe @Inject constructor(
     private fun decodeActions(mask: Long): List<String> =
         ACTION_NAMES.filter { (flag, _) -> mask and flag != 0L }.map { it.value }
 
-    /** Rapport texte, destiné à être copié et renvoyé pour analyse. */
-    fun textReport(hasAccess: Boolean, reports: List<SessionReport>): String = buildString {
+    /**
+     * Rapport texte, destiné à être copié et renvoyé pour analyse.
+     * [lastResult] est le verdict du dernier test live : c'est LUI qui tranche,
+     * pas les actions déclarées — une app annonce souvent des commandes qu'elle
+     * n'implémente pas (Media3 les déclare par défaut).
+     */
+    fun textReport(hasAccess: Boolean, reports: List<SessionReport>, lastResult: String?): String = buildString {
         appendLine("=== Sonde MediaSession Vizuzik ===")
         appendLine("Accès aux notifications : ${if (hasAccess) "accordé" else "REFUSÉ"}")
         appendLine("Sessions actives : ${reports.size}")
+        appendLine("DERNIER TEST LIVE : ${lastResult ?: "aucun test effectué"}")
         reports.forEach { r ->
             appendLine()
             appendLine("--- ${r.packageName} ---")
@@ -117,6 +138,9 @@ class MediaSessionProbe @Inject constructor(
             appendLine("durée         : ${r.durationMs} ms")
             appendLine("pochette      : ${r.artwork}")
             appendLine("file d'attente: ${r.queueSize?.toString() ?: "non exposée"}")
+            r.queueItems.forEach { item ->
+                appendLine("  · queueId=${item.queueId} mediaId=${item.mediaId ?: "—"} « ${item.title ?: "—"} »")
+            }
             appendLine("actions décisives : ${r.decisiveActions.ifEmpty { listOf("AUCUNE") }.joinToString()}")
             appendLine("toutes actions    : ${r.declaredActions.ifEmpty { listOf("aucune") }.joinToString()}")
             if (r.customActions.isNotEmpty()) appendLine("actions custom    : ${r.customActions.joinToString()}")

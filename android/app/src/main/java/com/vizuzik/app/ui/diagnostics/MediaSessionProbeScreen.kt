@@ -50,6 +50,7 @@ fun MediaSessionProbeScreen(onBack: () -> Unit, viewModel: MediaSessionProbeView
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     var query by remember { mutableStateOf("") }
+    var trackUrl by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -138,8 +139,13 @@ fun MediaSessionProbeScreen(onBack: () -> Unit, viewModel: MediaSessionProbeView
                     report = report,
                     query = query,
                     onQueryChange = { query = it },
+                    trackUrl = trackUrl,
+                    onTrackUrlChange = { trackUrl = it },
                     onTransport = { viewModel.sendTransport(report.packageName, it) },
                     onPlayFromSearch = { viewModel.testPlayFromSearch(report.packageName, query) },
+                    onPlayFromUri = { viewModel.testPlayFromUri(report.packageName, trackUrl) },
+                    onPlayFromMediaId = { viewModel.testPlayFromMediaId(report.packageName, it) },
+                    onSkipToQueueItem = { viewModel.testSkipToQueueItem(report.packageName, it) },
                 )
             }
         }
@@ -152,8 +158,13 @@ private fun SessionCard(
     report: SessionReport,
     query: String,
     onQueryChange: (String) -> Unit,
+    trackUrl: String,
+    onTrackUrlChange: (String) -> Unit,
     onTransport: (TransportCommand) -> Unit,
     onPlayFromSearch: () -> Unit,
+    onPlayFromUri: () -> Unit,
+    onPlayFromMediaId: (String) -> Unit,
+    onSkipToQueueItem: (Long) -> Unit,
 ) {
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -222,7 +233,41 @@ private fun SessionCard(
                 )
             }
             Button(onClick = onPlayFromSearch, enabled = query.isNotBlank()) {
-                Text("Lancer une recherche")
+                Text("1. Lancer une recherche (playFromSearch)")
+            }
+
+            OutlinedTextField(
+                value = trackUrl,
+                onValueChange = onTrackUrlChange,
+                label = { Text("URL d'un morceau (deezer.com/track/…)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(onClick = onPlayFromUri, enabled = trackUrl.isNotBlank()) {
+                Text("2. Lancer cette URL (playFromUri)")
+            }
+
+            if (report.queueItems.isNotEmpty()) {
+                Text(
+                    "3. Depuis la file exposée par l'app — ce sont ses propres identifiants, " +
+                        "donc le déclenchement le plus fiable possible :",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                report.queueItems.forEach { item ->
+                    Column {
+                        Text(
+                            "« ${item.title ?: "—"} »  ·  mediaId=${item.mediaId ?: "—"}  ·  queueId=${item.queueId}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item.mediaId?.let { id ->
+                                OutlinedButton(onClick = { onPlayFromMediaId(id) }) { Text("playFromMediaId") }
+                            }
+                            OutlinedButton(onClick = { onSkipToQueueItem(item.queueId) }) { Text("skipToQueueItem") }
+                        }
+                    }
+                }
             }
         }
     }

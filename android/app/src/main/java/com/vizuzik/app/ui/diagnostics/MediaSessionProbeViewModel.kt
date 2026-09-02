@@ -1,5 +1,7 @@
 package com.vizuzik.app.ui.diagnostics
 
+import android.media.session.MediaController
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vizuzik.app.diagnostics.MediaSessionProbe
@@ -38,26 +40,18 @@ class MediaSessionProbeViewModel @Inject constructor(
         _state.update { it.copy(hasAccess = hasAccess, reports = reports) }
     }
 
-    fun textReport(): String = probe.textReport(_state.value.hasAccess, _state.value.reports)
+    fun textReport(): String =
+        probe.textReport(_state.value.hasAccess, _state.value.reports, _state.value.lastResult)
 
     fun sendTransport(packageName: String, command: TransportCommand) {
-        val controller = probe.activeControllers().firstOrNull { it.packageName == packageName }
-        if (controller == null) {
-            _state.update { it.copy(lastResult = "Session $packageName introuvable — relance la lecture puis actualise.") }
-            return
-        }
-        runCatching {
+        withSession(packageName, command.name) { controller ->
             when (command) {
                 TransportCommand.PLAY -> controller.transportControls.play()
                 TransportCommand.PAUSE -> controller.transportControls.pause()
                 TransportCommand.NEXT -> controller.transportControls.skipToNext()
                 TransportCommand.PREVIOUS -> controller.transportControls.skipToPrevious()
             }
-        }.onFailure { error ->
-            _state.update { it.copy(lastResult = "${command.name} a échoué : ${error.message}") }
-            return
         }
-        observeEffect("${command.name} envoyée", packageName)
     }
 
     /**
@@ -67,17 +61,44 @@ class MediaSessionProbeViewModel @Inject constructor(
      */
     fun testPlayFromSearch(packageName: String, query: String) {
         if (query.isBlank()) return
+        withSession(packageName, "playFromSearch(\"$query\")") { controller ->
+            controller.transportControls.playFromSearch(query, null)
+        }
+    }
+
+    /** Deezer déclare PLAY_FROM_URI : une URL deezer.com pointe un morceau précis. */
+    fun testPlayFromUri(packageName: String, uri: String) {
+        if (uri.isBlank()) return
+        withSession(packageName, "playFromUri(\"$uri\")") { controller ->
+            controller.transportControls.playFromUri(uri.toUri(), null)
+        }
+    }
+
+    /** Le plus fiable : on rejoue un identifiant que l'app a elle-même publié dans sa file. */
+    fun testPlayFromMediaId(packageName: String, mediaId: String) {
+        withSession(packageName, "playFromMediaId(\"$mediaId\")") { controller ->
+            controller.transportControls.playFromMediaId(mediaId, null)
+        }
+    }
+
+    /** Non déclaré par Deezer, mais à essayer quand même : déclarer n'est pas honorer. */
+    fun testSkipToQueueItem(packageName: String, queueId: Long) {
+        withSession(packageName, "skipToQueueItem($queueId)") { controller ->
+            controller.transportControls.skipToQueueItem(queueId)
+        }
+    }
+
+    private fun withSession(packageName: String, label: String, action: (MediaController) -> Unit) {
         val controller = probe.activeControllers().firstOrNull { it.packageName == packageName }
         if (controller == null) {
             _state.update { it.copy(lastResult = "Session $packageName introuvable — relance la lecture puis actualise.") }
             return
         }
-        runCatching { controller.transportControls.playFromSearch(query, null) }
-            .onFailure { error ->
-                _state.update { it.copy(lastResult = "playFromSearch a échoué : ${error.message}") }
-                return
-            }
-        observeEffect("playFromSearch(\"$query\") envoyée", packageName)
+        runCatching { action(controller) }.onFailure { error ->
+            _state.update { it.copy(lastResult = "$label a échoué : ${error.message}") }
+            return
+        }
+        observeEffect(label, packageName)
     }
 
     /** Compare le morceau avant/après pour dire si la commande a vraiment agi. */
