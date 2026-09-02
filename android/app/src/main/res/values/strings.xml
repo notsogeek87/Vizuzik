@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Vizuzik</string>
+    <string name="title_activity_main">Vizuzik</string>
+    <string name="package_name">com.vizuzik.app</string>
+    <string name="custom_url_scheme">com.vizuzik.app</string>
+</resources>

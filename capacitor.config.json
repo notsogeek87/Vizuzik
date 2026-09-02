@@ -1,0 +1,8 @@
+{
+  "appId": "com.vizuzik.app",
+  "appName": "Vizuzik",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
