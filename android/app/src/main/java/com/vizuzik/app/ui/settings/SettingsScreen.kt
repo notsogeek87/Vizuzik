@@ -8,6 +8,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
@@ -38,6 +39,7 @@ import com.vizuzik.app.ui.components.SectionHeader
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDeezerProbe: () -> Unit,
+    onOpenDeezerAuth: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val themeId by viewModel.themeId.collectAsStateWithLifecycle()
@@ -67,6 +69,15 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
+            }
+
+            SectionHeader(title = "Deezer")
+            OutlinedButton(
+                onClick = onOpenDeezerAuth,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) {
+                Icon(Icons.Filled.CloudQueue, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text("Se connecter à Deezer")
             }
 
             SectionHeader(title = "Diagnostic")
