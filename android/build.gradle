@@ -18,12 +18,9 @@ buildscript {
     }
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+// Les repositories des sous-projets (dont :app) sont centralisés dans
+// settings.gradle (dependencyResolutionManagement) ; ne pas les redéclarer
+// ici, incompatible avec repositoriesMode = FAIL_ON_PROJECT_REPOS.
 
 task clean(type: Delete) {
     delete rootProject.buildDir
