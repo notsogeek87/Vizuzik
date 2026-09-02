@@ -113,15 +113,24 @@ class MediaSessionProbeViewModel @Inject constructor(
             // verdict anonyme laisse croire qu'on a testé Deezer alors qu'on a
             // pu appuyer sur la carte d'une autre app en ayant scrollé.
             val target = "[$packageName]"
+            // La file doit être comparée elle aussi : une commande peut charger
+            // un nouvel album sans que le titre en cours change dans les 2,5 s,
+            // et un verdict basé sur le seul titre annoncerait alors un échec
+            // à tort.
+            val queueChanged = after != null && before != null &&
+                (after.queueSize != before.queueSize || after.queueItems != before.queueItems)
             val verdict = when {
                 after == null -> "$target $label → la session a disparu."
                 before == null -> "$target $label → état : ${after.state} · ${after.title ?: "sans titre"}"
                 after.title != before.title ->
                     "$target $label → ✅ le morceau a changé : « ${before.title ?: "—"} » → « ${after.title ?: "—"} »"
+                queueChanged ->
+                    "$target $label → ✅ la file a changé (${before.queueSize ?: 0} → ${after.queueSize ?: 0} titres, " +
+                        "1er : « ${after.queueItems.firstOrNull()?.title ?: "—"} ») — commande acceptée"
                 after.state != before.state ->
                     "$target $label → ✅ l'état a changé : ${before.state} → ${after.state}"
                 else ->
-                    "$target $label → ❌ aucun changement observé (morceau et état identiques)"
+                    "$target $label → ❌ aucun changement (titre, file et état identiques)"
             }
             _state.update { it.copy(busy = false, lastResult = verdict) }
         }
