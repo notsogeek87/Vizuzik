@@ -241,7 +241,11 @@ private fun SessionCard(
                 OutlinedButton(onClick = { onTransport(TransportCommand.NEXT) }) { Text("Suivant") }
             }
 
-            Text("Test décisif", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Test décisif — cible : ${report.packageName}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
             Text(
                 "Une commande peut fonctionner même si l'app ne la déclare pas — il faut donc l'essayer " +
                     "réellement. Tape un artiste ou un titre que tu as sur Deezer.",

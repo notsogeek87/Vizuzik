@@ -109,15 +109,19 @@ class MediaSessionProbeViewModel @Inject constructor(
             delay(2_500)
             refresh()
             val after = _state.value.reports.firstOrNull { it.packageName == packageName }
+            // La cible est nommée : chaque session a ses propres boutons, et un
+            // verdict anonyme laisse croire qu'on a testé Deezer alors qu'on a
+            // pu appuyer sur la carte d'une autre app en ayant scrollé.
+            val target = "[$packageName]"
             val verdict = when {
-                after == null -> "$label → la session a disparu."
-                before == null -> "$label → état : ${after.state} · ${after.title ?: "sans titre"}"
+                after == null -> "$target $label → la session a disparu."
+                before == null -> "$target $label → état : ${after.state} · ${after.title ?: "sans titre"}"
                 after.title != before.title ->
-                    "$label → ✅ le morceau a changé : « ${before.title ?: "—"} » → « ${after.title ?: "—"} »"
+                    "$target $label → ✅ le morceau a changé : « ${before.title ?: "—"} » → « ${after.title ?: "—"} »"
                 after.state != before.state ->
-                    "$label → ✅ l'état a changé : ${before.state} → ${after.state}"
+                    "$target $label → ✅ l'état a changé : ${before.state} → ${after.state}"
                 else ->
-                    "$label → ❌ aucun changement observé (morceau et état identiques)"
+                    "$target $label → ❌ aucun changement observé (morceau et état identiques)"
             }
             _state.update { it.copy(busy = false, lastResult = verdict) }
         }
