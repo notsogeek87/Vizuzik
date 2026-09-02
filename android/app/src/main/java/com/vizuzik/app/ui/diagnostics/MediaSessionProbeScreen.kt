@@ -26,9 +26,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +54,14 @@ fun MediaSessionProbeScreen(onBack: () -> Unit, viewModel: MediaSessionProbeView
     var query by remember { mutableStateOf("") }
     var trackUrl by remember { mutableStateOf("") }
 
+    // Pré-remplit avec l'artiste en cours : sinon le bouton de recherche reste
+    // grisé et l'appui semble « ne rien faire ».
+    LaunchedEffect(state.reports) {
+        if (query.isBlank()) {
+            query = state.reports.firstNotNullOfOrNull { it.artist }.orEmpty()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -66,6 +76,21 @@ fun MediaSessionProbeScreen(onBack: () -> Unit, viewModel: MediaSessionProbeView
                     }
                 },
             )
+        },
+        // Le verdict vit dans une barre fixe en bas : les boutons de test sont
+        // en bas de la liste, un résultat affiché en haut serait hors écran.
+        bottomBar = {
+            state.lastResult?.let { result ->
+                Surface(tonalElevation = 3.dp) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("Dernier test", style = MaterialTheme.typography.titleSmall)
+                        Text(result, style = MaterialTheme.typography.bodyMedium)
+                        if (state.busy) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                        }
+                    }
+                }
+            }
         },
     ) { padding ->
         LazyColumn(
@@ -107,20 +132,6 @@ fun MediaSessionProbeScreen(onBack: () -> Unit, viewModel: MediaSessionProbeView
                                 "5. Copie le rapport (icône en haut) et renvoie-le moi.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                    }
-                }
-            }
-
-            state.lastResult?.let { result ->
-                item {
-                    Card {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("Dernier test", style = MaterialTheme.typography.titleSmall)
-                            Text(result, style = MaterialTheme.typography.bodyMedium)
-                            if (state.busy) {
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                            }
-                        }
                     }
                 }
             }
@@ -169,6 +180,22 @@ private fun SessionCard(
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(report.packageName, style = MaterialTheme.typography.titleMedium)
+
+            // Test principal : un seul appui, aucune saisie. On redemande à
+            // l'app de jouer un morceau qu'elle a elle-même publié dans sa
+            // file — si elle refuse ça, elle n'honore rien.
+            report.queueItems.firstOrNull()?.mediaId?.let { mediaId ->
+                Button(
+                    onClick = { onPlayFromMediaId(mediaId) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("▶ LANCER LE TEST (aucune saisie requise)")
+                }
+                Text(
+                    "Appuie, attends 3 secondes, et lis le verdict en bas de l'écran.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
 
             Text(
                 buildString {
