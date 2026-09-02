@@ -1,10 +1,7 @@
 # Vizuzik
 
-Lecteur musical Android façon Winamp, moderne, pour la musique locale — **V0.1**.
-
-Pensé pour qu'une source Deezer officielle puisse être ajoutée plus tard sans réécrire
-l'application (voir [Prêt pour Deezer](#prêt-pour-une-future-source-deezer)). **Aucune
-intégration Deezer n'existe dans cette version.**
+Lecteur musical Android façon Winamp, moderne, pour la musique locale — **V0.1** — et
+capable de piloter Deezer avec ce même skin (voir [Deezer](#deezer)).
 
 ## Stack
 
@@ -27,12 +24,14 @@ d'une prochaine itération (passer de kapt à KSP débloquerait Kotlin 2.1+).
 ## Architecture
 
 Clean Architecture / MVVM, avec la bibliothèque musicale abstraite derrière une
-interface `MusicSource` pour permettre une future source distante (Deezer) sans
-toucher à l'UI ni au lecteur :
+interface `MusicSource` et le lecteur derrière `MusicPlayer`, ce qui a permis de
+brancher Deezer (voir [Deezer](#deezer)) sans toucher à l'UI :
 
 ```
-domain/source/MusicSource (interface) ← data/source/LocalMusicSource (V0.1, MediaStore)
-domain/player/MusicPlayer (interface) ← player/Media3MusicPlayer (Media3/ExoPlayer)
+domain/source/MusicSource (interface) ← data/source/LocalMusicSource (MediaStore)
+domain/player/MusicPlayer (interface) ← player/MusicPlayerRouter (délègue selon la source active)
+                                           ├─ player/Media3MusicPlayer (local, Media3/ExoPlayer)
+                                           └─ player/deezer/DeezerRemotePlayer (télécommande Deezer)
 domain/repository/MusicRepository     ← data/repository/MusicRepositoryImpl (cache Room)
 ```
 
@@ -40,16 +39,20 @@ domain/repository/MusicRepository     ← data/repository/MusicRepositoryImpl (c
 app/src/main/java/com/vizuzik/app/
   domain/            modèles, interfaces (MusicSource, MusicPlayer), use cases, agrégation
   data/              MediaStore, cache Room, playlists, préférences (DataStore)
-  player/            Media3MusicPlayer (MediaController) + PlaybackService (MediaSession)
+  data/remote/deezer/ client OAuth + API Deezer (voir Deezer)
+  player/            MusicPlayerRouter, Media3MusicPlayer (MediaController) + PlaybackService
+  player/deezer/     DeezerRemotePlayer (télécommande de la session média Deezer)
   audio/             AudioEngine + Equalizer/BassBoost/Virtualizer/Reverb (android.media.audiofx)
   visualizer/        Visualizer (FFT) + barres de spectre Compose
   theme/             PlayerTheme + 3 skins (Modern, Winamp Classic, Dark)
   di/                modules Hilt
-  ui/                navigation, mini-player, écrans (home/tracks/albums/artists/playlists/player/...)
+  diagnostics/       sonde MediaSession (développement/diagnostic Deezer)
+  ui/                navigation, mini-player, écrans (home/tracks/albums/artists/playlists/player/deezer/...)
 ```
 
-L'UI ne dépend jamais d'ExoPlayer : seulement de `MusicPlayer`. La couche
-bibliothèque ne dépend jamais de `MediaStore` en dehors de `LocalMusicSource`.
+L'UI ne dépend jamais d'ExoPlayer ni de Deezer directement : seulement de
+`MusicPlayer`. La couche bibliothèque ne dépend jamais de `MediaStore` en dehors
+de `LocalMusicSource`.
 
 ## Fonctionnalités V0.1
 
@@ -103,18 +106,78 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 Ou récupérer l'APK depuis les Releases GitHub / artefacts du workflow
 `.github/workflows/android.yml` (build automatique à chaque push).
 
-## Prêt pour une future source Deezer
+## Deezer
 
-- `MusicSource` (tracks/albums/artists/search) est déjà l'interface que
-  `DeezerMusicSource` implémenterait.
-- `Track`/`Album`/`Artist` portent un `sourceType` (`LOCAL`/`DEEZER`) et des
-  identifiants préfixés par source (`local:123`), pensés pour cohabiter avec des
-  identifiants Deezer sans collision.
-- `MusicRepository` agrège déjà les sources par construction ; brancher Deezer
-  n'implique pas de changement d'UI ni de player.
-- Le lecteur (`MusicPlayer`) et l'UI ne connaissent que des `Track` du domaine —
-  peu importe leur origine.
+Deezer ne propose aucun accord commercial de streaming complet pour une app tierce
+(API publique limitée à 30 s d'extrait, SDK natif déprécié) : Vizuzik ne lit donc
+jamais l'audio Deezer lui-même. À la place, il **télécommande la session média de
+l'app Deezer officielle** (déjà installée sur l'appareil) via les API Android
+standard (`MediaSessionManager`/`MediaController`), avec le skin choisi dans
+Vizuzik. Validé en direct : `playFromSearch` lance fiablement un album/playlist
+par son nom, sans garantie de précision au morceau près — largement suffisant
+pour lancer un album ou une playlist qu'on a déjà sur Deezer.
+
+Ce que ça permet :
+- Se connecter à son compte Deezer (OAuth) et voir ses albums/playlists.
+- Toucher un album/playlist l'envoie à l'app Deezer, qui doit avoir été ouverte
+  au moins une fois auparavant sur l'appareil.
+- Le mini-player et l'écran plein écran de Vizuzik reflètent alors ce que joue
+  Deezer (titre, pochette, position, play/pause/suivant/précédent) avec le skin
+  choisi.
+
+Ce que ça ne permet pas :
+- Choisir un morceau précis dans un album/playlist (recherche par nom, pas par
+  identifiant) — accepté comme limite, voir l'historique des commits.
+- Égaliseur ou visualiseur sur l'audio Deezer : Vizuzik ne possède pas ce flux,
+  ces écrans sont masqués quand Deezer est la source active.
+- Réordonner/modifier la file d'attente de Deezer depuis Vizuzik.
 
 Aucun contournement des protections Deezer, aucune API privée, aucun flux non
-officiel : ce dépôt ne prétend à aucun moment offrir une intégration Deezer
-fonctionnelle.
+officiel.
+
+### Configuration (nécessaire pour que la connexion Deezer fonctionne)
+
+1. Créer une app sur [developers.deezer.com/myapps](https://developers.deezer.com/myapps).
+2. Dans les réglages de cette app, mettre comme **Domaine de redirection** :
+   `vizuzik.local` (ou l'hôte de `deezerRedirectUri` si personnalisé — voir plus bas).
+3. Noter l'**App ID** et le **Secret Key**.
+4. Dans le dépôt GitHub → *Settings* → *Secrets and variables* → *Actions*, ajouter
+   deux secrets : `DEEZER_APP_ID` et `DEEZER_APP_SECRET`, avec ces valeurs.
+5. Relancer le workflow `.github/workflows/android.yml` (ou pousser un commit) :
+   l'APK généré embarquera ces identifiants via `BuildConfig`.
+
+Sans ces secrets, le build reste vert : l'écran "Se connecter à Deezer" affiche
+simplement un message expliquant qu'il manque des identifiants, au lieu de planter.
+
+Pour un build local (Android Studio), une alternative à `-P` est un fichier
+`android/local.properties` (gitignoré, jamais commité) contenant :
+```
+deezerAppId=...
+deezerAppSecret=...
+```
+Le `redirect_uri` par défaut (`https://vizuzik.local/oauth/callback`) n'a pas
+besoin d'être un serveur réel : Vizuzik intercepte la navigation vers cette URL
+directement dans la WebView de connexion pour en extraire le code d'autorisation.
+Il est personnalisable via `-PdeezerRedirectUri=...` / `deezerRedirectUri=...` si
+besoin, du moment qu'il correspond au domaine déclaré sur developers.deezer.com.
+
+### Architecture
+
+- `data/remote/deezer/` : `DeezerOAuthConfig` (URL d'autorisation), `DeezerHttp`
+  (GET minimal, zéro dépendance ajoutée), `DeezerAuthRepository` (échange du code
+  contre un jeton, persistance DataStore — Deezer ne fournit pas de refresh token),
+  `DeezerApiClient` (albums/playlists via l'API publique), `DeezerPlaybackLauncher`
+  (`playFromSearch` sur la session Deezer active).
+- `ui/deezer/` : écran de connexion (WebView OAuth) et écran de bibliothèque
+  (albums/playlists, avec action de lancement).
+- `player/deezer/DeezerRemotePlayer` : implémente `MusicPlayer` en reflétant l'état
+  de la session Deezer (`MediaController.Callback` + rafraîchissement périodique)
+  et en lui relayant play/pause/next/prev/seek.
+- `player/MusicPlayerRouter` : unique `MusicPlayer` injecté dans toute l'UI,
+  délègue à `Media3MusicPlayer` (local) ou `DeezerRemotePlayer` selon
+  `PlaybackSourceController.activeSource` — aucun écran existant n'a eu besoin
+  d'être réécrit pour ça.
+- `diagnostics/` : sonde MediaSession utilisée pendant le développement pour
+  valider en direct ce que la session Deezer honore réellement (accessible depuis
+  Réglages → *Sonde Deezer*, gardée pour du diagnostic futur si Deezer change son
+  comportement).
