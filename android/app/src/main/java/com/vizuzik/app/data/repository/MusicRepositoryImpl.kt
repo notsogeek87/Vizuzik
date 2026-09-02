@@ -95,15 +95,17 @@ class MusicRepositoryImpl @Inject constructor(
         recentlyPlayedDao.recordPlayed(track.id, System.currentTimeMillis())
     }
 
+    /** Tri via [Collator] : "Édith" se classe bien avec "Edith", pas après "Z". */
     private fun comparatorFor(order: SortOrder): Comparator<Track> {
         val collator = Collator.getInstance().apply { strength = Collator.PRIMARY }
+        val byTitle = Comparator<Track> { a, b -> collator.compare(a.title, b.title) }
+        val byArtist = Comparator<Track> { a, b -> collator.compare(a.artist, b.artist) }
+        val byAlbum = Comparator<Track> { a, b -> collator.compare(a.album, b.album) }
+        val byPosition = compareBy<Track>({ it.discNumber }, { it.trackNumber })
         return when (order) {
-            SortOrder.TITLE -> Comparator { a, b -> collator.compare(a.title, b.title) }
-            SortOrder.ARTIST -> Comparator { a, b -> collator.compare(a.artist, b.artist) }
-                .then(Comparator { a, b -> collator.compare(a.album, b.album) })
-                .then(compareBy({ it.discNumber }, { it.trackNumber }))
-            SortOrder.ALBUM -> Comparator { a, b -> collator.compare(a.album, b.album) }
-                .then(compareBy({ it.discNumber }, { it.trackNumber }))
+            SortOrder.TITLE -> byTitle
+            SortOrder.ARTIST -> byArtist.then(byAlbum).then(byPosition)
+            SortOrder.ALBUM -> byAlbum.then(byPosition)
         }
     }
 }
