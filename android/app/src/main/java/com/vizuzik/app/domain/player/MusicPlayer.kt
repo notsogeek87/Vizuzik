@@ -7,9 +7,12 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Abstraction du moteur de lecture. [com.vizuzik.app.player.Media3MusicPlayer]
- * est l'unique implémentation (Media3/ExoPlayer). L'UI ne dépend jamais
- * d'ExoPlayer directement, uniquement de cette interface.
+ * Abstraction du moteur de lecture. [com.vizuzik.app.player.MusicPlayerRouter]
+ * est l'implémentation injectée dans toute l'UI : elle délègue à
+ * [com.vizuzik.app.player.Media3MusicPlayer] (local, Media3/ExoPlayer) ou à
+ * [com.vizuzik.app.player.deezer.DeezerRemotePlayer] (télécommande de la
+ * session média Deezer) selon la source active. L'UI ne dépend jamais
+ * d'ExoPlayer ni de Deezer directement, uniquement de cette interface.
  */
 interface MusicPlayer {
     val state: StateFlow<PlayerState>

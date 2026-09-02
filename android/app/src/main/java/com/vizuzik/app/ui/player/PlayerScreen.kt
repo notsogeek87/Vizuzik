@@ -60,6 +60,7 @@ fun PlayerScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val themeId by viewModel.themeId.collectAsStateWithLifecycle()
+    val isDeezerActive by viewModel.isDeezerActive.collectAsStateWithLifecycle()
     var skinMenuOpen by remember { mutableStateOf(false) }
     val track = state.currentTrack
 
@@ -135,12 +136,14 @@ fun PlayerScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = viewModel::toggleShuffle) {
-                    Icon(
-                        Icons.Filled.Shuffle,
-                        contentDescription = "Lecture aléatoire",
-                        tint = if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (!isDeezerActive) {
+                    IconButton(onClick = viewModel::toggleShuffle) {
+                        Icon(
+                            Icons.Filled.Shuffle,
+                            contentDescription = "Lecture aléatoire",
+                            tint = if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 IconButton(onClick = viewModel::skipToPrevious) {
                     Icon(Icons.Filled.SkipPrevious, contentDescription = "Précédent", modifier = Modifier.size(36.dp))
@@ -155,30 +158,48 @@ fun PlayerScreen(
                 IconButton(onClick = viewModel::skipToNext) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Suivant", modifier = Modifier.size(36.dp))
                 }
-                IconButton(onClick = viewModel::cycleRepeatMode) {
-                    Icon(
-                        imageVector = if (state.repeatMode == RepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                        contentDescription = "Répéter",
-                        tint = if (state.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (!isDeezerActive) {
+                    IconButton(onClick = viewModel::cycleRepeatMode) {
+                        Icon(
+                            imageVector = if (state.repeatMode == RepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = "Répéter",
+                            tint = if (state.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                TextButton(onClick = onOpenEqualizer) {
-                    Icon(Icons.Filled.Equalizer, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                    Text("EQ")
+            if (isDeezerActive) {
+                // EQ/visualiseur/file n'ont pas de sens ici : on ne possède pas le
+                // flux audio de Deezer, et sa file n'est pas pilotable depuis Vizuzik.
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Lecture pilotée depuis l'app Deezer — EQ, visualiseur et file d'attente indisponibles ici.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    TextButton(onClick = viewModel::returnToLocalPlayback) {
+                        Text("Revenir à la lecture locale")
+                    }
                 }
-                TextButton(onClick = onOpenVisualizer) {
-                    Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                    Text("VIS")
-                }
-                TextButton(onClick = onOpenQueue) {
-                    Icon(Icons.Filled.QueueMusic, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                    Text("File d'attente")
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    TextButton(onClick = onOpenEqualizer) {
+                        Icon(Icons.Filled.Equalizer, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                        Text("EQ")
+                    }
+                    TextButton(onClick = onOpenVisualizer) {
+                        Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                        Text("VIS")
+                    }
+                    TextButton(onClick = onOpenQueue) {
+                        Icon(Icons.Filled.QueueMusic, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                        Text("File d'attente")
+                    }
                 }
             }
         }

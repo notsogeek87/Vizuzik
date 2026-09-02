@@ -7,6 +7,7 @@ import com.vizuzik.app.data.remote.deezer.DeezerAuthRepository
 import com.vizuzik.app.data.remote.deezer.DeezerCollectionItem
 import com.vizuzik.app.data.remote.deezer.DeezerLaunchResult
 import com.vizuzik.app.data.remote.deezer.DeezerPlaybackLauncher
+import com.vizuzik.app.player.MusicPlayerRouter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,7 @@ class DeezerLibraryViewModel @Inject constructor(
     private val authRepository: DeezerAuthRepository,
     private val apiClient: DeezerApiClient,
     private val playbackLauncher: DeezerPlaybackLauncher,
+    private val musicPlayerRouter: MusicPlayerRouter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DeezerLibraryUiState())
@@ -59,7 +61,13 @@ class DeezerLibraryViewModel @Inject constructor(
     }
 
     fun launch(item: DeezerCollectionItem) {
-        val message = when (playbackLauncher.launch(item.searchQuery)) {
+        val result = playbackLauncher.launch(item.searchQuery)
+        // Bascule aussi le lecteur Vizuzik (mini-player, écran plein écran) sur
+        // Deezer : sans ça, l'utilisateur voit sa lecture démarrer dans Deezer
+        // mais rien ne change dans Vizuzik, alors que c'est justement le but
+        // (un lecteur skinné qui reflète Deezer).
+        if (result == DeezerLaunchResult.Started) musicPlayerRouter.activateDeezer()
+        val message = when (result) {
             DeezerLaunchResult.Started -> "« ${item.title} » envoyé à Deezer."
             DeezerLaunchResult.DeezerNotRunning ->
                 "Ouvre d'abord l'app Deezer et lance n'importe quel morceau, puis réessaie."
