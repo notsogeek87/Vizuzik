@@ -126,7 +126,11 @@ class MediaSessionProbe @Inject constructor(
     private companion object {
         val DECISIVE = setOf("PLAY_FROM_SEARCH", "PLAY_FROM_MEDIA_ID", "PLAY_FROM_URI", "SKIP_TO_QUEUE_ITEM")
 
-        val ACTION_NAMES = linkedMapOf(
+        // Type explicite : sans lui, une constante erronée fait échouer
+        // l'inférence de toute la map et noie l'erreur réelle sous 25 autres.
+        // Note : SET_REPEAT_MODE / SET_SHUFFLE_MODE n'existent que dans la
+        // couche compat AndroidX, pas sur le PlaybackState du framework.
+        val ACTION_NAMES: Map<Long, String> = linkedMapOf(
             PlaybackState.ACTION_PLAY to "PLAY",
             PlaybackState.ACTION_PAUSE to "PAUSE",
             PlaybackState.ACTION_PLAY_PAUSE to "PLAY_PAUSE",
@@ -145,8 +149,6 @@ class MediaSessionProbe @Inject constructor(
             PlaybackState.ACTION_PREPARE_FROM_MEDIA_ID to "PREPARE_FROM_MEDIA_ID",
             PlaybackState.ACTION_PREPARE_FROM_SEARCH to "PREPARE_FROM_SEARCH",
             PlaybackState.ACTION_PREPARE_FROM_URI to "PREPARE_FROM_URI",
-            PlaybackState.ACTION_SET_REPEAT_MODE to "SET_REPEAT_MODE",
-            PlaybackState.ACTION_SET_SHUFFLE_MODE to "SET_SHUFFLE_MODE",
         )
     }
 }
