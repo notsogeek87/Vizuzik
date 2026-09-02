@@ -7,8 +7,10 @@ ext {
     compileSdkVersion = 36
     targetSdkVersion = 36
 
-    kotlinVersion = '2.1.0'
-    kspVersion = '2.1.0-1.0.29'
+    // 2.0.21 (pas 2.1.x) : kapt embarque une kotlinx-metadata-jvm qui ne lit
+    // pas le format de métadonnées 2.1.0 (voir AnnotationProcessingError sur
+    // room-compiler/hilt-compiler).
+    kotlinVersion = '2.0.21'
 
     composeBomVersion = '2024.12.01'
     coreKtxVersion = '1.15.0'
