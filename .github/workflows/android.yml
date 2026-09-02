@@ -33,7 +33,7 @@ jobs:
 
       - name: Tests unitaires
         working-directory: android
-        run: ./gradlew testDebugUnitTest --no-daemon
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build debug APK
         working-directory: android
