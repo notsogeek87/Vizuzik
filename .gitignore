@@ -1,2 +1,3 @@
-node_modules/
-dist/
+# Voir android/.gitignore pour les artefacts de build Android.
+.idea/
+local.properties

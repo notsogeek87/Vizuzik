@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème système de l'Activity : le rendu visuel réel (skins Modern /
+         Winamp Classic / Dark) est géré entièrement par Compose (voir
+         theme/VizuzikTheme.kt), ce thème XML ne sert qu'au splash screen
+         et à la fenêtre système (edge-to-edge, barre de statut). -->
+    <style name="Theme.Vizuzik" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Vizuzik.Launch" parent="Theme.Vizuzik" />
+</resources>

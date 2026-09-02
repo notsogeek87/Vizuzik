@@ -1,8 +1,13 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'org.jetbrains.kotlin.kapt'
+apply plugin: 'dagger.hilt.android.plugin'
 
 android {
     namespace = "com.vizuzik.app"
     compileSdk = rootProject.ext.compileSdkVersion
+
     defaultConfig {
         applicationId "com.vizuzik.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -10,14 +15,11 @@ android {
         // Surchargeable en CI via -PvizuzikVersionCode=N -PvizuzikVersionName=X.Y.N
         // pour que chaque release GitHub porte une version unique et croissante.
         versionCode project.hasProperty('vizuzikVersionCode') ? (vizuzikVersionCode as int) : 1
-        versionName project.hasProperty('vizuzikVersionName') ? vizuzikVersionName : "1.0"
+        versionName project.hasProperty('vizuzikVersionName') ? vizuzikVersionName : "0.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        }
+        vectorDrawables.useSupportLibrary = true
     }
+
     // Clé debug FIXE, committée dans le repo (android/app/debug.keystore).
     // Sans ça, chaque runner CI neuf régénère sa propre clé debug aléatoire,
     // et deux builds successifs sont alors signés différemment, empêchant
@@ -32,42 +34,103 @@ android {
             keyPassword 'android'
         }
     }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            applicationIdSuffix ".debug"
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-}
 
-repositories {
-    flatDir{
-        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}', '/META-INF/LICENSE*', '/META-INF/DEPENDENCIES']
+        }
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
     }
 }
 
 dependencies {
-    implementation fileTree(include: ['*.jar'], dir: 'libs')
-    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
-    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-    implementation project(':capacitor-android')
-    testImplementation "junit:junit:$junitVersion"
-    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-    implementation project(':capacitor-cordova-android-plugins')
+    implementation "androidx.core:core-ktx:$rootProject.ext.coreKtxVersion"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:$rootProject.ext.lifecycleVersion"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-compose:$rootProject.ext.lifecycleVersion"
+    implementation "androidx.lifecycle:lifecycle-runtime-compose:$rootProject.ext.lifecycleVersion"
+    implementation "androidx.lifecycle:lifecycle-service:$rootProject.ext.lifecycleVersion"
+    implementation "androidx.activity:activity-compose:$rootProject.ext.activityComposeVersion"
+    implementation "androidx.core:core-splashscreen:1.0.1"
+
+    // Compose
+    implementation platform("androidx.compose:compose-bom:$rootProject.ext.composeBomVersion")
+    androidTestImplementation platform("androidx.compose:compose-bom:$rootProject.ext.composeBomVersion")
+    implementation "androidx.compose.ui:ui"
+    implementation "androidx.compose.ui:ui-graphics"
+    implementation "androidx.compose.ui:ui-tooling-preview"
+    implementation "androidx.compose.material3:material3"
+    implementation "androidx.compose.material:material-icons-extended"
+    debugImplementation "androidx.compose.ui:ui-tooling"
+
+    // Navigation
+    implementation "androidx.navigation:navigation-compose:$rootProject.ext.navigationComposeVersion"
+    implementation "androidx.hilt:hilt-navigation-compose:$rootProject.ext.hiltNavigationComposeVersion"
+
+    // Hilt
+    implementation "com.google.dagger:hilt-android:$rootProject.ext.hiltVersion"
+    kapt "com.google.dagger:hilt-compiler:$rootProject.ext.hiltVersion"
+
+    // Room
+    implementation "androidx.room:room-runtime:$rootProject.ext.roomVersion"
+    implementation "androidx.room:room-ktx:$rootProject.ext.roomVersion"
+    kapt "androidx.room:room-compiler:$rootProject.ext.roomVersion"
+
+    // Preferences (thème, tri, dernier scan)
+    implementation "androidx.datastore:datastore-preferences:$rootProject.ext.datastoreVersion"
+
+    // Media3 / ExoPlayer
+    implementation "androidx.media3:media3-exoplayer:$rootProject.ext.media3Version"
+    implementation "androidx.media3:media3-session:$rootProject.ext.media3Version"
+    implementation "androidx.media3:media3-common:$rootProject.ext.media3Version"
+
+    // Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$rootProject.ext.coroutinesVersion"
+
+    // Chargement des pochettes (cache mémoire/disque, décodage économe)
+    implementation "io.coil-kt:coil-compose:$rootProject.ext.coilVersion"
+
+    // Tests unitaires (JVM)
+    testImplementation "junit:junit:$rootProject.ext.junitVersion"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$rootProject.ext.coroutinesVersion"
+
+    // Tests instrumentés
+    androidTestImplementation "androidx.test.ext:junit:$rootProject.ext.androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$rootProject.ext.androidxEspressoCoreVersion"
+    androidTestImplementation "androidx.compose.ui:ui-test-junit4"
+    debugImplementation "androidx.compose.ui:ui-test-manifest"
 }
 
-apply from: 'capacitor.build.gradle'
-
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+kapt {
+    correctErrorTypes true
 }

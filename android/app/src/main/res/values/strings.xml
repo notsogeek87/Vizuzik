@@ -1,7 +1,41 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Vizuzik</string>
-    <string name="title_activity_main">Vizuzik</string>
-    <string name="package_name">com.vizuzik.app</string>
-    <string name="custom_url_scheme">com.vizuzik.app</string>
+
+    <!-- Permissions -->
+    <string name="permission_rationale_title">Accès à votre musique</string>
+    <string name="permission_rationale_body">Vizuzik a besoin d\'accéder aux fichiers audio de votre appareil pour construire votre bibliothèque musicale.</string>
+    <string name="permission_grant">Autoriser l\'accès</string>
+    <string name="permission_denied">Sans cette permission, Vizuzik ne peut pas afficher votre musique locale.</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Accueil</string>
+    <string name="nav_tracks">Morceaux</string>
+    <string name="nav_albums">Albums</string>
+    <string name="nav_artists">Artistes</string>
+    <string name="nav_playlists">Playlists</string>
+
+    <!-- Actions communes -->
+    <string name="action_search">Rechercher</string>
+    <string name="action_refresh_library">Actualiser la bibliothèque</string>
+    <string name="action_play">Lecture</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_next">Suivant</string>
+    <string name="action_previous">Précédent</string>
+    <string name="action_shuffle">Lecture aléatoire</string>
+    <string name="action_repeat">Répéter</string>
+    <string name="action_queue">File d\'attente</string>
+    <string name="action_settings">Réglages</string>
+
+    <!-- MediaSession -->
+    <string name="playback_channel_name">Lecture en cours</string>
+    <string name="playback_channel_description">Contrôles de lecture musicale</string>
+
+    <!-- Bibliothèque vide -->
+    <string name="library_empty_title">Aucune musique trouvée</string>
+    <string name="library_empty_body">Ajoutez des fichiers audio à votre appareil puis actualisez la bibliothèque.</string>
+    <string name="library_scanning">Analyse de la bibliothèque…</string>
+
+    <string name="unknown_artist">Artiste inconnu</string>
+    <string name="unknown_album">Album inconnu</string>
 </resources>
