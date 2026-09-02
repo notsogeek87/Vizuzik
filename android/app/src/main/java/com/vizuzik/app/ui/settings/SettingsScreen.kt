@@ -9,11 +9,13 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,7 +35,11 @@ import com.vizuzik.app.ui.components.SectionHeader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onOpenDeezerProbe: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val themeId by viewModel.themeId.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
 
@@ -61,6 +67,15 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
+            }
+
+            SectionHeader(title = "Diagnostic")
+            OutlinedButton(
+                onClick = onOpenDeezerProbe,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) {
+                Icon(Icons.Filled.Science, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text("Sonde Deezer (MediaSession)")
             }
 
             SectionHeader(title = "Skin")

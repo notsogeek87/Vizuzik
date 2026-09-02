@@ -50,5 +50,23 @@
             </intent-filter>
         </service>
 
+        <!-- Service vide : ne lit aucune notification. Il n'existe que pour
+             débloquer MediaSessionManager.getActiveSessions, qui permet de lire
+             et piloter la session média d'une autre app (sonde Deezer).
+             exported="true" car un service porteur d'un intent-filter l'était
+             par défaut avant l'API 31 : c'est la configuration historiquement
+             fonctionnelle pour un listener de notifications. Le bind reste
+             verrouillé par BIND_NOTIFICATION_LISTENER_SERVICE, de niveau
+             signature, que seul le système détient. -->
+        <service
+            android:name=".diagnostics.VizuzikNotificationListener"
+            android:label="@string/app_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
     </application>
 </manifest>

@@ -11,6 +11,7 @@ import com.vizuzik.app.ui.albums.AlbumDetailScreen
 import com.vizuzik.app.ui.albums.AlbumsScreen
 import com.vizuzik.app.ui.artists.ArtistDetailScreen
 import com.vizuzik.app.ui.artists.ArtistsScreen
+import com.vizuzik.app.ui.diagnostics.MediaSessionProbeScreen
 import com.vizuzik.app.ui.home.HomeScreen
 import com.vizuzik.app.ui.player.EqualizerScreen
 import com.vizuzik.app.ui.player.PlayerScreen
@@ -49,7 +50,15 @@ fun VizuzikNavHost(navController: NavHostController, modifier: Modifier = Modifi
                 onOpenArtist = { id -> navController.navigate(Destination.ArtistDetail.createRoute(id)) },
             )
         }
-        composable(Destination.Settings.route) { SettingsScreen(onBack = { navController.popBackStack() }) }
+        composable(Destination.Settings.route) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenDeezerProbe = { navController.navigate(Destination.DeezerProbe.route) },
+            )
+        }
+        composable(Destination.DeezerProbe.route) {
+            MediaSessionProbeScreen(onBack = { navController.popBackStack() })
+        }
         composable(Destination.Player.route) {
             PlayerScreen(
                 onBack = { navController.popBackStack() },
