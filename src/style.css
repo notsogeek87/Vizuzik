@@ -173,9 +173,11 @@ body[data-mode="cassette"] .fx {
   opacity: 0;
 }
 
+/* No spacer kept for it either way (unlike the other modes' disc, which shrinks but keeps
+   its footprint): the cassette artwork already fills the screen behind everything, so a
+   reserved square here would only ever push the title/controls off-centre under it. */
 body[data-mode="cassette"] .stage {
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
 
 .scrim {
@@ -865,9 +867,11 @@ body.is-changing .artist {
 }
 
 /* Cassette mode has no stage to tap for the usual tap-to-cycle gesture, so a tap there instead
-   tucks the transport buttons away — an unobstructed view of the cassette, restored by the
-   next tap. Scoped to cassette mode so the class can't linger visibly into another mode. */
-body[data-mode="cassette"].cassette-controls-hidden .controls {
+   tucks the transport buttons and the scrub bar away — an unobstructed view of the cassette,
+   restored by the next tap. The title/artist stay up, so it's still clear what's playing.
+   Scoped to cassette mode so the class can't linger visibly into another mode. */
+body[data-mode="cassette"].cassette-controls-hidden .controls,
+body[data-mode="cassette"].cassette-controls-hidden .progress {
   opacity: 0;
   pointer-events: none;
 }
@@ -957,17 +961,43 @@ body[data-mode="cassette"].cassette-controls-hidden .controls {
   display: block;
 }
 
-/* Cassette mode expects the phone turned sideways, cassette-side up — the vertical stack
-   built for portrait wastes most of a short landscape screen. Dropping the (already hidden)
-   stage out of the layout and hugging the bottom edge instead reads like a Walkman's own
-   transport bar. */
-@media (orientation: landscape) {
-  body[data-mode="cassette"] .stage {
-    display: none;
-  }
+/* Cassette mode's own footer: hugging the bottom edge instead of centring in the column
+   (the old default, built around a stage square that no longer exists here) keeps the title
+   and buttons off the reels and sitting where the scrim gradient is darkest, wherever the
+   illustration currently is — rotated into portrait or shown natively in landscape. */
+body[data-mode="cassette"] .player {
+  justify-content: flex-end;
+}
 
+/* On a wide-but-short landscape screen the reels can still reach close to the bottom edge, so
+   the title/artist and the scrub bar get their own frosted card — the same chip language as
+   .capture-status/.mode-toggle — instead of floating text that would fight the artwork under
+   it for legibility wherever the two happen to land. */
+body[data-mode="cassette"] .meta {
+  background: rgba(10, 10, 20, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-radius: 18px;
+  padding: 12px 26px;
+}
+
+body[data-mode="cassette"] .progress {
+  background: rgba(10, 10, 20, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-radius: 16px;
+  padding: 16px 20px 10px;
+}
+
+/* Landscape leaves much less vertical room than portrait's tall column, so the same footer
+   is tightened up and the buttons shrink a notch to keep everything comfortably on screen —
+   this is also the orientation this mode is actually meant to be used in (see
+   DeezerMedia.lockLandscape() in main.js), portrait only being the brief fallback until the
+   OS rotation catches up. */
+@media (orientation: landscape) {
   body[data-mode="cassette"] .player {
-    justify-content: flex-end;
     gap: 0.85rem;
     padding:
       calc(env(safe-area-inset-top, 0px) + 14px)
@@ -984,9 +1014,13 @@ body[data-mode="cassette"].cassette-controls-hidden .controls {
     font-size: clamp(0.8rem, 2.4vw, 0.95rem);
   }
 
+  body[data-mode="cassette"] .meta {
+    padding: 8px 20px;
+  }
+
   body[data-mode="cassette"] .progress {
     width: min(70vw, 460px);
-    padding: 8px 0 4px;
+    padding: 12px 16px 8px;
   }
 
   body[data-mode="cassette"] .controls {

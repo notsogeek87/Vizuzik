@@ -611,7 +611,8 @@ function endGesture(event, cancelled) {
     cycleDisplayMode();
   } else if (isTap && displayMode === "cassette") {
     // Cassette mode has no stage to tap (the artwork fills the screen): tapping it instead
-    // toggles the transport buttons out of the way, for an unobstructed view of the cassette.
+    // toggles the transport buttons and scrub bar out of the way, for an unobstructed view
+    // of the cassette. The title/artist stay up (see .cassette-controls-hidden in style.css).
     document.body.classList.toggle("cassette-controls-hidden");
   }
 }
