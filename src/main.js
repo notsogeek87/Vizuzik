@@ -64,20 +64,21 @@ function applyDisplayMode() {
     if (!captureActive) {
       captureActive = true;
       lastCaptureError = null;
-      DeezerMedia.startVisualizerCapture()
-        .then(() => {
-          clearCaptureWatchdog();
-          captureWatchdog = setTimeout(() => {
-            if (visualizer.captureStatus === "simulated") {
-              lastCaptureError = "aucune réponse";
-              captureActive = false;
-            }
-          }, 8000);
-        })
-        .catch((err) => {
+      // Armed the moment the call goes out — not after it resolves — so a native call that
+      // never settles at all (neither resolve nor reject, e.g. the system consent flow never
+      // returning a result) still surfaces a reason instead of leaving the badge blank forever.
+      clearCaptureWatchdog();
+      captureWatchdog = setTimeout(() => {
+        if (visualizer.captureStatus === "simulated") {
+          lastCaptureError = "aucune réponse (la fenêtre système n'a jamais rendu la main)";
           captureActive = false;
-          lastCaptureError = (err && err.message) || String(err);
-        });
+        }
+      }, 8000);
+      DeezerMedia.startVisualizerCapture().catch((err) => {
+        clearCaptureWatchdog();
+        captureActive = false;
+        lastCaptureError = (err && err.message) || String(err);
+      });
     }
   } else {
     stopCapture();
