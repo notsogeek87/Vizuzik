@@ -61,4 +61,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <!-- Without this, PackageManager#getApplicationInfo("deezer.android.app", ...) can throw
+         NameNotFoundException on Android 11+ package-visibility restrictions, breaking the UID
+         lookup AudioCaptureService uses to scope playback capture to Deezer specifically. -->
+    <queries>
+        <package android:name="deezer.android.app" />
+    </queries>
 </manifest>
