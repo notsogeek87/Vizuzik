@@ -28,9 +28,11 @@
     <!-- Cassette mode: a fixed, edge-to-edge illustration instead of a canvas scene — the
          phone's own screen reads as the little window on a Walkman door. Drawn cassette-side
          up (landscape), and rotated back onto a portrait screen by CSS (see .cassette__art)
-         so holding the phone in landscape shows it the "right" way up. The reels actually
-         turn while a track is playing (see .cassette__reel); everything else stays put, and
-         only the reel hubs and the label tab follow the album palette. -->
+         so holding the phone in landscape shows it the "right" way up (the app also asks the
+         OS to actually rotate the screen — see DeezerMedia.lockLandscape() in main.js). The
+         reels turn while a track is playing (see .cassette__reel), with a ring of wound "tape"
+         shrinking toward each hub's teeth; everything else stays put, and only the hubs and
+         the brand plate follow the album palette. -->
     <div id="cassette" class="cassette" aria-hidden="true">
       <svg class="cassette__art" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
         <defs>
@@ -38,41 +40,65 @@
             <stop class="cassette__stop cassette__stop--a" offset="0" />
             <stop class="cassette__stop cassette__stop--b" offset="1" />
           </linearGradient>
+          <linearGradient id="cassette-shell" x1="0" y1="0" x2="0.4" y2="1">
+            <stop offset="0" stop-color="#33333f" />
+            <stop offset="1" stop-color="#131319" />
+          </linearGradient>
         </defs>
+
         <rect class="cassette__shell" x="8" y="8" width="304" height="184" rx="16" />
-        <rect class="cassette__label" x="24" y="22" width="272" height="56" rx="6" />
-        <line class="cassette__labelline cassette__labelline--1" x1="40" y1="40" x2="190" y2="40" />
-        <line class="cassette__labelline cassette__labelline--2" x1="40" y1="54" x2="140" y2="54" />
-        <rect x="266" y="30" width="22" height="40" rx="4" fill="url(#cassette-accent)" />
-        <rect class="cassette__window" x="34" y="90" width="252" height="88" rx="14" />
-        <path class="cassette__tape" d="M110 134 C144 160 176 160 210 134" />
+        <rect class="cassette__bezel" x="14" y="14" width="292" height="172" rx="12" />
+        <path class="cassette__sheen" d="M30 11 Q13 11 13 28" />
+
+        <rect class="cassette__label" x="22" y="20" width="228" height="58" rx="6" />
+        <line class="cassette__labelrule" x1="34" y1="32" x2="238" y2="32" />
+        <line class="cassette__labelline cassette__labelline--1" x1="34" y1="48" x2="206" y2="48" />
+        <line class="cassette__labelline cassette__labelline--2" x1="34" y1="62" x2="150" y2="62" />
+        <line class="cassette__labelline cassette__labelline--2" x1="214" y1="62" x2="238" y2="62" />
+        <rect class="cassette__brand" x="260" y="20" width="38" height="58" rx="6" fill="url(#cassette-accent)" />
+        <line class="cassette__brandsheen" x1="268" y1="70" x2="290" y2="28" />
+
+        <rect class="cassette__window" x="30" y="90" width="260" height="86" rx="12" />
+        <path class="cassette__tape" d="M108 150 C140 176 180 176 212 150" />
+
         <g class="cassette__reel cassette__reel--a">
-          <circle class="cassette__reelring" cx="110" cy="134" r="32" />
-          <circle cx="110" cy="134" r="12" fill="url(#cassette-accent)" />
-          <g class="cassette__spokes" transform="translate(110 134)">
-            <line x1="0" y1="-12" x2="0" y2="12" />
-            <line x1="-10.4" y1="6" x2="10.4" y2="-6" />
-            <line x1="10.4" y1="6" x2="-10.4" y2="-6" />
+          <circle class="cassette__reelring" cx="108" cy="134" r="30" />
+          <circle class="cassette__wrap" cx="108" cy="134" r="23" />
+          <circle class="cassette__wrap" cx="108" cy="134" r="16" />
+          <circle cx="108" cy="134" r="11" fill="url(#cassette-accent)" />
+          <g class="cassette__teeth" transform="translate(108 134)">
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(60)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(120)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(180)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(240)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(300)" />
           </g>
         </g>
         <g class="cassette__reel cassette__reel--b">
-          <circle class="cassette__reelring" cx="210" cy="134" r="32" />
-          <circle cx="210" cy="134" r="12" fill="url(#cassette-accent)" />
-          <g class="cassette__spokes" transform="translate(210 134)">
-            <line x1="0" y1="-12" x2="0" y2="12" />
-            <line x1="-10.4" y1="6" x2="10.4" y2="-6" />
-            <line x1="10.4" y1="6" x2="-10.4" y2="-6" />
+          <circle class="cassette__reelring" cx="212" cy="134" r="30" />
+          <circle class="cassette__wrap" cx="212" cy="134" r="23" />
+          <circle class="cassette__wrap" cx="212" cy="134" r="16" />
+          <circle cx="212" cy="134" r="11" fill="url(#cassette-accent)" />
+          <g class="cassette__teeth" transform="translate(212 134)">
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(60)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(120)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(180)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(240)" />
+            <rect x="-1.1" y="-16" width="2.2" height="5" rx="1" transform="rotate(300)" />
           </g>
         </g>
-        <circle class="cassette__guide" cx="150" cy="168" r="5" />
-        <circle class="cassette__guide" cx="170" cy="168" r="5" />
-        <rect class="cassette__notch" x="40" y="180" width="16" height="6" rx="2" />
-        <rect class="cassette__notch" x="264" y="180" width="16" height="6" rx="2" />
-        <circle class="cassette__screw" cx="22" cy="22" r="3.2" />
-        <circle class="cassette__screw" cx="298" cy="22" r="3.2" />
-        <circle class="cassette__screw" cx="22" cy="178" r="3.2" />
-        <circle class="cassette__screw" cx="298" cy="178" r="3.2" />
-        <circle class="cassette__screw" cx="160" cy="186" r="3.2" />
+
+        <circle class="cassette__capstan" cx="150" cy="172" r="5" />
+        <circle class="cassette__capstan" cx="170" cy="172" r="5" />
+        <rect class="cassette__notch" x="40" y="182" width="16" height="6" rx="2" />
+        <rect class="cassette__notch" x="264" y="182" width="16" height="6" rx="2" />
+        <circle class="cassette__screw" cx="20" cy="20" r="3.4" />
+        <circle class="cassette__screw" cx="300" cy="20" r="3.4" />
+        <circle class="cassette__screw" cx="20" cy="180" r="3.4" />
+        <circle class="cassette__screw" cx="300" cy="180" r="3.4" />
+        <circle class="cassette__screw" cx="160" cy="186" r="3.4" />
       </svg>
     </div>
 

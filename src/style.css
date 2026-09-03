@@ -256,15 +256,35 @@ body[data-state="playing"] .cassette__reel {
 }
 
 .cassette__shell {
-  fill: rgba(247, 248, 252, 0.05);
-  stroke: rgba(247, 248, 252, 0.32);
+  fill: url(#cassette-shell);
+  stroke: rgba(0, 0, 0, 0.6);
   stroke-width: 2;
 }
 
-.cassette__label {
-  fill: rgba(247, 248, 252, 0.07);
-  stroke: rgba(247, 248, 252, 0.22);
+/* A raised inner edge and a short specular arc near the top-left corner: two cheap strokes
+   that read as moulded plastic catching light, instead of a flat filled rectangle. */
+.cassette__bezel {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
   stroke-width: 1.5;
+}
+
+.cassette__sheen {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.cassette__label {
+  fill: rgba(247, 248, 252, 0.14);
+  stroke: rgba(247, 248, 252, 0.3);
+  stroke-width: 1.5;
+}
+
+.cassette__labelrule {
+  stroke: rgba(5, 5, 11, 0.3);
+  stroke-width: 1;
 }
 
 .cassette__labelline {
@@ -273,38 +293,55 @@ body[data-state="playing"] .cassette__reel {
 }
 
 .cassette__labelline--1 {
-  stroke: rgba(247, 248, 252, 0.4);
+  stroke: rgba(5, 5, 11, 0.55);
 }
 
 .cassette__labelline--2 {
-  stroke: rgba(247, 248, 252, 0.22);
+  stroke: rgba(5, 5, 11, 0.3);
+}
+
+.cassette__brandsheen {
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .cassette__window {
-  fill: rgba(5, 5, 11, 0.55);
-  stroke: rgba(247, 248, 252, 0.18);
+  fill: rgba(5, 5, 11, 0.68);
+  stroke: rgba(0, 0, 0, 0.5);
   stroke-width: 1.5;
 }
 
 .cassette__tape {
   fill: none;
-  stroke: rgba(247, 248, 252, 0.28);
-  stroke-width: 3;
+  stroke: rgba(247, 248, 252, 0.3);
+  stroke-width: 4;
 }
 
 .cassette__reelring {
   fill: none;
-  stroke: rgba(247, 248, 252, 0.32);
+  stroke: rgba(247, 248, 252, 0.4);
+  stroke-width: 6;
+}
+
+/* Concentric rings inside each reel, standing in for layers of wound tape without animating
+   them independently — only the reel group as a whole spins. */
+.cassette__wrap {
+  fill: none;
+  stroke: rgba(247, 248, 252, 0.18);
   stroke-width: 2;
 }
 
-.cassette__spokes line {
-  stroke: rgba(5, 5, 11, 0.6);
-  stroke-width: 2;
-  stroke-linecap: round;
+.cassette__teeth rect {
+  fill: rgba(5, 5, 11, 0.7);
 }
 
-.cassette__guide,
+.cassette__capstan {
+  fill: rgba(5, 5, 11, 0.65);
+  stroke: rgba(247, 248, 252, 0.35);
+  stroke-width: 1.4;
+}
+
 .cassette__screw,
 .cassette__notch {
   fill: rgba(247, 248, 252, 0.28);

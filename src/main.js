@@ -446,6 +446,21 @@ function applyDisplayMode(announce) {
   // as it moves, or the corona would sit where the artwork used to be.
   scheduleFocusRefresh();
   if (announce) showToast(MODE_LABELS[displayMode]);
+  syncOrientationLock();
+}
+
+// Cassette mode is drawn cassette-side up (landscape); rather than only relying on the CSS
+// rotation trick for whichever way the phone already happens to be held, this actually turns
+// the screen for the user — the same way a video player forces landscape for fullscreen.
+// Guarded against re-firing on every applyDisplayMode(false) call (nowPlayingChanged fires
+// that often) so the native side isn't asked to re-apply the same orientation repeatedly.
+let orientationLockedFor = null;
+function syncOrientationLock() {
+  if (orientationLockedFor === displayMode) return;
+  orientationLockedFor = displayMode;
+  const request = displayMode === "cassette" ? DeezerMedia.lockLandscape() : DeezerMedia.unlockOrientation();
+  // No native implementation on the web (dev preview): fails silently there.
+  request.catch(() => {});
 }
 
 function showToast(label, durationMs = 1400) {

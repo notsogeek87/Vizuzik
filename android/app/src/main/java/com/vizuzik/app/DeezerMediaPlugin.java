@@ -3,6 +3,7 @@ package com.vizuzik.app;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
@@ -136,6 +137,36 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         } catch (Exception e) {
             // Background-activity-start restriction or similar: nothing more to do.
         }
+        call.resolve();
+    }
+
+    /**
+     * Cassette mode is drawn cassette-side up, i.e. landscape: forcing the activity into
+     * landscape here — rather than leaving it to the CSS rotation trick alone — is what makes
+     * the phone's own auto-rotate turn the screen for the user instead of asking them to fight
+     * a portrait lock to see it the right way up. SENSOR_LANDSCAPE (not USER_LANDSCAPE) ignores
+     * the system's rotation-lock toggle, since the whole point is that this mode itself decides.
+     */
+    @PluginMethod
+    public void lockLandscape(PluginCall call) {
+        getBridge().executeOnMainThread(() -> {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            }
+        });
+        call.resolve();
+    }
+
+    /** Leaving cassette mode: back to whatever the system/device would normally allow. */
+    @PluginMethod
+    public void unlockOrientation(PluginCall call) {
+        getBridge().executeOnMainThread(() -> {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            }
+        });
         call.resolve();
     }
 
