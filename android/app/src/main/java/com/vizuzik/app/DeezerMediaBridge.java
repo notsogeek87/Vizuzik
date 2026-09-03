@@ -6,9 +6,10 @@ import android.media.session.PlaybackState;
 import android.os.SystemClock;
 
 /**
- * In-process singleton shared between NowPlayingListenerService (which tracks Deezer's
- * MediaSession) and DeezerMediaPlugin (which exposes it to the web layer). Both run in the
- * app's default process, so a static holder is enough — no IPC needed.
+ * In-process singleton shared between NowPlayingListenerService (which tracks the currently
+ * targeted app's MediaSession — Deezer or Spotify, see MusicAppPreference) and DeezerMediaPlugin
+ * (which exposes it to the web layer). Both run in the app's default process, so a static holder
+ * is enough — no IPC needed.
  */
 final class DeezerMediaBridge {
 
@@ -22,7 +23,7 @@ final class DeezerMediaBridge {
         final String album;
         final Bitmap albumArt;
         final boolean isPlaying;
-        /** Track length in ms, or 0 when Deezer's metadata doesn't report one (live streams). */
+        /** Track length in ms, or 0 when the app's metadata doesn't report one (live streams). */
         final long durationMs;
         /** Playback position in ms, resolved to the instant this object was built. */
         final long positionMs;

@@ -30,8 +30,6 @@ import java.util.Set;
 @CapacitorPlugin(name = "DeezerMedia")
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
-    private static final String DEEZER_PACKAGE = "deezer.android.app";
-
     @Override
     protected void handleOnStart() {
         DeezerMediaBridge.getInstance().setListener(this);
@@ -67,16 +65,47 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Launches Deezer directly instead of leaving the user to find it themselves. Vizuzik is a
-     * companion display: called once per cold start, only when no track is already active, so it
-     * never yanks focus away from an already-playing session just to show a screen that's already
-     * where it should be. Resolves {launched:false} rather than rejecting when Deezer isn't
-     * installed — that isn't an error the caller needs to react to.
+     * Whether Deezer and/or Spotify are installed. The web layer uses this to pick which one to
+     * track without asking: only one installed decides it outright, and asking is reserved for
+     * the case where both are present.
      */
     @PluginMethod
-    public void openDeezer(PluginCall call) {
+    public void detectMusicApps(PluginCall call) {
         JSObject result = new JSObject();
-        Intent intent = getContext().getPackageManager().getLaunchIntentForPackage(DEEZER_PACKAGE);
+        result.put("deezerInstalled", getContext().getPackageManager().getLaunchIntentForPackage(MusicApps.DEEZER_PACKAGE) != null);
+        result.put("spotifyInstalled", getContext().getPackageManager().getLaunchIntentForPackage(MusicApps.SPOTIFY_PACKAGE) != null);
+        call.resolve(result);
+    }
+
+    /**
+     * Mirrors the web layer's choice of tracked app ("deezer" or "spotify") into
+     * MusicAppPreference, so NowPlayingListenerService and AudioCaptureService — which don't
+     * have access to localStorage — can read the same value.
+     */
+    @PluginMethod
+    public void setMusicAppTarget(PluginCall call) {
+        String packageName = MusicApps.packageForKey(call.getString("app"));
+        if (packageName == null) {
+            call.reject("app inconnu");
+            return;
+        }
+        MusicAppPreference.setPackage(getContext(), packageName);
+        call.resolve();
+    }
+
+    /**
+     * Launches the given app ("deezer" or "spotify") directly instead of leaving the user to
+     * find it themselves. Vizuzik is a companion display: called once per cold start, only when
+     * no track is already active, so it never yanks focus away from an already-playing session
+     * just to show a screen that's already where it should be. Resolves {launched:false} rather
+     * than rejecting when the app isn't installed — that isn't an error the caller needs to
+     * react to.
+     */
+    @PluginMethod
+    public void openMusicApp(PluginCall call) {
+        JSObject result = new JSObject();
+        String packageName = MusicApps.packageForKey(call.getString("app"));
+        Intent intent = packageName != null ? getContext().getPackageManager().getLaunchIntentForPackage(packageName) : null;
         if (intent == null) {
             result.put("launched", false);
             call.resolve(result);
@@ -175,9 +204,9 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Requests the system MediaProjection consent needed to capture Deezer's own audio output
-     * (Android 10+ only). Once granted, starts AudioCaptureService, which streams a real-time
-     * loudness spectrum back via "audioLevels" events for as long as the service runs.
+     * Requests the system MediaProjection consent needed to capture the tracked app's own audio
+     * output (Android 10+ only). Once granted, starts AudioCaptureService, which streams a
+     * real-time loudness spectrum back via "audioLevels" events for as long as the service runs.
      */
     @PluginMethod
     public void startVisualizerCapture(PluginCall call) {
@@ -268,7 +297,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     private void withTransportControls(PluginCall call, TransportAction action) {
         MediaController controller = DeezerMediaBridge.getInstance().getController();
         if (controller == null) {
-            call.reject("Deezer n'a pas de lecture active");
+            call.reject("Aucune lecture active");
             return;
         }
         action.run(controller.getTransportControls());

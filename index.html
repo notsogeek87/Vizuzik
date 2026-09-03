@@ -92,7 +92,7 @@
         </div>
         <h2 id="capture-sheet-title" class="sheet__title">Faire vibrer l'écran avec la musique</h2>
         <p class="sheet__lead">
-          Vizuzik peut écouter le son de Deezer pour que les visuels suivent vraiment le morceau.
+          Vizuzik peut écouter le son de l'app suivie pour que les visuels suivent vraiment le morceau.
         </p>
         <ul class="sheet__points">
           <li>Rien n'est enregistré ni envoyé : le son sert uniquement à animer cet écran.</li>
@@ -107,14 +107,26 @@
 
     <div id="mode-toast" class="mode-toast" role="status" aria-live="polite"></div>
 
+    <!-- Shown once, only when both Deezer and Spotify are installed: the one moment Vizuzik
+         can't decide on its own which app to follow. -->
+    <section id="app-select" class="message" hidden>
+      <div class="message__pulse" aria-hidden="true"></div>
+      <p>Deezer et Spotify sont tous les deux installés.</p>
+      <p class="hint">Quelle app Vizuzik doit-il suivre ?</p>
+      <div class="message__choices">
+        <button id="select-deezer" type="button" class="grant-button">Deezer</button>
+        <button id="select-spotify" type="button" class="grant-button">Spotify</button>
+      </div>
+    </section>
+
     <section id="empty" class="message" hidden>
       <div class="message__pulse" aria-hidden="true"></div>
-      <p>Aucune lecture Deezer en cours.</p>
-      <p class="hint">Lance un titre dans l'app Deezer.</p>
+      <p>Aucune lecture en cours.</p>
+      <p class="hint">Lance un titre dans Deezer ou Spotify.</p>
     </section>
 
     <section id="permission" class="message" hidden>
-      <p>Vizuzik a besoin de l'accès aux notifications pour afficher et contrôler la lecture Deezer.</p>
+      <p>Vizuzik a besoin de l'accès aux notifications pour afficher et contrôler la lecture.</p>
       <button id="grant-access" type="button" class="grant-button">Autoriser l'accès</button>
     </section>
 

@@ -24,8 +24,9 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 
 /**
- * Captures Deezer's own audio output (Android's AudioPlaybackCapture API, requires API 29+) and
- * turns it into a per-band loudness spectrum for the visualizer, instead of a simulated beat.
+ * Captures the tracked music app's own audio output (Android's AudioPlaybackCapture API,
+ * requires API 29+) and turns it into a per-band loudness spectrum for the visualizer, instead
+ * of a simulated beat.
  *
  * Requires a MediaProjection consent grant (the system "start recording or casting" dialog),
  * obtained by DeezerMediaPlugin beforehand and passed in as this service's start intent extras.
@@ -118,13 +119,14 @@ public class AudioCaptureService extends Service {
             .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
             .addMatchingUsage(AudioAttributes.USAGE_GAME);
 
-        Integer deezerUid = resolveDeezerUid();
-        if (deezerUid != null) {
-            // Restrict capture to Deezer specifically instead of "whatever app is playing
-            // media", so e.g. a notification sound from another app can't feed the visualizer.
-            configBuilder.addMatchingUid(deezerUid);
+        Integer targetUid = resolveTargetUid();
+        if (targetUid != null) {
+            // Restrict capture to the tracked app specifically instead of "whatever app is
+            // playing media", so e.g. a notification sound from another app can't feed the
+            // visualizer.
+            configBuilder.addMatchingUid(targetUid);
         } else {
-            Log.w(TAG, "UID Deezer introuvable, capture non restreinte à un paquet précis");
+            Log.w(TAG, "UID de l'app suivie introuvable, capture non restreinte à un paquet précis");
         }
         AudioPlaybackCaptureConfiguration config = configBuilder.build();
 
@@ -183,14 +185,18 @@ public class AudioCaptureService extends Service {
     }
 
     /**
-     * Prefers the live Deezer package name we already know from the active MediaSession
+     * Prefers the live package name we already know from the active MediaSession
      * (DeezerMediaBridge, populated via NowPlayingListenerService's notification-listener
      * access — not subject to Android 11+ package-visibility filtering); falls back to the
-     * known Play Store package id in case the session isn't tracked yet at this exact moment.
+     * configured target (MusicAppPreference) in case the session isn't tracked yet at this
+     * exact moment, and to Deezer's package id if even that isn't set.
      */
-    private Integer resolveDeezerUid() {
+    private Integer resolveTargetUid() {
         MediaController controller = DeezerMediaBridge.getInstance().getController();
-        String packageName = controller != null ? controller.getPackageName() : "deezer.android.app";
+        String packageName = controller != null ? controller.getPackageName() : MusicAppPreference.getPackage(this);
+        if (packageName == null) {
+            packageName = MusicApps.DEEZER_PACKAGE;
+        }
         try {
             return getPackageManager().getApplicationInfo(packageName, 0).uid;
         } catch (PackageManager.NameNotFoundException e) {

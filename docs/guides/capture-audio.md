@@ -12,8 +12,10 @@ croise rarement, et qu'on sache à quoi elle sert quand elle arrive.
 
 ## Le parcours
 
-0. **Avant tout ça :** si aucun titre n'est déjà affiché au lancement, Vizuzik ouvre Deezer lui
-   -même (voir [Lancer Deezer soi-même](../architecture/2026-09-03-lancement-automatique-deezer.md)).
+0. **Avant tout ça :** Vizuzik détermine d'abord s'il suit Deezer ou Spotify (une seule des deux
+   installée : c'est elle ; les deux : un choix est demandé une fois), puis, si aucun titre n'est
+   déjà affiché au lancement, ouvre l'app choisie lui-même (voir
+   [Choisir puis lancer l'app de musique soi-même](../architecture/2026-09-03-lancement-automatique-deezer.md)).
    Une fois de retour sur Vizuzik avec un morceau lancé, le parcours ci-dessous reprend
    normalement — y compris l'étape 4 si le consentement a déjà été donné par le passé.
 1. **Premier lancement :** rien ne s'ouvre tout seul. Le badge en haut à gauche propose
@@ -31,7 +33,7 @@ croise rarement, et qu'on sache à quoi elle sert quand elle arrive.
 
 | Situation | Avant | Maintenant |
 |---|---|---|
-| Deezer se met en pause, ou un blanc entre deux titres | La capture était coupée, il fallait tout refaire | La capture continue |
+| L'app suivie se met en pause, ou un blanc entre deux titres | La capture était coupée, il fallait tout refaire | La capture continue |
 | Retour dans l'app après un passage en arrière-plan | La fenêtre revenait | Rien à redemander |
 | Webview rechargée alors que le service tourne | Le badge reproposait l'activation | L'état réel est relu côté natif |
 | Appareil sans capture possible (Android 9 ou antérieur) | Badge « Réessayer (unsupported) » | Badge masqué |
@@ -44,9 +46,9 @@ La capture s'arrête pour de bon quand Vizuzik est retiré des applications réc
 |-----------|---------------|
 | `▶ Activer le son réel` | Aucune capture : régime ambiant, sans rythme inventé (voir [Les modes](modes-de-visualisation.md#sans-capture-audio)). Appuyable. |
 | `● Connexion…` | Demande en cours. |
-| `● Son réel` | Les visualisations suivent l'audio de Deezer. |
+| `● Son réel` | Les visualisations suivent l'audio de l'app suivie. |
 | `● Son réel prêt` | Capture active, lecture en pause : rien à écouter pour l'instant. |
-| `● Son réel (silencieux)` | La capture fonctionne mais renvoie du silence depuis plus de 3 s — en général Deezer a refusé la capture de lecture et Android renvoie un flux muet. |
+| `● Son réel (silencieux)` | La capture fonctionne mais renvoie du silence depuis plus de 3 s — en général l'app suivie a refusé la capture de lecture et Android renvoie un flux muet. |
 | `● Son réel (signal faible)` | Capture active et lecture en cours, mais plus aucun niveau ne remonte. |
 | `↻ Son réel (raison)` | Échec, avec la raison en clair : autorisation refusée, appareil non compatible, capture interrompue, ou absence de réponse du système. |
 
@@ -65,10 +67,16 @@ capturer.
 
 - Android 10 (API 29) ou supérieur.
 - L'accès aux notifications doit déjà être accordé (écran d'autorisation au premier lancement).
-- La capture est limitée à l'UID de Deezer ; les autres applications ne sont jamais écoutées.
+- La capture est limitée à l'UID de l'app suivie (Deezer ou Spotify) ; les autres applications ne
+  sont jamais écoutées.
 
 ## Repartir de zéro
 
 L'accord (ou le refus) est stocké dans `localStorage` sous la clé `vizuzik:realAudio`
 (`"on"` / `"off"`). L'effacer remet le parcours au premier lancement, écran d'explication
 compris.
+
+Le choix de l'app suivie est stocké séparément, sous la clé `vizuzik:musicApp`
+(`"deezer"` / `"spotify"`) ; l'effacer redéclenche la détection automatique au prochain
+lancement — et l'écran de choix si les deux apps sont installées (voir
+[Choisir puis lancer l'app de musique soi-même](../architecture/2026-09-03-lancement-automatique-deezer.md)).

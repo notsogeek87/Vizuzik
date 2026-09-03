@@ -1,7 +1,7 @@
 # Documentation Vizuzik
 
 Vizuzik est un écran plein écran Android (Capacitor + Vite) qui affiche et pilote la lecture
-Deezer en cours, avec un moteur visuel réactif à l'audio.
+Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
 
 ## Sommaire
 
@@ -14,9 +14,10 @@ Deezer en cours, avec un moteur visuel réactif à l'audio.
 - [Le rythme hors capture](architecture/2026-09-03-rythme-hors-capture.md) — pourquoi
   l'application n'invente plus de tempo quand elle n'entend pas la musique, et ce qui anime
   l'écran à la place.
-- [Lancer Deezer soi-même](architecture/2026-09-03-lancement-automatique-deezer.md) — pourquoi
-  Vizuzik ouvre Deezer au lancement plutôt que d'attendre qu'on le fasse, et pourquoi une seule
-  fois par lancement.
+- [Choisir puis lancer l'app de musique soi-même](architecture/2026-09-03-lancement-automatique-deezer.md)
+  — comment Vizuzik décide s'il suit Deezer ou Spotify, pourquoi il ne demande qu'en cas
+  d'ambiguïté réelle, et pourquoi il ouvre l'app choisie au lancement plutôt que d'attendre
+  qu'on le fasse.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des cinq scènes.
@@ -28,5 +29,6 @@ Deezer en cours, avec un moteur visuel réactif à l'audio.
 - [Gestes et contrôles](guides/gestes.md) — tap, swipe et barre de progression.
 - [Les cinq modes de visualisation](guides/modes-de-visualisation.md) — ce que voit
   l'utilisateur et comment il en change.
-- [Activer le son réel](guides/capture-audio.md) — capture de la sortie audio de Deezer :
-  parcours d'activation, lecture du badge, et ce qui ne redéclenche plus la fenêtre système.
+- [Activer le son réel](guides/capture-audio.md) — capture de la sortie audio de l'app suivie
+  (Deezer ou Spotify) : parcours d'activation, lecture du badge, et ce qui ne redéclenche plus
+  la fenêtre système.

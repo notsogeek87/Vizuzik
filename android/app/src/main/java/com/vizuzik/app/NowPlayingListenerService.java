@@ -11,18 +11,19 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Notification-listener component whose sole purpose is to obtain "notification access", which
  * Android also requires in order to read other apps' active MediaSessions. Notifications
- * themselves are ignored; only Deezer's media session (title/artist/art/playback state and
- * transport controls) is tracked, via DeezerMediaBridge.
+ * themselves are ignored; only the tracked app's media session (title/artist/art/playback state
+ * and transport controls) is followed, via DeezerMediaBridge. Which app that is comes from
+ * MusicAppPreference — Deezer or Spotify, whichever the web layer resolved at launch. Before
+ * that choice is known, any session from either known app matches, so something still shows up
+ * immediately on the (common) case where only one of the two is installed.
  */
 public class NowPlayingListenerService extends NotificationListenerService {
 
     private static final String TAG = "NowPlayingListener";
-    private static final String DEEZER_PACKAGE = "deezer";
 
     private MediaSessionManager mediaSessionManager;
     private MediaController activeController;
@@ -64,17 +65,23 @@ public class NowPlayingListenerService extends NotificationListenerService {
     }
 
     private void updateActiveSession(List<MediaController> controllers) {
-        MediaController deezerController = null;
+        String targetPackage = MusicAppPreference.getPackage(this);
+        MediaController matched = null;
         if (controllers != null) {
             for (MediaController controller : controllers) {
-                if (controller.getPackageName() != null && controller.getPackageName().toLowerCase(Locale.ROOT).contains(DEEZER_PACKAGE)) {
-                    deezerController = controller;
+                String packageName = controller.getPackageName();
+                if (packageName == null) continue;
+                boolean matches = targetPackage != null
+                    ? packageName.equals(targetPackage)
+                    : MusicApps.isKnownPackage(packageName);
+                if (matches) {
+                    matched = controller;
                     break;
                 }
             }
         }
 
-        if (deezerController == null) {
+        if (matched == null) {
             detachController();
             DeezerMediaBridge.getInstance().clear();
             return;
@@ -82,13 +89,13 @@ public class NowPlayingListenerService extends NotificationListenerService {
 
         if (
             activeController != null &&
-            activeController.getSessionToken().equals(deezerController.getSessionToken())
+            activeController.getSessionToken().equals(matched.getSessionToken())
         ) {
             return;
         }
 
         detachController();
-        activeController = deezerController;
+        activeController = matched;
         DeezerMediaBridge.getInstance().setController(activeController);
 
         controllerCallback = new MediaController.Callback() {

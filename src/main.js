@@ -32,6 +32,9 @@ const els = {
   empty: document.getElementById("empty"),
   permission: document.getElementById("permission"),
   grantAccess: document.getElementById("grant-access"),
+  appSelect: document.getElementById("app-select"),
+  selectDeezer: document.getElementById("select-deezer"),
+  selectSpotify: document.getElementById("select-spotify"),
 };
 
 const root = document.documentElement;
@@ -145,6 +148,76 @@ function writeVar(name, key, value) {
   if (rounded === cssState[key]) return;
   cssState[key] = rounded;
   root.style.setProperty(name, String(rounded));
+}
+
+/* ------------------------------------------------------------------ music app selection */
+
+// Vizuzik can follow either Deezer or Spotify. Resolved once at startup: whichever of the two
+// is actually installed decides it outright, and a person is only asked when both are — the
+// one case Vizuzik genuinely can't guess. The answer is remembered, same pattern as the capture
+// consent below, so it's asked at most once per install.
+const MUSIC_APP_KEY = "vizuzik:musicApp";
+
+function readMusicApp() {
+  try {
+    const stored = localStorage.getItem(MUSIC_APP_KEY);
+    return stored === "deezer" || stored === "spotify" ? stored : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function rememberMusicApp(app) {
+  try {
+    localStorage.setItem(MUSIC_APP_KEY, app);
+  } catch (err) {
+    /* see readMusicApp() */
+  }
+}
+
+/** Shows the app-select screen and resolves once the user taps one of the two buttons. */
+function askMusicApp() {
+  return new Promise((resolve) => {
+    els.appSelect.hidden = false;
+    const pick = (app) => {
+      els.selectDeezer.removeEventListener("click", onDeezer);
+      els.selectSpotify.removeEventListener("click", onSpotify);
+      els.appSelect.hidden = true;
+      resolve(app);
+    };
+    const onDeezer = () => pick("deezer");
+    const onSpotify = () => pick("spotify");
+    els.selectDeezer.addEventListener("click", onDeezer);
+    els.selectSpotify.addEventListener("click", onSpotify);
+  });
+}
+
+/**
+ * Resolves which app to track and launch: the stored choice if it's still installed, the one
+ * installed app if there's only one, null if neither is, and the app-select screen only when
+ * both are present and nothing was chosen yet.
+ */
+async function resolveMusicApp() {
+  let detected;
+  try {
+    detected = await DeezerMedia.detectMusicApps();
+  } catch (err) {
+    // Older native build without detectMusicApps(): behave exactly as before, Deezer-only.
+    return "deezer";
+  }
+  const { deezerInstalled, spotifyInstalled } = detected;
+  const stored = readMusicApp();
+  if (stored === "deezer" && deezerInstalled) return "deezer";
+  if (stored === "spotify" && spotifyInstalled) return "spotify";
+
+  let resolved;
+  if (deezerInstalled && !spotifyInstalled) resolved = "deezer";
+  else if (spotifyInstalled && !deezerInstalled) resolved = "spotify";
+  else if (!deezerInstalled && !spotifyInstalled) resolved = null;
+  else resolved = await askMusicApp();
+
+  if (resolved) rememberMusicApp(resolved);
+  return resolved;
 }
 
 /* ------------------------------------------------------------------ audio capture */
@@ -716,17 +789,25 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("resize", scheduleFocusRefresh);
 
 applyDisplayMode(false);
-refresh()
-  .catch(() => {})
-  .then(() => {
-    syncCaptureState();
-    // Cold start only: if nothing is already playing, get Deezer going instead of leaving the
-    // user to open it by hand. Never repeated on a later resume — a track already on screen
-    // means Deezer is already where it should be, and relaunching it mid-session would just
-    // steal focus back from the visuals it's supposed to be feeding. Once Deezer starts a
-    // track, the notification listener picks it up and maybeAutoRequestCapture() takes the
-    // system consent dialog off the user's hands too, same as any other launch.
-    if (els.player.hidden) {
-      DeezerMedia.openDeezer().catch(() => {});
-    }
-  });
+(async () => {
+  // Which app to follow has to be settled first: the native now-playing listener needs it
+  // before refresh() can report anything meaningful, and it decides which app (if any) gets
+  // auto-launched below.
+  const app = await resolveMusicApp();
+  if (app) {
+    // Awaited: refresh() below reads the now-playing session natively, and that lookup needs
+    // to already know which app to look for.
+    await DeezerMedia.setMusicAppTarget({ app }).catch(() => {});
+  }
+  await refresh().catch(() => {});
+  syncCaptureState();
+  // Cold start only: if nothing is already playing, get the app going instead of leaving the
+  // user to open it by hand. Never repeated on a later resume — a track already on screen means
+  // the app is already where it should be, and relaunching it mid-session would just steal
+  // focus back from the visuals it's supposed to be feeding. Once it starts a track, the
+  // notification listener picks it up and maybeAutoRequestCapture() takes the system consent
+  // dialog off the user's hands too, same as any other launch.
+  if (app && els.player.hidden) {
+    DeezerMedia.openMusicApp({ app }).catch(() => {});
+  }
+})();

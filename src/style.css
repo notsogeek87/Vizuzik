@@ -823,6 +823,16 @@ body.is-changing .artist {
   50% { transform: scale(1.12); opacity: 1; }
 }
 
+.message__choices {
+  display: flex;
+  gap: 12px;
+  margin-top: 0.2rem;
+}
+
+.message__choices .grant-button {
+  margin-top: 0;
+}
+
 .grant-button {
   margin-top: 0.6rem;
   padding: 0.85rem 1.7rem;
