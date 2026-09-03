@@ -1,0 +1,178 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #0b0b0f;
+  color: #f9fafb;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.background {
+  position: fixed;
+  inset: -10%;
+  background-position: center;
+  background-size: cover;
+  filter: blur(40px) brightness(0.45);
+  transform: scale(1.1);
+  transition: background-image 0.4s ease;
+}
+
+.player {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: env(safe-area-inset-top, 24px) 24px env(safe-area-inset-bottom, 24px);
+  text-align: center;
+}
+
+.cover-wrap {
+  width: min(70vw, 340px);
+  aspect-ratio: 1 / 1;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.cover {
+  width: 100%;
+  height: 100%;
+  background-color: #1f2937;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist {
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: rgba(249, 250, 251, 0.7);
+  margin: 0;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.control {
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.control:active {
+  transform: scale(0.92);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.control svg {
+  fill: currentColor;
+}
+
+.control--secondary {
+  width: 56px;
+  height: 56px;
+}
+
+.control--secondary svg {
+  width: 26px;
+  height: 26px;
+}
+
+.control--primary {
+  width: 76px;
+  height: 76px;
+  background: #f9fafb;
+  color: #0b0b0f;
+}
+
+.control--primary:active {
+  background: #e5e7eb;
+}
+
+.control--primary svg {
+  width: 34px;
+  height: 34px;
+}
+
+.icon-pause {
+  display: none;
+}
+
+.control--primary[data-state="playing"] .icon-play {
+  display: none;
+}
+
+.control--primary[data-state="playing"] .icon-pause {
+  display: block;
+}
+
+.empty,
+.permission {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0 32px;
+  text-align: center;
+  color: rgba(249, 250, 251, 0.85);
+}
+
+.empty .hint {
+  color: rgba(249, 250, 251, 0.5);
+  font-size: 0.9rem;
+}
+
+.grant-button {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #0b0b0f;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.grant-button:active {
+  background: #e5e7eb;
+}

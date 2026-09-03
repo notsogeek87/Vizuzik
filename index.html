@@ -2,26 +2,44 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Vizuzik</title>
-    <style>
-      html, body {
-        height: 100%;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #111827;
-        color: #f9fafb;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
-      h1 {
-        font-size: 2rem;
-        font-weight: 600;
-      }
-    </style>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <h1>Hello World</h1>
+    <div id="background" class="background"></div>
+
+    <main id="player" class="player" hidden>
+      <div class="cover-wrap">
+        <div id="cover" class="cover"></div>
+      </div>
+      <h1 id="title" class="title"></h1>
+      <p id="artist" class="artist"></p>
+
+      <div class="controls">
+        <button id="previous" class="control control--secondary" aria-label="Précédent">
+          <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
+        </button>
+        <button id="play-pause" class="control control--primary" data-state="paused" aria-label="Lecture / Pause">
+          <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
+        </button>
+        <button id="next" class="control control--secondary" aria-label="Suivant">
+          <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z" /></svg>
+        </button>
+      </div>
+    </main>
+
+    <section id="empty" class="empty" hidden>
+      <p>Aucune lecture Deezer en cours.</p>
+      <p class="hint">Lance un titre dans l'app Deezer.</p>
+    </section>
+
+    <section id="permission" class="permission" hidden>
+      <p>Vizuzik a besoin de l'accès aux notifications pour afficher et contrôler la lecture Deezer.</p>
+      <button id="grant-access" class="grant-button">Autoriser l'accès</button>
+    </section>
+
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
