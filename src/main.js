@@ -33,6 +33,7 @@ const els = {
   empty: document.getElementById("empty"),
   permission: document.getElementById("permission"),
   grantAccess: document.getElementById("grant-access"),
+  permissionHint: document.getElementById("permission-hint"),
   appSelect: document.getElementById("app-select"),
   selectDeezer: document.getElementById("select-deezer"),
   selectSpotify: document.getElementById("select-spotify"),
@@ -864,13 +865,34 @@ async function refresh() {
 
 /* ------------------------------------------------------------------ wiring */
 
+/**
+ * A toast alone isn't enough for either case below: it fades before someone stuck on this exact
+ * screen has necessarily read it, and they're going to be looking right at the screen it's on.
+ */
+function setPermissionHint(text) {
+  els.permissionHint.textContent = text;
+  els.permissionHint.hidden = !text;
+}
+
 els.grantAccess.addEventListener("click", () => {
-  // Some Android TV builds have no notification-listener screen for the native side to open
-  // (see requestPermission() in DeezerMediaPlugin.java) — that now comes back as a rejection
-  // instead of crashing the app, so it needs somewhere to land here too.
-  DeezerMedia.requestPermission().catch(() => {
-    showToast("Réglage indisponible sur cet appareil", 2600);
-  });
+  // Some Android TV builds have no notification-listener screen for the native side to open at
+  // all (see requestPermission() in DeezerMediaPlugin.java): it either falls back to the root
+  // Settings screen ({fallback: true} — the exact spot is now on the user to find) or, on the
+  // rare device with no Settings app to open either, rejects outright.
+  DeezerMedia.requestPermission()
+    .then((result) => {
+      if (result && result.fallback) {
+        setPermissionHint(
+          "Cet appareil ne propose pas de raccourci direct : dans Réglages, cherchez " +
+            "Applications › Accès aux notifications, puis autorisez Vizuzik."
+        );
+      } else {
+        setPermissionHint("");
+      }
+    })
+    .catch(() => {
+      setPermissionHint("Cet appareil ne propose pas ce réglage : Vizuzik ne peut pas l'autoriser ici.");
+    });
 });
 
 els.playPause.addEventListener("click", () => {

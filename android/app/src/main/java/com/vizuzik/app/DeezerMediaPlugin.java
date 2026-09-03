@@ -62,19 +62,36 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     @PluginMethod
     public void requestPermission(PluginCall call) {
-        Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            getContext().startActivity(intent);
-        } catch (ActivityNotFoundException e) {
-            // Some Android TV builds don't ship the phone Settings app's notification-listener
-            // screen at all, so this intent resolves to nothing there — startActivity() would
-            // otherwise throw straight past the plugin and crash the whole app. Rejecting instead
-            // lets the web layer say so instead of the app just vanishing.
-            call.reject("unavailable");
+        Intent listenerIntent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+        listenerIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(listenerIntent)) {
+            call.resolve();
             return;
         }
-        call.resolve();
+        // Some Android TV builds (mainly generic/no-name boxes running a stripped-down Settings
+        // app) don't have a screen for ACTION_NOTIFICATION_LISTENER_SETTINGS at all — that intent
+        // resolves to nothing there. Falling back to the root Settings screen at least drops the
+        // user somewhere they can look for it themselves instead of a dead button; the web layer
+        // (see the click handler in main.js) tells them what to look for from there.
+        Intent settingsIntent = new Intent(Settings.ACTION_SETTINGS);
+        settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(settingsIntent)) {
+            JSObject result = new JSObject();
+            result.put("fallback", true);
+            call.resolve(result);
+            return;
+        }
+        // Neither intent resolved to anything: genuinely nothing left to open.
+        call.reject("unavailable");
+    }
+
+    private boolean tryStartActivity(Intent intent) {
+        try {
+            getContext().startActivity(intent);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            return false;
+        }
     }
 
     /**

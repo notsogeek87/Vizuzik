@@ -220,6 +220,11 @@
     <section id="permission" class="message" hidden>
       <p>Vizuzik a besoin de l'accès aux notifications pour afficher et contrôler la lecture.</p>
       <button id="grant-access" type="button" class="grant-button">Autoriser l'accès</button>
+      <!-- Filled in and unhidden only when the system couldn't open the notification-access
+           screen directly (see requestPermission() in DeezerMediaPlugin.java) — a persistent
+           message here instead of a toast alone, since this screen is exactly where someone
+           stuck on that device is going to be looking. -->
+      <p id="permission-hint" class="hint" hidden></p>
     </section>
 
     <script type="module" src="/src/main.js"></script>
