@@ -1,7 +1,7 @@
 # Choisir puis lancer l'app de musique soi-même
 
 **Statut :** adopté · **Date :** 2026-09-03 · **Concerne :**
-`src/main.js`, `index.html`, `DeezerMediaPlugin.java`, `MusicApps.java`,
+`src/main.js`, `index.html`, `MainActivity.java`, `DeezerMediaPlugin.java`, `MusicApps.java`,
 `MusicAppPreference.java`, `NowPlayingListenerService.java`, `AudioCaptureService.java`
 
 ## Le problème
@@ -61,6 +61,20 @@ plus, pas de moins. Vizuzik évite donc de le faire dès qu'il peut s'en passer 
   d'échouer (ce cas ne devrait de toute manière plus se produire, `resolveMusicApp()` n'ayant
   choisi que parmi les apps effectivement détectées).
 
+  Ce cas pose `awaitingFirstTrackAfterLaunch = true`. Dès que le morceau qu'on est allé choisir
+  démarre réellement (`nowPlayingChanged` avec `active` et `isPlaying` tous deux vrais — pas
+  simplement une visite de l'app), un second écouteur appelle
+  `DeezerMediaPlugin.bringToFront()`, qui relance l'activité de Vizuzik avec
+  `FLAG_ACTIVITY_REORDER_TO_FRONT` pour ramener la tâche existante au premier plan sans la
+  recréer. **Best-effort, pas garanti :** les restrictions Android sur le démarrage d'activités
+  depuis l'arrière-plan peuvent bloquer l'appel selon la version ou le temps écoulé depuis que
+  Vizuzik a lui-même eu le premier plan ; dans ce cas l'appel échoue silencieusement et
+  l'utilisateur se retrouve simplement là où `openMusicApp()` l'aurait laissé sans cette
+  tentative. Le drapeau est aussi remis à zéro dès qu'un retour manuel vers Vizuzik est détecté
+  (`visibilitychange` → `visible`, y compris celui que `bringToFront()` provoque lui-même), pour
+  qu'un morceau lancé plus tard dans la session — après que l'utilisateur a déjà navigué de son
+  propre chef — ne déclenche pas un retour surprise.
+
 **Une seule fois par lancement, jamais en cours de session.** Les deux branches vivent dans la
 même IIFE de démarrage que la résolution de l'app, pas dans `visibilitychange` ni dans aucune
 fonction rappelée plus tard. Les répéter à chaque retour au premier plan referait exactement ce
@@ -89,9 +103,9 @@ dynamiquement, depuis la session active ou, à défaut, depuis `MusicAppPreferen
 - Les deux installées, jamais choisi encore : un écran, une fois, puis plus jamais.
 - Premier écran d'un lancement à froid, une session en pause existe déjà : le morceau reprend
   tout seul, sans jamais quitter l'écran plein écran.
-- Premier écran d'un lancement à froid, aucune session : l'app choisie s'ouvre toute seule,
-  l'utilisateur n'a plus qu'à lancer un morceau — c'est le seul cas où il faut encore revenir
-  soi-même vers Vizuzik.
+- Premier écran d'un lancement à froid, aucune session : l'app choisie s'ouvre toute seule ;
+  dès qu'un morceau démarre, Vizuzik tente de revenir tout seul au premier plan — sans garantie
+  (restrictions Android), mais dans le pire cas c'est exactement le retour manuel d'avant.
 - Un titre déjà en cours de lecture au lancement (webview relancée pendant que l'app jouait déjà) :
   rien ne bouge, l'écran plein écran reste au premier plan.
 - Retour dans Vizuzik après être passé sur l'app de musique en cours de session : jamais de

@@ -49,6 +49,11 @@ const MODE_LABELS = {
 let isPlaying = false;
 let currentArt = null;
 let currentTrackKey = null;
+// Set only right after openMusicApp() sent the user off to pick a track themselves (see the
+// startup IIFE near the bottom of this file). Cleared the moment either a track actually starts
+// (bringToFront() is attempted then) or the user manually returns first — see the
+// nowPlayingChanged and visibilitychange listeners below.
+let awaitingFirstTrackAfterLaunch = false;
 
 const DISPLAY_MODE_KEY = "vizuzik:displayMode";
 const storedMode = localStorage.getItem(DISPLAY_MODE_KEY);
@@ -757,6 +762,15 @@ els.previous.addEventListener("click", () => DeezerMedia.previous());
 els.next.addEventListener("click", () => DeezerMedia.next());
 
 DeezerMedia.addListener("nowPlayingChanged", setNowPlaying);
+DeezerMedia.addListener("nowPlayingChanged", (state) => {
+  // Best-effort return trip: the app was opened because there was nothing to resume, and now
+  // something is actually playing — the moment a person picked a track, not just switched to
+  // the app to look around. Not guaranteed (see DeezerMediaPlugin.bringToFront()), but this is
+  // the one moment it's worth trying.
+  if (!awaitingFirstTrackAfterLaunch || !state || !state.active || !state.isPlaying) return;
+  awaitingFirstTrackAfterLaunch = false;
+  DeezerMedia.bringToFront().catch(() => {});
+});
 DeezerMedia.addListener("audioLevels", (data) => {
   if (data && data.levels) {
     visualizer.setLevels(data.levels);
@@ -777,6 +791,9 @@ DeezerMedia.addListener("audioCaptureStopped", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
+    // Back in Vizuzik on our own steam (manually, or via bringToFront() already firing this
+    // same event): either way there's nothing left to bring back.
+    awaitingFirstTrackAfterLaunch = false;
     refresh();
     syncCaptureState();
   } else {
@@ -813,7 +830,8 @@ applyDisplayMode(false);
     // No session at all: there is no last track to resume, so nothing short of opening the app
     // lets the user pick one. Once they start something, the notification listener picks it up
     // and maybeAutoRequestCapture() takes the system consent dialog off their hands too, same
-    // as any other launch.
+    // as any other launch — and the nowPlayingChanged listener above tries to bring Vizuzik back.
+    awaitingFirstTrackAfterLaunch = true;
     DeezerMedia.openMusicApp({ app }).catch(() => {});
   }
 })();

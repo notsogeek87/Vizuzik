@@ -117,6 +117,28 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         call.resolve(result);
     }
 
+    /**
+     * Best-effort: brings Vizuzik's own task back to the foreground after openMusicApp() sent
+     * the user to Deezer/Spotify because there was nothing to resume. Called once a track
+     * actually starts, not on a timer, so it never interrupts someone still picking a song.
+     * FLAG_ACTIVITY_REORDER_TO_FRONT reuses the existing task instead of recreating it. Not
+     * guaranteed: Android's background-activity-start restrictions can block this outright on
+     * some versions or if too much time has passed since Vizuzik itself last held the
+     * foreground — in that case this silently does nothing, and the user is exactly where a
+     * plain openMusicApp() would have left them anyway.
+     */
+    @PluginMethod
+    public void bringToFront(PluginCall call) {
+        Intent intent = new Intent(getContext(), MainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(intent);
+        } catch (Exception e) {
+            // Background-activity-start restriction or similar: nothing more to do.
+        }
+        call.resolve();
+    }
+
     @PluginMethod
     public void getNowPlaying(PluginCall call) {
         call.resolve(toJs(DeezerMediaBridge.getInstance().getLastNowPlaying()));
