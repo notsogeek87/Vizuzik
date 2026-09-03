@@ -42,26 +42,35 @@ résolution), `NowPlayingListenerService` accepte la session de n'importe laquel
 connues plutôt que de rien afficher — pour que le cas courant (une seule des deux installée)
 n'attende pas inutilement l'aller-retour vers le natif avant de montrer quelque chose.
 
-### Lancer l'app choisie
+### Reprendre plutôt que quitter l'écran
 
-Au tout premier écran de chaque lancement, si aucun titre n'est déjà affiché (`els.player`
-masqué — que ce soit l'écran vide ou celui de permission), Vizuzik ouvre l'app choisie via
-`DeezerMediaPlugin.openMusicApp({ app })`, qui résout l'intent de lancement du paquet
-correspondant et démarre l'activité. Rien ne se passe si l'app n'est pas installée : la méthode
-répond simplement `{ launched: false }` plutôt que d'échouer, ce que l'appel côté web ignore de
-toute façon (ce cas ne devrait de toute manière plus se produire, `resolveMusicApp()` n'ayant
-choisi que parmi les apps effectivement détectées).
+Ouvrir l'app de musique fait perdre le focus à Vizuzik, et rien ne le lui rend automatiquement —
+quitter l'écran pour choisir un titre puis devoir revenir soi-même serait un aller-retour de
+plus, pas de moins. Vizuzik évite donc de le faire dès qu'il peut s'en passer :
 
-**Une seule fois par lancement, jamais en cours de session.** L'appel vit dans la même IIFE de
-démarrage que la résolution de l'app, pas dans `visibilitychange` ni dans aucune fonction
-rappelée plus tard. Le réexécuter à chaque retour au premier plan aurait fait exactement ce que
-Vizuzik essaie d'éviter ailleurs (voir
+- **Une session existe déjà, en pause** (`els.player` visible mais `isPlaying` faux — l'app
+  tournait encore en arrière-plan avec un dernier titre chargé) : Vizuzik appelle
+  `DeezerMedia.play()`, les mêmes commandes de transport que le bouton lecture/pause de l'écran,
+  directement sur cette session. Le morceau reprend sans que Vizuzik n'ait jamais quitté l'écran,
+  donc rien à ramener au premier plan.
+- **Aucune session du tout** (`els.player` masqué) : il n'y a rien à reprendre, aucune commande
+  de transport ne peut inventer un titre. C'est le seul cas où Vizuzik ouvre l'app via
+  `DeezerMediaPlugin.openMusicApp({ app })`, qui résout l'intent de lancement du paquet
+  correspondant et démarre l'activité — pour que l'utilisateur en choisisse un. Rien ne se passe
+  si l'app n'est pas installée : la méthode répond simplement `{ launched: false }` plutôt que
+  d'échouer (ce cas ne devrait de toute manière plus se produire, `resolveMusicApp()` n'ayant
+  choisi que parmi les apps effectivement détectées).
+
+**Une seule fois par lancement, jamais en cours de session.** Les deux branches vivent dans la
+même IIFE de démarrage que la résolution de l'app, pas dans `visibilitychange` ni dans aucune
+fonction rappelée plus tard. Les répéter à chaque retour au premier plan referait exactement ce
+que Vizuzik essaie d'éviter ailleurs (voir
 [Le consentement de capture audio comme parcours](2026-09-03-consentement-capture-audio.md)) :
-reprendre le focus sur l'app de musique alors que l'utilisateur vient justement de revenir
-regarder les visuels.
+relancer un titre que l'utilisateur vient justement de mettre en pause, ou rouvrir l'app de
+musique alors qu'il vient de revenir regarder les visuels.
 
-**Seulement si rien ne joue déjà.** Un titre déjà affiché signifie que l'app est déjà à sa place ;
-relancer son intent d'ouverture volerait le focus à l'écran plein écran pour rien.
+**Seulement si rien ne joue déjà.** Une lecture déjà en cours (`isPlaying` vrai) signifie que
+l'app est déjà à sa place ; aucune des deux branches ne se déclenche.
 
 ## Conséquence sur le consentement de capture
 
@@ -78,11 +87,15 @@ dynamiquement, depuis la session active ou, à défaut, depuis `MusicAppPreferen
 - Une seule des deux apps installée : elle est choisie sans qu'on demande rien, comme avant avec
   Deezer.
 - Les deux installées, jamais choisi encore : un écran, une fois, puis plus jamais.
-- Premier écran d'un lancement à froid, rien ne joue : l'app choisie s'ouvre toute seule,
-  l'utilisateur n'a plus qu'à lancer un morceau.
-- Un titre déjà en cours au lancement (webview relancée pendant que l'app tournait) : rien ne
-  bouge, l'écran plein écran reste au premier plan.
+- Premier écran d'un lancement à froid, une session en pause existe déjà : le morceau reprend
+  tout seul, sans jamais quitter l'écran plein écran.
+- Premier écran d'un lancement à froid, aucune session : l'app choisie s'ouvre toute seule,
+  l'utilisateur n'a plus qu'à lancer un morceau — c'est le seul cas où il faut encore revenir
+  soi-même vers Vizuzik.
+- Un titre déjà en cours de lecture au lancement (webview relancée pendant que l'app jouait déjà) :
+  rien ne bouge, l'écran plein écran reste au premier plan.
 - Retour dans Vizuzik après être passé sur l'app de musique en cours de session : jamais de
-  relance, seul le tout premier écran du lancement déclenche l'ouverture.
+  relance ni de reprise forcée, seul le tout premier écran du lancement déclenche l'une ou
+  l'autre.
 - Désinstaller l'app suivie et n'en garder qu'une : au lancement suivant, le choix mémorisé n'est
   plus valide, `resolveMusicApp()` retombe sur l'app restante sans redemander.

@@ -801,13 +801,19 @@ applyDisplayMode(false);
   }
   await refresh().catch(() => {});
   syncCaptureState();
-  // Cold start only: if nothing is already playing, get the app going instead of leaving the
-  // user to open it by hand. Never repeated on a later resume — a track already on screen means
-  // the app is already where it should be, and relaunching it mid-session would just steal
-  // focus back from the visuals it's supposed to be feeding. Once it starts a track, the
-  // notification listener picks it up and maybeAutoRequestCapture() takes the system consent
-  // dialog off the user's hands too, same as any other launch.
-  if (app && els.player.hidden) {
+  // Cold start only: never repeated on a later resume, since by then the app (or a resumed
+  // session) is already exactly where it should be, and redoing any of this mid-session would
+  // just steal focus or restart a track the user is deliberately listening to or pausing.
+  if (app && !els.player.hidden && !isPlaying) {
+    // A session for the tracked app is already there (it kept running in the background, still
+    // holding the last track) — just paused. Resuming it straight from here means Vizuzik never
+    // has to leave the screen at all, let alone find its way back to it.
+    DeezerMedia.play().catch(() => {});
+  } else if (app && els.player.hidden) {
+    // No session at all: there is no last track to resume, so nothing short of opening the app
+    // lets the user pick one. Once they start something, the notification listener picks it up
+    // and maybeAutoRequestCapture() takes the system consent dialog off their hands too, same
+    // as any other launch.
     DeezerMedia.openMusicApp({ app }).catch(() => {});
   }
 })();
