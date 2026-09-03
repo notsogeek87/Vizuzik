@@ -1,6 +1,7 @@
 package com.vizuzik.app.player
 
 import com.vizuzik.app.di.ApplicationScope
+import com.vizuzik.app.diagnostics.MediaSessionProbe
 import com.vizuzik.app.domain.model.PlayerState
 import com.vizuzik.app.domain.model.RepeatMode
 import com.vizuzik.app.domain.model.Track
@@ -9,12 +10,15 @@ import com.vizuzik.app.domain.player.PlaybackEvent
 import com.vizuzik.app.player.deezer.DeezerRemotePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,6 +35,7 @@ class MusicPlayerRouter @Inject constructor(
     private val sourceController: PlaybackSourceController,
     private val localPlayer: Media3MusicPlayer,
     private val deezerPlayer: DeezerRemotePlayer,
+    private val probe: MediaSessionProbe,
     @ApplicationScope scope: CoroutineScope,
 ) : MusicPlayer {
 
@@ -48,6 +53,30 @@ class MusicPlayerRouter @Inject constructor(
     override val events: SharedFlow<PlaybackEvent> = sourceController.activeSource
         .flatMapLatest { delegateFor(it).events }
         .shareIn(scope, SharingStarted.Eagerly, replay = 0)
+
+    init {
+        // L'utilisateur peut lancer Deezer directement (pas seulement depuis
+        // « Lancer sur Deezer ») et s'attend à ce que Vizuzik le reflète quand
+        // même, en vraie télécommande. On surveille donc en continu la session
+        // Deezer : si elle se met à jouer alors qu'on n'écoute rien en local,
+        // on bascule automatiquement dessus ; si elle disparaît, on revient au
+        // local plutôt que de laisser la télécommande pointer dans le vide.
+        scope.launch {
+            while (isActive) {
+                val deezerController = probe.activeControllers()
+                    .firstOrNull { it.packageName.contains("deezer", ignoreCase = true) }
+                val deezerPlaying = deezerController != null &&
+                    probe.report(deezerController).state == "PLAYING"
+                when {
+                    deezerPlaying && sourceController.activeSource.value == PlaybackSource.LOCAL &&
+                        !localPlayer.state.value.isPlaying -> activateDeezer()
+                    deezerController == null && sourceController.activeSource.value == PlaybackSource.DEEZER ->
+                        activateLocal()
+                }
+                delay(2_000)
+            }
+        }
+    }
 
     override fun setQueue(tracks: List<Track>, startIndex: Int, playWhenReady: Boolean) =
         active.setQueue(tracks, startIndex, playWhenReady)
