@@ -11,6 +11,7 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Notification-listener component whose sole purpose is to obtain "notification access", which
@@ -21,7 +22,7 @@ import java.util.List;
 public class NowPlayingListenerService extends NotificationListenerService {
 
     private static final String TAG = "NowPlayingListener";
-    private static final String DEEZER_PACKAGE = "deezer.android.app";
+    private static final String DEEZER_PACKAGE = "deezer";
 
     private MediaSessionManager mediaSessionManager;
     private MediaController activeController;
@@ -66,7 +67,7 @@ public class NowPlayingListenerService extends NotificationListenerService {
         MediaController deezerController = null;
         if (controllers != null) {
             for (MediaController controller : controllers) {
-                if (DEEZER_PACKAGE.equals(controller.getPackageName())) {
+                if (controller.getPackageName() != null && controller.getPackageName().toLowerCase(Locale.ROOT).contains(DEEZER_PACKAGE)) {
                     deezerController = controller;
                     break;
                 }
