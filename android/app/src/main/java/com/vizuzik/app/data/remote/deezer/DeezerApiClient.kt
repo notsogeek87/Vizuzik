@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,17 +28,19 @@ data class DeezerCollectionItem(
 )
 
 /**
- * Client minimal pour l'API publique Deezer (`api.deezer.com`), authentifié
- * par le jeton OAuth obtenu via [DeezerAuthRepository]. Pas de SDK officiel
- * utilisé : de simples appels GET suffisent pour lister les albums/playlists
- * de l'utilisateur.
+ * Client pour le catalogue public Deezer (`api.deezer.com/search/...`), qui ne
+ * nécessite ni app développeur ni jeton OAuth — seule la lecture de la
+ * bibliothèque personnelle de l'utilisateur (`user/me/...`) l'exige, et
+ * Deezer n'a pas accepté la création d'une app pour ce projet. On cherche
+ * donc dans le catalogue public plutôt que de lister « mes » albums/playlists :
+ * ça suffit pour retrouver et lancer un album/une playlist qu'on possède déjà.
  */
 @Singleton
 class DeezerApiClient @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
-    suspend fun fetchAlbums(accessToken: String): List<DeezerCollectionItem> = withContext(ioDispatcher) {
-        fetchAll("https://api.deezer.com/user/me/albums", accessToken) { item ->
+    suspend fun searchAlbums(query: String): List<DeezerCollectionItem> = withContext(ioDispatcher) {
+        search("https://api.deezer.com/search/album", query) { item ->
             val artist = item.optJSONObject("artist")?.optString("name").orEmpty()
             val title = item.optString("title")
             DeezerCollectionItem(
@@ -51,8 +54,8 @@ class DeezerApiClient @Inject constructor(
         }
     }
 
-    suspend fun fetchPlaylists(accessToken: String): List<DeezerCollectionItem> = withContext(ioDispatcher) {
-        fetchAll("https://api.deezer.com/user/me/playlists", accessToken) { item ->
+    suspend fun searchPlaylists(query: String): List<DeezerCollectionItem> = withContext(ioDispatcher) {
+        search("https://api.deezer.com/search/playlist", query) { item ->
             val trackCount = item.optInt("nb_tracks")
             val title = item.optString("title")
             DeezerCollectionItem(
@@ -66,33 +69,18 @@ class DeezerApiClient @Inject constructor(
         }
     }
 
-    /**
-     * Suit `next` pour parcourir toutes les pages. Le champ `next` renvoyé par
-     * Deezer ne porte pas toujours `access_token` (non vérifiable en direct
-     * depuis cet environnement) : on le rajoute par précaution s'il manque.
-     */
-    private fun fetchAll(
-        baseUrl: String,
-        accessToken: String,
+    private fun search(
+        endpoint: String,
+        query: String,
         map: (JSONObject) -> DeezerCollectionItem,
     ): List<DeezerCollectionItem> {
-        val items = mutableListOf<DeezerCollectionItem>()
-        var url: String? = withAccessToken("$baseUrl?limit=100", accessToken)
-        while (url != null) {
-            val body = DeezerHttp.get(url)
-            val json = JSONObject(body)
-            json.optJSONObject("error")?.let { error ->
-                throw IOException(error.optString("message").ifBlank { "Erreur API Deezer" })
-            }
-            val data = json.optJSONArray("data") ?: JSONArray()
-            for (i in 0 until data.length()) {
-                items += map(data.getJSONObject(i))
-            }
-            url = json.optString("next").takeIf { it.isNotBlank() }?.let { withAccessToken(it, accessToken) }
+        val url = "$endpoint?q=${URLEncoder.encode(query, "UTF-8")}&limit=25"
+        val body = DeezerHttp.get(url)
+        val json = JSONObject(body)
+        json.optJSONObject("error")?.let { error ->
+            throw IOException(error.optString("message").ifBlank { "Erreur API Deezer" })
         }
-        return items
+        val data = json.optJSONArray("data") ?: JSONArray()
+        return (0 until data.length()).map { i -> map(data.getJSONObject(i)) }
     }
-
-    private fun withAccessToken(url: String, accessToken: String): String =
-        if (url.contains("access_token=")) url else url + (if (url.contains("?")) "&" else "?") + "access_token=$accessToken"
 }

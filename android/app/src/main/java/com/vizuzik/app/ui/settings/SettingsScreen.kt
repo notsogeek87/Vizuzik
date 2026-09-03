@@ -39,7 +39,7 @@ import com.vizuzik.app.ui.components.SectionHeader
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDeezerProbe: () -> Unit,
-    onOpenDeezerAuth: () -> Unit,
+    onOpenDeezerSearch: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val themeId by viewModel.themeId.collectAsStateWithLifecycle()
@@ -73,11 +73,11 @@ fun SettingsScreen(
 
             SectionHeader(title = "Deezer")
             OutlinedButton(
-                onClick = onOpenDeezerAuth,
+                onClick = onOpenDeezerSearch,
                 modifier = Modifier.padding(horizontal = 16.dp),
             ) {
                 Icon(Icons.Filled.CloudQueue, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text("Se connecter à Deezer")
+                Text("Lancer sur Deezer")
             }
 
             SectionHeader(title = "Diagnostic")

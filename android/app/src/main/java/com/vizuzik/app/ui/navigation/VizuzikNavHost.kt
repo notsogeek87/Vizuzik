@@ -11,8 +11,7 @@ import com.vizuzik.app.ui.albums.AlbumDetailScreen
 import com.vizuzik.app.ui.albums.AlbumsScreen
 import com.vizuzik.app.ui.artists.ArtistDetailScreen
 import com.vizuzik.app.ui.artists.ArtistsScreen
-import com.vizuzik.app.ui.deezer.DeezerAuthScreen
-import com.vizuzik.app.ui.deezer.DeezerLibraryScreen
+import com.vizuzik.app.ui.deezer.DeezerSearchScreen
 import com.vizuzik.app.ui.diagnostics.MediaSessionProbeScreen
 import com.vizuzik.app.ui.home.HomeScreen
 import com.vizuzik.app.ui.player.EqualizerScreen
@@ -56,20 +55,14 @@ fun VizuzikNavHost(navController: NavHostController, modifier: Modifier = Modifi
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenDeezerProbe = { navController.navigate(Destination.DeezerProbe.route) },
-                onOpenDeezerAuth = { navController.navigate(Destination.DeezerAuth.route) },
+                onOpenDeezerSearch = { navController.navigate(Destination.DeezerSearch.route) },
             )
         }
         composable(Destination.DeezerProbe.route) {
             MediaSessionProbeScreen(onBack = { navController.popBackStack() })
         }
-        composable(Destination.DeezerAuth.route) {
-            DeezerAuthScreen(
-                onBack = { navController.popBackStack() },
-                onOpenLibrary = { navController.navigate(Destination.DeezerLibrary.route) },
-            )
-        }
-        composable(Destination.DeezerLibrary.route) {
-            DeezerLibraryScreen(onBack = { navController.popBackStack() })
+        composable(Destination.DeezerSearch.route) {
+            DeezerSearchScreen(onBack = { navController.popBackStack() })
         }
         composable(Destination.Player.route) {
             PlayerScreen(

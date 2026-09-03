@@ -39,7 +39,7 @@ domain/repository/MusicRepository     ← data/repository/MusicRepositoryImpl (c
 app/src/main/java/com/vizuzik/app/
   domain/            modèles, interfaces (MusicSource, MusicPlayer), use cases, agrégation
   data/              MediaStore, cache Room, playlists, préférences (DataStore)
-  data/remote/deezer/ client OAuth + API Deezer (voir Deezer)
+  data/remote/deezer/ client recherche catalogue public Deezer (voir Deezer)
   player/            MusicPlayerRouter, Media3MusicPlayer (MediaController) + PlaybackService
   player/deezer/     DeezerRemotePlayer (télécommande de la session média Deezer)
   audio/             AudioEngine + Equalizer/BassBoost/Virtualizer/Reverb (android.media.audiofx)
@@ -109,23 +109,29 @@ Ou récupérer l'APK depuis les Releases GitHub / artefacts du workflow
 ## Deezer
 
 Deezer ne propose aucun accord commercial de streaming complet pour une app tierce
-(API publique limitée à 30 s d'extrait, SDK natif déprécié) : Vizuzik ne lit donc
-jamais l'audio Deezer lui-même. À la place, il **télécommande la session média de
-l'app Deezer officielle** (déjà installée sur l'appareil) via les API Android
-standard (`MediaSessionManager`/`MediaController`), avec le skin choisi dans
-Vizuzik. Validé en direct : `playFromSearch` lance fiablement un album/playlist
-par son nom, sans garantie de précision au morceau près — largement suffisant
-pour lancer un album ou une playlist qu'on a déjà sur Deezer.
+(API publique limitée à 30 s d'extrait, SDK natif déprécié), et la création d'une
+app développeur (nécessaire pour l'API `user/me/...` et OAuth) n'a pas été acceptée
+pour ce projet. Vizuzik ne lit donc jamais l'audio Deezer lui-même, et ne demande
+aucune connexion au compte Deezer de l'utilisateur. À la place, il **télécommande
+la session média de l'app Deezer officielle** (déjà installée sur l'appareil) via
+les API Android standard (`MediaSessionManager`/`MediaController`), avec le skin
+choisi dans Vizuzik. Validé en direct : `playFromSearch` lance fiablement un
+album/playlist par son nom, sans garantie de précision au morceau près —
+largement suffisant pour lancer un album ou une playlist qu'on a déjà sur Deezer.
 
-Ce que ça permet :
-- Se connecter à son compte Deezer (OAuth) et voir ses albums/playlists.
-- Toucher un album/playlist l'envoie à l'app Deezer, qui doit avoir été ouverte
-  au moins une fois auparavant sur l'appareil.
+Ce que ça permet, sans aucune configuration ni compte Deezer développeur :
+- Chercher un artiste/album/playlist dans le catalogue public Deezer
+  (`api.deezer.com/search/...`, aucune authentification requise) et voir les
+  résultats avec leur pochette.
+- Toucher un résultat l'envoie à l'app Deezer, qui doit avoir été ouverte au
+  moins une fois auparavant sur l'appareil.
 - Le mini-player et l'écran plein écran de Vizuzik reflètent alors ce que joue
   Deezer (titre, pochette, position, play/pause/suivant/précédent) avec le skin
   choisi.
 
 Ce que ça ne permet pas :
+- Voir directement "mes" albums/playlists Deezer (ça nécessiterait l'API
+  `user/me/...`, donc OAuth) — on cherche dans le catalogue public à la place.
 - Choisir un morceau précis dans un album/playlist (recherche par nom, pas par
   identifiant) — accepté comme limite, voir l'historique des commits.
 - Égaliseur ou visualiseur sur l'audio Deezer : Vizuzik ne possède pas ce flux,
@@ -135,41 +141,13 @@ Ce que ça ne permet pas :
 Aucun contournement des protections Deezer, aucune API privée, aucun flux non
 officiel.
 
-### Configuration (nécessaire pour que la connexion Deezer fonctionne)
-
-1. Créer une app sur [developers.deezer.com/myapps](https://developers.deezer.com/myapps).
-2. Dans les réglages de cette app, mettre comme **Domaine de redirection** :
-   `vizuzik.local` (ou l'hôte de `deezerRedirectUri` si personnalisé — voir plus bas).
-3. Noter l'**App ID** et le **Secret Key**.
-4. Dans le dépôt GitHub → *Settings* → *Secrets and variables* → *Actions*, ajouter
-   deux secrets : `DEEZER_APP_ID` et `DEEZER_APP_SECRET`, avec ces valeurs.
-5. Relancer le workflow `.github/workflows/android.yml` (ou pousser un commit) :
-   l'APK généré embarquera ces identifiants via `BuildConfig`.
-
-Sans ces secrets, le build reste vert : l'écran "Se connecter à Deezer" affiche
-simplement un message expliquant qu'il manque des identifiants, au lieu de planter.
-
-Pour un build local (Android Studio), une alternative à `-P` est un fichier
-`android/local.properties` (gitignoré, jamais commité) contenant :
-```
-deezerAppId=...
-deezerAppSecret=...
-```
-Le `redirect_uri` par défaut (`https://vizuzik.local/oauth/callback`) n'a pas
-besoin d'être un serveur réel : Vizuzik intercepte la navigation vers cette URL
-directement dans la WebView de connexion pour en extraire le code d'autorisation.
-Il est personnalisable via `-PdeezerRedirectUri=...` / `deezerRedirectUri=...` si
-besoin, du moment qu'il correspond au domaine déclaré sur developers.deezer.com.
-
 ### Architecture
 
-- `data/remote/deezer/` : `DeezerOAuthConfig` (URL d'autorisation), `DeezerHttp`
-  (GET minimal, zéro dépendance ajoutée), `DeezerAuthRepository` (échange du code
-  contre un jeton, persistance DataStore — Deezer ne fournit pas de refresh token),
-  `DeezerApiClient` (albums/playlists via l'API publique), `DeezerPlaybackLauncher`
-  (`playFromSearch` sur la session Deezer active).
-- `ui/deezer/` : écran de connexion (WebView OAuth) et écran de bibliothèque
-  (albums/playlists, avec action de lancement).
+- `data/remote/deezer/` : `DeezerHttp` (GET minimal, zéro dépendance ajoutée),
+  `DeezerApiClient` (recherche albums/playlists via le catalogue public, sans
+  jeton), `DeezerPlaybackLauncher` (`playFromSearch` sur la session Deezer active).
+- `ui/deezer/DeezerSearchScreen` : recherche + lancement, accessible depuis
+  Réglages → *Lancer sur Deezer*.
 - `player/deezer/DeezerRemotePlayer` : implémente `MusicPlayer` en reflétant l'état
   de la session Deezer (`MediaController.Callback` + rafraîchissement périodique)
   et en lui relayant play/pause/next/prev/seek.

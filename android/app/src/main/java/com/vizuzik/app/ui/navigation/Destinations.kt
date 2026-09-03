@@ -15,8 +15,7 @@ sealed class Destination(val route: String) {
     data object Equalizer : Destination("equalizer")
     data object Visualizer : Destination("visualizer")
     data object DeezerProbe : Destination("deezer-probe")
-    data object DeezerAuth : Destination("deezer-auth")
-    data object DeezerLibrary : Destination("deezer-library")
+    data object DeezerSearch : Destination("deezer-search")
 
     data object AlbumDetail : Destination("album/{albumId}") {
         const val ARG = "albumId"

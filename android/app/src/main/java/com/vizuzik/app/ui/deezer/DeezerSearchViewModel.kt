@@ -3,7 +3,6 @@ package com.vizuzik.app.ui.deezer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vizuzik.app.data.remote.deezer.DeezerApiClient
-import com.vizuzik.app.data.remote.deezer.DeezerAuthRepository
 import com.vizuzik.app.data.remote.deezer.DeezerCollectionItem
 import com.vizuzik.app.data.remote.deezer.DeezerLaunchResult
 import com.vizuzik.app.data.remote.deezer.DeezerPlaybackLauncher
@@ -12,50 +11,53 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class DeezerLibraryUiState(
-    val isLoading: Boolean = true,
+data class DeezerSearchUiState(
+    val query: String = "",
+    val isSearching: Boolean = false,
+    val hasSearched: Boolean = false,
     val albums: List<DeezerCollectionItem> = emptyList(),
     val playlists: List<DeezerCollectionItem> = emptyList(),
     val error: String? = null,
     val lastLaunchMessage: String? = null,
 )
 
+/**
+ * Recherche dans le catalogue public Deezer (pas de connexion requise, voir
+ * [DeezerApiClient]) puis lance l'album/playlist choisi sur la session média
+ * Deezer active — c'est tout ce dont on a besoin : lancer un album/une
+ * playlist qu'on a déjà sur Deezer, pas choisir un morceau précis.
+ */
 @HiltViewModel
-class DeezerLibraryViewModel @Inject constructor(
-    private val authRepository: DeezerAuthRepository,
+class DeezerSearchViewModel @Inject constructor(
     private val apiClient: DeezerApiClient,
     private val playbackLauncher: DeezerPlaybackLauncher,
     private val musicPlayerRouter: MusicPlayerRouter,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(DeezerLibraryUiState())
-    val state: StateFlow<DeezerLibraryUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(DeezerSearchUiState())
+    val state: StateFlow<DeezerSearchUiState> = _state.asStateFlow()
 
-    init {
-        refresh()
+    fun onQueryChange(query: String) {
+        _state.update { it.copy(query = query) }
     }
 
-    fun refresh() {
+    fun search() {
+        val query = _state.value.query.trim()
+        if (query.isBlank()) return
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            val token = authRepository.accessToken.first()
-            if (token.isNullOrBlank()) {
-                _state.update { it.copy(isLoading = false, error = "Non connecté à Deezer.") }
-                return@launch
-            }
+            _state.update { it.copy(isSearching = true, hasSearched = true, error = null) }
             runCatching {
-                val albums = apiClient.fetchAlbums(token)
-                val playlists = apiClient.fetchPlaylists(token)
+                val albums = apiClient.searchAlbums(query)
+                val playlists = apiClient.searchPlaylists(query)
                 albums to playlists
             }.onSuccess { (albums, playlists) ->
-                _state.update { it.copy(isLoading = false, albums = albums, playlists = playlists) }
+                _state.update { it.copy(isSearching = false, albums = albums, playlists = playlists) }
             }.onFailure { error ->
-                _state.update { it.copy(isLoading = false, error = error.message ?: "Échec du chargement de la bibliothèque Deezer.") }
+                _state.update { it.copy(isSearching = false, error = error.message ?: "Échec de la recherche Deezer.") }
             }
         }
     }

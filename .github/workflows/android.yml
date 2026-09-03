@@ -35,22 +35,12 @@ jobs:
         working-directory: android
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      # DEEZER_APP_ID / DEEZER_APP_SECRET : secrets du dépôt (Settings →
-      # Secrets and variables → Actions), jamais commités. Absents tant que
-      # l'utilisateur ne les a pas ajoutés lui-même — le build reste vert
-      # (BuildConfig.DEEZER_APP_ID vide), seul l'écran de connexion Deezer
-      # affichera un message au lieu de fonctionner.
       - name: Build debug APK
         working-directory: android
-        env:
-          DEEZER_APP_ID: ${{ secrets.DEEZER_APP_ID }}
-          DEEZER_APP_SECRET: ${{ secrets.DEEZER_APP_SECRET }}
         run: |
           ./gradlew assembleDebug --no-daemon \
             -PvizuzikVersionCode=${{ steps.version.outputs.code }} \
-            -PvizuzikVersionName=${{ steps.version.outputs.name }} \
-            -PdeezerAppId="$DEEZER_APP_ID" \
-            -PdeezerAppSecret="$DEEZER_APP_SECRET"
+            -PvizuzikVersionName=${{ steps.version.outputs.name }}
 
       # Gradle nomme toujours sa sortie "app-debug.apk" (nom fixe lié au
       # buildType), quelle que soit la version : on la renomme pour que le
