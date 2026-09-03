@@ -14,6 +14,9 @@ Deezer en cours, avec un moteur visuel réactif à l'audio.
 - [Le rythme hors capture](architecture/2026-09-03-rythme-hors-capture.md) — pourquoi
   l'application n'invente plus de tempo quand elle n'entend pas la musique, et ce qui anime
   l'écran à la place.
+- [Lancer Deezer soi-même](architecture/2026-09-03-lancement-automatique-deezer.md) — pourquoi
+  Vizuzik ouvre Deezer au lancement plutôt que d'attendre qu'on le fasse, et pourquoi une seule
+  fois par lancement.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des cinq scènes.

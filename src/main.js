@@ -716,4 +716,17 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("resize", scheduleFocusRefresh);
 
 applyDisplayMode(false);
-refresh().catch(() => {}).then(syncCaptureState);
+refresh()
+  .catch(() => {})
+  .then(() => {
+    syncCaptureState();
+    // Cold start only: if nothing is already playing, get Deezer going instead of leaving the
+    // user to open it by hand. Never repeated on a later resume — a track already on screen
+    // means Deezer is already where it should be, and relaunching it mid-session would just
+    // steal focus back from the visuals it's supposed to be feeding. Once Deezer starts a
+    // track, the notification listener picks it up and maybeAutoRequestCapture() takes the
+    // system consent dialog off the user's hands too, same as any other launch.
+    if (els.player.hidden) {
+      DeezerMedia.openDeezer().catch(() => {});
+    }
+  });

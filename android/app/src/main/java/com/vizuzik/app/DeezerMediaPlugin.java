@@ -30,6 +30,8 @@ import java.util.Set;
 @CapacitorPlugin(name = "DeezerMedia")
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
+    private static final String DEEZER_PACKAGE = "deezer.android.app";
+
     @Override
     protected void handleOnStart() {
         DeezerMediaBridge.getInstance().setListener(this);
@@ -62,6 +64,28 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         getContext().startActivity(intent);
         call.resolve();
+    }
+
+    /**
+     * Launches Deezer directly instead of leaving the user to find it themselves. Vizuzik is a
+     * companion display: called once per cold start, only when no track is already active, so it
+     * never yanks focus away from an already-playing session just to show a screen that's already
+     * where it should be. Resolves {launched:false} rather than rejecting when Deezer isn't
+     * installed — that isn't an error the caller needs to react to.
+     */
+    @PluginMethod
+    public void openDeezer(PluginCall call) {
+        JSObject result = new JSObject();
+        Intent intent = getContext().getPackageManager().getLaunchIntentForPackage(DEEZER_PACKAGE);
+        if (intent == null) {
+            result.put("launched", false);
+            call.resolve(result);
+            return;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        result.put("launched", true);
+        call.resolve(result);
     }
 
     @PluginMethod

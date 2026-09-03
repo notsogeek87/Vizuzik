@@ -12,6 +12,10 @@ croise rarement, et qu'on sache à quoi elle sert quand elle arrive.
 
 ## Le parcours
 
+0. **Avant tout ça :** si aucun titre n'est déjà affiché au lancement, Vizuzik ouvre Deezer lui
+   -même (voir [Lancer Deezer soi-même](../architecture/2026-09-03-lancement-automatique-deezer.md)).
+   Une fois de retour sur Vizuzik avec un morceau lancé, le parcours ci-dessous reprend
+   normalement — y compris l'étape 4 si le consentement a déjà été donné par le passé.
 1. **Premier lancement :** rien ne s'ouvre tout seul. Le badge en haut à gauche propose
    *« ▶ Activer le son réel »*.
 2. **Au premier appui :** un écran d'explication apparaît d'abord — ce que Vizuzik fait du son,
