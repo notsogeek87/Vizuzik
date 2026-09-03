@@ -1,6 +1,13 @@
 // Full-screen music visualizer. When AudioCaptureService is capturing Deezer's real output
-// (Android 10+, user-granted), every scene is driven by the actual spectrum via setLevels();
-// otherwise a synthetic groove keeps the screen alive so it never looks frozen.
+// (Android 10+, user-granted), every scene is driven by the actual spectrum via setLevels().
+//
+// Without capture the engine goes AMBIENT rather than faking a groove: it never guesses a
+// tempo. A made-up beat is compared by the ear against the one it can actually hear, so a
+// wrong pulse reads as broken where no pulse at all reads as calm. So in ambient mode nothing
+// is allowed to hit: the spectrum flows on slow, deliberately incommensurable waves, the
+// palette travels through the artwork's own colours instead of flashing on them, and the only
+// impulses left are pulse() calls for events that really happened (a track change, play/pause,
+// a swipe, a mode change).
 //
 // One analysis pass feeds five scenes:
 //   cover   - a restrained halo around the artwork (the art stays the hero)
@@ -20,6 +27,9 @@ const BAR_COUNT = 32;
 const LIVE_LEVELS_TIMEOUT_MS = 500;
 const BEAT_HISTORY = 48;
 const MIRROR_SLOTS = 64;
+// Seconds for the ambient palette to slide one full colour along. Slow enough that the screen
+// is never seen changing colour, only ever noticed having changed.
+const AMBIENT_COLOR_TRAVEL_S = 26;
 
 const reduceMotion =
   typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -77,8 +87,13 @@ export class Visualizer {
     this.time = 0;
     this.spin = 0;
 
-    this.nextSyntheticBeatAt = 0;
     this.startTime = 0;
+    this.isLive = false;
+
+    // Ambient colour travel: a continuous offset into the palette, so every colour in the
+    // scene drifts towards the next one instead of the palette staying pinned per element.
+    this.colorShift = 0;
+    this._colorScratch = [0, 0, 0];
 
     this.liveLevels = null;
     this.lastLiveAt = 0;
@@ -111,7 +126,6 @@ export class Visualizer {
     if (this.running) return;
     this.running = true;
     this.startTime = performance.now();
-    this.nextSyntheticBeatAt = this.startTime + 350;
     this.lastFrameAt = this.startTime;
     this._loop();
   }
@@ -171,8 +185,23 @@ export class Visualizer {
     this.palette = palette.colors;
     this.targetHue = palette.hue;
     this.saturation = palette.saturation;
-    // A shockwave on track change, so a new song visibly *lands* instead of just appearing.
-    this._emitRipple(1.1);
+    // No shockwave here: the track-change impulse is a pulse() from main.js, which fires on
+    // the track itself rather than on the artwork, so a new song still lands when two tracks
+    // happen to share a cover.
+  }
+
+  /**
+   * A deliberate impulse for something that really happened — a track change, play/pause, a
+   * swipe, a mode change. This is what keeps the screen punctuated in ambient mode, where
+   * every automatic pulse has been removed: it fires on real events only, so it can never be
+   * off-beat with music it cannot hear.
+   */
+  pulse(strength = 1) {
+    const s = clamp01(strength);
+    this.beatCount++;
+    this.beatEnergy = Math.max(this.beatEnergy, s);
+    this._emitRipple(0.5 + s * 0.6);
+    this._burstParticles();
   }
 
   /** The element the canvas should treat as the centre of the composition (the disc). */
@@ -259,11 +288,18 @@ export class Visualizer {
 
   _update(now, dt) {
     const hasLive = this.isPlaying && this.liveLevels && now - this.lastLiveAt < LIVE_LEVELS_TIMEOUT_MS;
+    this.isLive = hasLive;
     if (hasLive) this._updateFromLiveLevels();
-    else this._updateSynthetic(now);
+    else this._updateAmbient(now);
 
     this._updateBands();
-    this._detectBeat(now);
+    // Beat detection runs on real audio only. On ambient waves it would just rediscover the
+    // shape of its own oscillators and turn them into a metronome.
+    this.beatEnergy *= 0.9;
+    if (hasLive) this._detectBeat(now);
+    // Wrapped rather than left to grow: over a night on a shelf it would otherwise drift
+    // into the range where a float stops resolving a fraction of a second.
+    else this.colorShift = (this.colorShift + dt / AMBIENT_COLOR_TRAVEL_S) % this.livePalette.length;
     this._updatePeaks(dt);
 
     this.time += dt * (this.isPlaying ? 1 : 0.25);
@@ -290,29 +326,33 @@ export class Visualizer {
     }
   }
 
-  _updateSynthetic(now) {
+  /**
+   * The no-capture engine: a slow tide instead of a fake band. Three oscillators per band with
+   * periods that share no common multiple (≈30 s, ≈48 s, ≈82 s), so the field never repeats
+   * on a span anyone can perceive and nothing in it can be mistaken for a downbeat. Smoothing
+   * is symmetric and slow on purpose — the asymmetric attack used for live audio is exactly
+   * what would turn these waves back into hits.
+   */
+  _updateAmbient(now) {
     if (!this.isPlaying) {
       for (let i = 0; i < BAR_COUNT; i++) this.bars[i] += (0 - this.bars[i]) * 0.06;
       return;
     }
     const t = (now - this.startTime) / 1000;
-    if (now >= this.nextSyntheticBeatAt) {
-      const bpm = 96 + Math.random() * 44;
-      this.nextSyntheticBeatAt = now + 60000 / bpm;
-      this.syntheticKick = 1;
-    }
-    this.syntheticKick = (this.syntheticKick || 0) * 0.9;
 
     for (let i = 0; i < BAR_COUNT; i++) {
       const norm = i / (BAR_COUNT - 1);
-      // Pink-ish spectral tilt (loud lows, quieter highs) so the fake spectrum has the same
-      // silhouette as real music instead of a flat wall of bars.
+      // Pink-ish spectral tilt (loud lows, quieter highs) so the ambient spectrum keeps the
+      // silhouette of real music instead of a flat wall of bars.
       const tilt = Math.pow(1 - norm, 1.35) * 0.75 + 0.2;
-      const slow = 0.5 + 0.5 * Math.sin(t * (0.6 + norm * 1.4) + i * 0.42);
-      const fast = 0.5 + 0.5 * Math.sin(t * (2.4 + norm * 3.1) + i * 0.87);
-      const kick = this.syntheticKick * (1 - norm * 0.55);
-      const value = clamp01((slow * 0.55 + fast * 0.3) * tilt + kick * 0.6);
-      this.bars[i] += (value - this.bars[i]) * (value > this.bars[i] ? 0.5 : 0.16);
+      const wave =
+        0.5 +
+        (Math.sin(t * 0.21 + norm * 2.7) * 0.42 +
+          Math.sin(t * 0.13 - norm * 4.1 + 1.7) * 0.33 +
+          Math.sin(t * 0.077 + norm * 1.3 + 3.4) * 0.25) *
+          0.5;
+      const value = clamp01(wave * tilt * 1.05);
+      this.bars[i] += (value - this.bars[i]) * 0.08;
     }
   }
 
@@ -347,7 +387,6 @@ export class Visualizer {
    * pulse, instead of one flatlining and the other strobing.
    */
   _detectBeat(now) {
-    this.beatEnergy *= 0.9;
     this.bassHistory[this.bassCursor] = this.bass;
     this.bassCursor = (this.bassCursor + 1) % BEAT_HISTORY;
 
@@ -490,9 +529,26 @@ export class Visualizer {
     ctx.restore();
   }
 
-  /** rgba() from the (smoothly interpolated) album palette. */
+  /**
+   * Palette colour `index` as it should be shown right now: the album colour smoothed towards
+   * the current track's, then offset by the ambient travel so the whole scene slides from one
+   * accent into the next. Fills and returns a scratch array — called hundreds of times per
+   * frame, so it must not allocate.
+   */
+  displayColor(index, out = this._colorScratch) {
+    const n = this.livePalette.length;
+    const p = index + this.colorShift;
+    const base = Math.floor(p);
+    const from = this.livePalette[((base % n) + n) % n];
+    const to = this.livePalette[((base + 1) % n + n) % n];
+    const f = p - base;
+    for (let c = 0; c < 3; c++) out[c] = lerp(from[c], to[c], f);
+    return out;
+  }
+
+  /** rgba() from the travelling album palette. */
   _rgba(index, alpha) {
-    const c = this.livePalette[index % this.livePalette.length];
+    const c = this.displayColor(index);
     return `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${alpha})`;
   }
 

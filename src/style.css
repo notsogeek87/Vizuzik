@@ -3,8 +3,11 @@
 
    Everything reactive is driven by three custom properties written once per
    animation frame from main.js (see the visualizer's onFrame callback):
-     --beat   0..1  impulse that spikes on each detected kick and decays
-     --level  0..1  smoothed overall loudness
+     --beat   0..1  impulse that spikes and decays — on each detected kick with
+                    real audio captured, and otherwise only on a real event
+                    (track change, play/pause, swipe, mode change): with no
+                    capture the app never invents a tempo
+     --level  0..1  smoothed overall loudness, a slow ambient tide without capture
      --bass   0..1  smoothed low-end energy
    and by a palette extracted from the album art:
      --c1 --c2 --c3  "r, g, b" triplets, usable as rgb(var(--c1) / .5)
@@ -341,11 +344,15 @@ body[data-mode="nebula"] .mode-toggle .icon-nebula {
   width: 100%;
   height: 100%;
   border-radius: 22px;
-  /* The glow breathes with the kick; the colour comes from the artwork itself. */
+  /* The glow breathes on the slow level and flares on an impulse; the colour comes from the
+     artwork itself. The --level term is what keeps the disc alive without capture, where
+     --beat only moves on a real event. */
   box-shadow:
     0 24px 70px rgba(0, 0, 0, 0.55),
-    0 0 calc(30px + var(--beat) * 70px) rgba(var(--c1), calc(0.28 + var(--beat) * 0.4)),
-    0 0 calc(60px + var(--beat) * 110px) rgba(var(--c2), calc(0.12 + var(--beat) * 0.25));
+    0 0 calc(30px + var(--level) * 30px + var(--beat) * 70px)
+      rgba(var(--c1), calc(0.24 + var(--level) * 0.12 + var(--beat) * 0.4)),
+    0 0 calc(60px + var(--level) * 46px + var(--beat) * 110px)
+      rgba(var(--c2), calc(0.1 + var(--level) * 0.08 + var(--beat) * 0.25));
   /* --swipe-x / --swipe-o are written by the drag handler; the beat scale composes with them
      so a swipe in progress still breathes with the music. --swipe-x is a UNITLESS number of
      pixels, multiplied here into a length and an angle: calc() cannot turn a px value into
@@ -741,24 +748,21 @@ body.is-changing .artist {
   height: 34px;
 }
 
-/* A ring that expands out of the play button on every kick — the whole UI stays on the beat,
-   not just the canvas. */
+/* A ring that expands out of the play button on each impulse. It used to run on a fixed 1.6s
+   loop, which was a claim about the tempo that was wrong against every track ever played;
+   riding --beat means it fires on real kicks when the audio is captured, on real events when
+   it isn't, and stays invisible the rest of the time. */
 .control__pulse {
   position: absolute;
   inset: 0;
   border-radius: 50%;
   border: 2px solid rgba(var(--c1), 0.7);
-  opacity: 0;
+  /* Tight and bright at the impulse, wide and gone as --beat decays: the expansion IS the
+     decay curve. No transition — --beat is rewritten every frame, so the ring is already
+     smooth, and a transition would only make it lag behind the sound. */
+  opacity: calc(var(--beat) * 0.55);
+  transform: scale(calc(1.85 - var(--beat) * 0.85));
   pointer-events: none;
-}
-
-body[data-state="playing"] .control__pulse {
-  animation: pulse-ring 1.6s ease-out infinite;
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(1); opacity: 0.55; }
-  100% { transform: scale(1.85); opacity: 0; }
 }
 
 .icon-pause {
@@ -996,7 +1000,6 @@ body[data-state="playing"] .control__pulse {
   .disc__sheen,
   .disc__spin,
   .title .marquee__text,
-  .control__pulse,
   .message__pulse,
   .sheet__wave span,
   .marquee__text.is-scrolling {
@@ -1018,5 +1021,10 @@ body[data-state="playing"] .control__pulse {
 
   .progress__thumb {
     transition: none;
+  }
+
+  /* The ring is pure motion, and it is the one element with nothing to say when it is still. */
+  .control__pulse {
+    display: none;
   }
 }

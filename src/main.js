@@ -112,8 +112,31 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   writeVar("--beat", "beat", beat);
   writeVar("--level", "level", level);
   writeVar("--bass", "bass", bass);
+  syncPaletteVars();
   progress.render();
 };
+
+// Without real audio the engine slowly travels the artwork's palette instead of flashing on a
+// tempo it doesn't know (see visualizer.js), so the interface re-reads its colours from the
+// engine rather than writing them once per track — canvas and DOM are then never two different
+// shades of the same album. Throttled and diffed: these three properties are inherited by the
+// whole tree, so writing them repaints everything.
+const COLOR_SYNC_MS = 120;
+const cssColors = ["", "", ""];
+let lastColorSyncAt = 0;
+
+function syncPaletteVars() {
+  const now = performance.now();
+  if (now - lastColorSyncAt < COLOR_SYNC_MS) return;
+  lastColorSyncAt = now;
+  for (let i = 0; i < cssColors.length; i++) {
+    const c = visualizer.displayColor(i);
+    const value = `${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}`;
+    if (value === cssColors[i]) continue;
+    cssColors[i] = value;
+    root.style.setProperty(`--c${i + 1}`, value);
+  }
+}
 
 // Quantised to 50 steps: finer than the eye can follow on a glow, and it keeps a quiet
 // passage from invalidating styles on every single frame.
@@ -338,6 +361,8 @@ let toastTimer = null;
 function applyDisplayMode(announce) {
   document.body.dataset.mode = displayMode;
   visualizer.setStyle(displayMode);
+  // setStyle() wipes the scene; the impulse goes after it so the new one arrives lit.
+  if (announce) visualizer.pulse(0.6);
   // The disc changes size and shape over a 0.7s transition; the canvas needs the new centre
   // as it moves, or the corona would sit where the artwork used to be.
   scheduleFocusRefresh();
@@ -472,6 +497,9 @@ function endGesture(event, cancelled) {
   if (!cancelled && g.dragging && horizontal && Math.abs(g.dx) > SWIPE_TRIGGER_PX) {
     const goNext = g.dx < 0;
     flingDisc(goNext ? -1 : 1);
+    // The gesture itself is a real event: the screen answers the finger now, without waiting
+    // for Deezer to confirm the track change.
+    visualizer.pulse(0.45);
     Promise.resolve(goNext ? DeezerMedia.next() : DeezerMedia.previous()).catch(() => {});
     return;
   }
@@ -542,9 +570,13 @@ function setArtwork(art) {
 
   extractPalette(art).then((palette) => {
     visualizer.setPalette(palette);
-    palette.colors.forEach((rgb, i) => {
-      root.style.setProperty(`--c${i + 1}`, rgb.join(", "));
-    });
+    // While the engine loops, syncPaletteVars() melts the interface into the new palette along
+    // with the canvas. Off the player screen nothing is looping, so seed the vars directly.
+    if (!visualizer.running) {
+      palette.colors.forEach((rgb, i) => {
+        root.style.setProperty(`--c${i + 1}`, rgb.join(", "));
+      });
+    }
   });
 }
 
@@ -592,9 +624,15 @@ function setNowPlaying(state) {
     setScrollingText(els.title, title);
     setScrollingText(els.artist, artist);
     playTrackChangeAnimation();
+    // A new song has to visibly land. This and the handful of pulses below are the only
+    // impulses the screen gets when the audio isn't being captured — all of them tied to
+    // something that actually happened, never to a guessed tempo.
+    visualizer.pulse(1);
   }
 
+  const wasPlaying = isPlaying;
   isPlaying = !!state.isPlaying;
+  if (isPlaying !== wasPlaying) visualizer.pulse(0.55);
   els.playPause.dataset.state = isPlaying ? "playing" : "paused";
   document.body.dataset.state = isPlaying ? "playing" : "paused";
   visualizer.setPlaying(isPlaying);

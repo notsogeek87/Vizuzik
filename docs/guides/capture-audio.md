@@ -38,7 +38,7 @@ La capture s'arrête pour de bon quand Vizuzik est retiré des applications réc
 
 | Affichage | Signification |
 |-----------|---------------|
-| `▶ Activer le son réel` | Aucune capture : animation synthétique. Appuyable. |
+| `▶ Activer le son réel` | Aucune capture : régime ambiant, sans rythme inventé (voir [Les modes](modes-de-visualisation.md#sans-capture-audio)). Appuyable. |
 | `● Connexion…` | Demande en cours. |
 | `● Son réel` | Les visualisations suivent l'audio de Deezer. |
 | `● Son réel prêt` | Capture active, lecture en pause : rien à écouter pour l'instant. |
@@ -48,6 +48,14 @@ La capture s'arrête pour de bon quand Vizuzik est retiré des applications réc
 
 Le badge est masqué tant qu'aucun morceau n'est affiché, et sur les appareils incapables de
 capturer.
+
+## Ce que la capture change à l'écran
+
+| | Sans capture | Avec capture |
+|---|---|---|
+| Rythme | Aucun n'est inventé : vagues lentes, couleurs qui voyagent | Le vrai : chaque kick est détecté |
+| Impulsions | Changement de morceau, lecture/pause, glissement, changement de mode | Les mêmes, plus chaque kick |
+| Disque, pochette, couleurs de l'interface | Identiques | Identiques |
 
 ## Prérequis
 

@@ -11,6 +11,9 @@ Deezer en cours, avec un moteur visuel réactif à l'audio.
 - [Le consentement de capture audio comme parcours](architecture/2026-09-03-consentement-capture-audio.md)
   — comment la fenêtre système Android, impossible à supprimer, n'est plus croisée qu'une fois
   par lancement.
+- [Le rythme hors capture](architecture/2026-09-03-rythme-hors-capture.md) — pourquoi
+  l'application n'invente plus de tempo quand elle n'entend pas la musique, et ce qui anime
+  l'écran à la place.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des cinq scènes.

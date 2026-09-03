@@ -14,8 +14,11 @@ Cinq modes, en boucle via le bouton en haut à droite ou en touchant la pochette
 **Spectre**, **Corona**, **Aurore**, **Nébuleuse**. Les couleurs de toute l'interface sont
 extraites de la pochette du morceau en cours, et la lueur pulse sur les basses.
 
-Pour que les visualisations suivent réellement le son plutôt qu'un rythme simulé, appuyer sur
-le badge en haut à gauche — voir [Activer le son réel](docs/guides/capture-audio.md).
+Sans capture du son, l'application n'invente aucun rythme : le disque tourne, les scènes
+coulent sur des vagues lentes, les couleurs voyagent d'un accent de la pochette au suivant, et
+l'écran ne s'illumine que sur un évènement réel (changement de morceau, lecture/pause,
+glissement). Pour que les visualisations suivent réellement le son, appuyer sur le badge en
+haut à gauche — voir [Activer le son réel](docs/guides/capture-audio.md).
 
 ## Contrôles
 

@@ -29,7 +29,7 @@ callback `onFrame` écrit trois propriétés CSS personnalisées sur `:root` :
 
 | Variable  | Plage | Sens |
 |-----------|-------|------|
-| `--beat`  | 0..1  | Impulsion sur chaque kick détecté, décroissante |
+| `--beat`  | 0..1  | Impulsion décroissante : sur chaque kick détecté avec la capture, sinon uniquement sur un évènement réel — voir [Le rythme hors capture](2026-09-03-rythme-hors-capture.md) |
 | `--level` | 0..1  | Volume global lissé |
 | `--bass`  | 0..1  | Énergie des basses lissée |
 
@@ -52,8 +52,11 @@ lieu de sauter.
 
 Un seuil fixe fait clignoter les morceaux forts et laisse les ballades inertes. La détection
 compare l'énergie des basses à sa propre moyenne glissante (48 images) : est un beat toute
-valeur dépassant `moyenne × 1,32`, avec un intervalle minimum de 190 ms. Cela fonctionne aussi
-bien sur le spectre réel que sur le spectre synthétique de repli.
+valeur dépassant `moyenne × 1,32`, avec un intervalle minimum de 190 ms.
+
+Elle ne tourne que sur du **son réellement capté**. Sans capture, il n'y a pas de rythme à
+détecter et le moteur n'en invente pas : lancée sur les vagues du régime ambiant, elle ne
+ferait que redécouvrir ses propres oscillateurs et les transformer en métronome.
 
 ### 5. Bloom par recopie floutée, pas par `shadowBlur`
 

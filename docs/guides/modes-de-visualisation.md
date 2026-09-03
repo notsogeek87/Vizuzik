@@ -20,7 +20,7 @@ Une étiquette apparaît brièvement pour nommer le mode. Le choix est mémoris�
 |------|---------|---------------|
 | `cover` | Pochette | La pochette en grand, entourée d'un halo discret et de rayons de spectre. L'artwork reste le sujet. |
 | `bars` | Spectre | Spectre replié sur toute la largeur : graves au centre, aigus aux bords, avec reflet au sol et crêtes flottantes. |
-| `radial` | Corona | Couronne de rayons autour du disque, étincelles en orbite et ondes de choc à chaque kick. |
+| `radial` | Corona | Couronne de rayons autour du disque, étincelles en orbite et ondes de choc à chaque impulsion. |
 | `aurora` | Aurore | Six rubans de lumière traversant l'écran, un par tranche de fréquence. |
 | `nebula` | Nébuleuse | Galaxie de particules en orbite laissant des traînées lumineuses. |
 
@@ -30,12 +30,25 @@ tourne pendant la lecture et s'arrête à la pause.
 ## Ce qui réagit en dehors du canvas
 
 - Le fond (pochette floutée + trois nuages de couleur) respire avec le volume.
-- La lueur autour de la pochette et du bouton lecture pulse sur chaque kick.
+- La lueur autour de la pochette et l'anneau du bouton lecture s'ouvrent sur chaque impulsion.
 - Les couleurs de toute l'interface viennent de la pochette du morceau en cours.
 - Un titre trop long défile lentement au lieu d'être coupé.
 
 ## Sans capture audio
 
-Si la capture du son réel n'est pas active (voir [Activer le son réel](capture-audio.md)),
-les visualisations tournent sur un rythme synthétique : l'écran reste vivant, mais il ne suit
-pas réellement la musique. Le badge en haut à gauche indique toujours l'état réel.
+Sans capture du son réel (voir [Activer le son réel](capture-audio.md)), l'application **ne
+fait semblant d'aucun rythme**. Elle ne peut pas entendre la musique, et une pulsation inventée
+tomberait forcément à côté de celle qu'on écoute — ce qui se remarque bien plus qu'une image
+calme.
+
+À la place, l'écran passe en **régime ambiant** :
+
+- le disque tourne comme d'habitude, et la pochette reste le sujet ;
+- les scènes coulent sur des vagues lentes, sans jamais frapper ;
+- les couleurs **voyagent** : la scène glisse d'un accent de la pochette vers le suivant,
+  environ une couleur toutes les 26 secondes, au lieu de clignoter ;
+- l'écran ne s'illumine d'un coup que sur ce qui arrive vraiment : changement de morceau,
+  lecture/pause, glissement pour changer de titre, changement de mode.
+
+Le badge en haut à gauche indique toujours l'état réel, et reste le moyen d'activer la
+capture.
