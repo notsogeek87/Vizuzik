@@ -17,6 +17,12 @@ extraites de la pochette du morceau en cours, et la lueur pulse sur les basses.
 Pour que les visualisations suivent réellement le son plutôt qu'un rythme simulé, appuyer sur
 le badge en haut à gauche — voir [Activer le son réel](docs/guides/capture-audio.md).
 
+## Contrôles
+
+Barre de progression avec temps écoulé, durée et déplacement dans le morceau. Sur la pochette :
+**taper** change de visualisation, **glisser à gauche ou à droite** change de morceau — voir
+[Gestes et contrôles](docs/guides/gestes.md).
+
 ## Développement
 
 ```bash

@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
+import android.media.session.PlaybackState;
 import android.os.Build;
 import android.provider.Settings;
 import android.util.Base64;
@@ -66,6 +67,41 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     @PluginMethod
     public void getNowPlaying(PluginCall call) {
         call.resolve(toJs(DeezerMediaBridge.getInstance().getLastNowPlaying()));
+    }
+
+    /**
+     * Position and duration only — deliberately not the whole now-playing payload, because that
+     * re-encodes the album art to base64 on every call and this one is polled every few seconds
+     * to re-anchor the progress bar against drift.
+     */
+    @PluginMethod
+    public void getPosition(PluginCall call) {
+        JSObject result = new JSObject();
+        DeezerMediaBridge bridge = DeezerMediaBridge.getInstance();
+        DeezerMediaBridge.NowPlaying nowPlaying = bridge.getLastNowPlaying();
+        if (nowPlaying == null) {
+            result.put("active", false);
+            call.resolve(result);
+            return;
+        }
+        PlaybackState state = currentPlaybackState();
+        result.put("active", true);
+        result.put("duration", nowPlaying.durationMs);
+        result.put("position", state != null ? DeezerMediaBridge.resolvePosition(state) : nowPlaying.positionMs);
+        result.put("isPlaying", state != null ? state.getState() == PlaybackState.STATE_PLAYING : nowPlaying.isPlaying);
+        result.put("canSeek", state != null ? DeezerMediaBridge.canSeek(state) : nowPlaying.canSeek);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void seek(PluginCall call) {
+        Long position = call.getLong("position");
+        if (position == null || position < 0) {
+            call.reject("position manquante");
+            return;
+        }
+        final long target = position;
+        withTransportControls(call, controls -> controls.seekTo(target));
     }
 
     @PluginMethod
@@ -201,7 +237,19 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("album", nowPlaying.album);
         result.put("isPlaying", nowPlaying.isPlaying);
         result.put("albumArt", encodeBitmap(nowPlaying.albumArt));
+        result.put("duration", nowPlaying.durationMs);
+        // Resolved against the session's *current* state rather than reusing the value captured
+        // when the track was published: getNowPlaying() is also called on resume, potentially
+        // minutes later, and a stale position would rewind the bar on every return to the app.
+        PlaybackState state = currentPlaybackState();
+        result.put("position", state != null ? DeezerMediaBridge.resolvePosition(state) : nowPlaying.positionMs);
+        result.put("canSeek", state != null ? DeezerMediaBridge.canSeek(state) : nowPlaying.canSeek);
         return result;
+    }
+
+    private PlaybackState currentPlaybackState() {
+        MediaController controller = DeezerMediaBridge.getInstance().getController();
+        return controller == null ? null : controller.getPlaybackState();
     }
 
     private String encodeBitmap(Bitmap bitmap) {

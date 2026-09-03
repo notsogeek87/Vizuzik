@@ -2,6 +2,8 @@ package com.vizuzik.app;
 
 import android.graphics.Bitmap;
 import android.media.session.MediaController;
+import android.media.session.PlaybackState;
+import android.os.SystemClock;
 
 /**
  * In-process singleton shared between NowPlayingListenerService (which tracks Deezer's
@@ -20,14 +22,56 @@ final class DeezerMediaBridge {
         final String album;
         final Bitmap albumArt;
         final boolean isPlaying;
+        /** Track length in ms, or 0 when Deezer's metadata doesn't report one (live streams). */
+        final long durationMs;
+        /** Playback position in ms, resolved to the instant this object was built. */
+        final long positionMs;
+        final boolean canSeek;
 
-        NowPlaying(String title, String artist, String album, Bitmap albumArt, boolean isPlaying) {
+        NowPlaying(
+            String title,
+            String artist,
+            String album,
+            Bitmap albumArt,
+            boolean isPlaying,
+            long durationMs,
+            long positionMs,
+            boolean canSeek
+        ) {
             this.title = title;
             this.artist = artist;
             this.album = album;
             this.albumArt = albumArt;
             this.isPlaying = isPlaying;
+            this.durationMs = durationMs;
+            this.positionMs = positionMs;
+            this.canSeek = canSeek;
         }
+    }
+
+    /**
+     * A PlaybackState carries the position as of the last time the session updated it, not as of
+     * now — so while playing it has to be extrapolated forward from that timestamp, otherwise the
+     * progress bar would sit still between the session's occasional updates.
+     */
+    static long resolvePosition(PlaybackState state) {
+        if (state == null) {
+            return 0;
+        }
+        long position = state.getPosition();
+        long updatedAt = state.getLastPositionUpdateTime();
+        if (state.getState() == PlaybackState.STATE_PLAYING && updatedAt > 0) {
+            float speed = state.getPlaybackSpeed();
+            if (speed <= 0) {
+                speed = 1f;
+            }
+            position += (long) ((SystemClock.elapsedRealtime() - updatedAt) * speed);
+        }
+        return Math.max(0, position);
+    }
+
+    static boolean canSeek(PlaybackState state) {
+        return state != null && (state.getActions() & PlaybackState.ACTION_SEEK_TO) != 0;
     }
 
     private static final DeezerMediaBridge INSTANCE = new DeezerMediaBridge();

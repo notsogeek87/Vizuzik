@@ -8,7 +8,8 @@ montre chaque mode.
 Deux gestes équivalents, qui font défiler les modes en boucle :
 
 - appuyer sur le bouton rond en haut à droite (son icône indique le mode courant) ;
-- appuyer sur la pochette elle-même.
+- **taper** brièvement sur la pochette (un *glissement* horizontal, lui, change de morceau —
+  voir [Gestes et contrôles](gestes.md)).
 
 Une étiquette apparaît brièvement pour nommer le mode. Le choix est mémorisé
 (`localStorage`, clé `vizuzik:displayMode`) et retrouvé au lancement suivant.

@@ -1,6 +1,7 @@
 import { registerPlugin } from "@capacitor/core";
 import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
 import { extractPalette } from "./palette.js";
+import { PlaybackProgress } from "./progress.js";
 
 const DeezerMedia = registerPlugin("DeezerMedia");
 
@@ -18,6 +19,10 @@ const els = {
   modeToast: document.getElementById("mode-toast"),
   title: document.getElementById("title"),
   artist: document.getElementById("artist"),
+  progress: document.getElementById("progress"),
+  progressBar: document.getElementById("progress-bar"),
+  timeElapsed: document.getElementById("time-elapsed"),
+  timeTotal: document.getElementById("time-total"),
   playPause: document.getElementById("play-pause"),
   previous: document.getElementById("previous"),
   next: document.getElementById("next"),
@@ -46,6 +51,11 @@ let displayMode = VISUAL_STYLES.includes(storedMode) ? storedMode : "cover";
 const visualizer = new Visualizer(els.fx);
 visualizer.setFocusElement(els.disc);
 
+const progress = new PlaybackProgress(
+  { root: els.progress, bar: els.progressBar, elapsed: els.timeElapsed, total: els.timeTotal },
+  { onSeek: (position) => DeezerMedia.seek({ position }).catch(() => {}) }
+);
+
 /* ------------------------------------------------------------------ reactive CSS vars */
 
 // The visualizer owns the only animation frame loop in the app; the DOM's beat-reactive
@@ -57,6 +67,7 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   writeVar("--beat", "beat", beat);
   writeVar("--level", "level", level);
   writeVar("--bass", "bass", bass);
+  progress.render();
 };
 
 // Quantised to 50 steps: finer than the eye can follow on a glow, and it keeps a quiet
@@ -187,10 +198,123 @@ function scheduleFocusRefresh() {
 }
 
 els.modeToggle.addEventListener("click", cycleDisplayMode);
-// Tapping the artwork itself cycles visualizations too: the obvious gesture on a screen you
-// look at from a distance, and the toast names what you just landed on.
-els.stage.addEventListener("click", cycleDisplayMode);
 els.captureStatus.addEventListener("click", requestCapture);
+
+/* ------------------------------------------------------------------ swipe & tap */
+
+// Past this much horizontal travel, releasing changes track.
+const SWIPE_TRIGGER_PX = 64;
+// Below this, the gesture is still a tap rather than a drag.
+const TAP_SLOP_PX = 12;
+const TAP_MAX_MS = 450;
+const FLING_MS = 260;
+
+let gesture = null;
+
+// --swipe-x is written unitless (see .disc in style.css): the stylesheet turns it into both a
+// translation and a rotation, and calc() can only derive an angle from a plain number.
+function setSwipeOffset(px, opacity) {
+  root.style.setProperty("--swipe-x", String(Math.round(px)));
+  root.style.setProperty("--swipe-o", String(opacity));
+}
+
+function resetSwipe() {
+  setSwipeOffset(0, 1);
+}
+
+/**
+ * Carousel release: the artwork flies out the way the finger went, is teleported to the far
+ * side with no transition, then glides back to centre — so a track change reads as one
+ * continuous movement rather than a disc that vanishes and pops back.
+ */
+function flingDisc(direction) {
+  const distance = window.innerWidth * 0.6;
+  setSwipeOffset(direction * distance, 0);
+  setTimeout(() => {
+    document.body.classList.remove("is-swipe-releasing");
+    setSwipeOffset(-direction * distance, 0);
+    // Two frames: the jump has to be painted before the transition is re-armed, otherwise the
+    // browser coalesces both values and animates straight across the screen.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document.body.classList.add("is-swipe-releasing");
+        resetSwipe();
+        setTimeout(() => document.body.classList.remove("is-swipe-releasing"), 320);
+      })
+    );
+  }, FLING_MS);
+}
+
+// The controls, the scrub bar and the top bar own their own pointers; a swipe must not start
+// on top of them or dragging off a button would skip a track.
+function ownsItsPointer(target) {
+  return !!(target.closest && target.closest(".controls, .progress, .topbar"));
+}
+
+els.player.addEventListener("pointerdown", (event) => {
+  if (gesture || ownsItsPointer(event.target)) return;
+  gesture = {
+    id: event.pointerId,
+    x0: event.clientX,
+    y0: event.clientY,
+    t0: performance.now(),
+    dx: 0,
+    dy: 0,
+    dragging: false,
+    onStage: !!(event.target.closest && event.target.closest(".stage")),
+  };
+  els.player.setPointerCapture(event.pointerId);
+  document.body.classList.remove("is-swipe-releasing");
+});
+
+els.player.addEventListener("pointermove", (event) => {
+  if (!gesture || gesture.id !== event.pointerId) return;
+  gesture.dx = event.clientX - gesture.x0;
+  gesture.dy = event.clientY - gesture.y0;
+  if (!gesture.dragging && Math.abs(gesture.dx) > TAP_SLOP_PX && Math.abs(gesture.dx) > Math.abs(gesture.dy)) {
+    gesture.dragging = true;
+    document.body.classList.add("is-swiping");
+  }
+  if (gesture.dragging) {
+    // Damped: the artwork trails the finger, which makes the threshold feel like resistance
+    // rather than a cliff.
+    const offset = gesture.dx * 0.75;
+    setSwipeOffset(offset, Math.max(0.35, 1 - Math.abs(offset) / 520));
+  }
+});
+
+function endGesture(event, cancelled) {
+  if (!gesture || gesture.id !== event.pointerId) return;
+  const g = gesture;
+  gesture = null;
+  if (els.player.hasPointerCapture(event.pointerId)) els.player.releasePointerCapture(event.pointerId);
+  document.body.classList.remove("is-swiping");
+  document.body.classList.add("is-swipe-releasing");
+
+  const horizontal = Math.abs(g.dx) > Math.abs(g.dy);
+  if (!cancelled && g.dragging && horizontal && Math.abs(g.dx) > SWIPE_TRIGGER_PX) {
+    const goNext = g.dx < 0;
+    flingDisc(goNext ? -1 : 1);
+    Promise.resolve(goNext ? DeezerMedia.next() : DeezerMedia.previous()).catch(() => {});
+    return;
+  }
+
+  resetSwipe();
+  // A tap on the artwork still cycles visualizations — the obvious gesture on a screen you
+  // look at from across the room, and the toast names what you landed on.
+  if (
+    !cancelled &&
+    !g.dragging &&
+    g.onStage &&
+    performance.now() - g.t0 < TAP_MAX_MS &&
+    Math.abs(g.dy) < TAP_SLOP_PX
+  ) {
+    cycleDisplayMode();
+  }
+}
+
+els.player.addEventListener("pointerup", (event) => endGesture(event, false));
+els.player.addEventListener("pointercancel", (event) => endGesture(event, true));
 
 /* ------------------------------------------------------------------ now playing */
 
@@ -293,9 +417,37 @@ function setNowPlaying(state) {
   document.body.dataset.state = isPlaying ? "playing" : "paused";
   visualizer.setPlaying(isPlaying);
 
+  progress.setTrack({
+    position: state.position || 0,
+    duration: state.duration || 0,
+    isPlaying,
+    canSeek: !!state.canSeek,
+  });
+
   setArtwork(state.albumArt || "");
   applyDisplayMode(false);
 }
+
+// The media session only reports a position when something changes, so the bar runs on a local
+// clock between updates. This re-anchors it against the real one often enough that drift never
+// becomes visible, using the position-only call so the album art isn't re-encoded every time.
+const POSITION_RESYNC_MS = 5000;
+setInterval(async () => {
+  if (els.player.hidden || document.visibilityState !== "visible") return;
+  try {
+    const state = await DeezerMedia.getPosition();
+    if (state && state.active) {
+      progress.setTrack({
+        position: state.position || 0,
+        duration: state.duration || 0,
+        isPlaying: !!state.isPlaying,
+        canSeek: !!state.canSeek,
+      });
+    }
+  } catch (err) {
+    // Older native build without getPosition(): the local clock alone still drives the bar.
+  }
+}, POSITION_RESYNC_MS);
 
 async function refresh() {
   const { granted } = await DeezerMedia.checkPermission();

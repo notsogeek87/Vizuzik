@@ -126,7 +126,10 @@ public class NowPlayingListenerService extends NotificationListenerService {
             metadata.getString(MediaMetadata.METADATA_KEY_ARTIST),
             metadata.getString(MediaMetadata.METADATA_KEY_ALBUM),
             art,
-            isPlaying
+            isPlaying,
+            Math.max(0, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)),
+            DeezerMediaBridge.resolvePosition(state),
+            DeezerMediaBridge.canSeek(state)
         );
         DeezerMediaBridge.getInstance().updateNowPlaying(nowPlaying);
     }

@@ -53,6 +53,20 @@
         <p class="artist"><span id="artist" class="marquee__text"></span></p>
       </div>
 
+      <!-- data-available flips to "false" for streams with no reported length; data-seekable
+           to "false" when Deezer's session doesn't advertise ACTION_SEEK_TO. -->
+      <div id="progress" class="progress" data-available="false" data-seekable="false">
+        <div id="progress-bar" class="progress__bar">
+          <div class="progress__track"></div>
+          <div class="progress__fill"></div>
+          <div class="progress__thumb"></div>
+        </div>
+        <div class="progress__times">
+          <span id="time-elapsed">0:00</span>
+          <span id="time-total">--:--</span>
+        </div>
+      </div>
+
       <div class="controls">
         <button id="previous" type="button" class="control control--secondary" aria-label="Précédent">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>

@@ -319,6 +319,9 @@ body[data-mode="nebula"] .mode-toggle .icon-nebula {
   gap: 1.75rem;
   padding: calc(env(safe-area-inset-top, 0px) + 72px) 24px calc(env(safe-area-inset-bottom, 0px) + 28px);
   text-align: center;
+  /* Nothing on this screen scrolls, so hand every touch to the swipe handler rather than
+     letting the WebView claim horizontal drags for its own gestures. */
+  touch-action: none;
 }
 
 /* Fixed-size stage: the artwork shrinks into a disc between modes, but the stage keeps
@@ -343,13 +346,32 @@ body[data-mode="nebula"] .mode-toggle .icon-nebula {
     0 24px 70px rgba(0, 0, 0, 0.55),
     0 0 calc(30px + var(--beat) * 70px) rgba(var(--c1), calc(0.28 + var(--beat) * 0.4)),
     0 0 calc(60px + var(--beat) * 110px) rgba(var(--c2), calc(0.12 + var(--beat) * 0.25));
-  transform: scale(calc(1 + var(--beat) * 0.022));
+  /* --swipe-x / --swipe-o are written by the drag handler; the beat scale composes with them
+     so a swipe in progress still breathes with the music. --swipe-x is a UNITLESS number of
+     pixels, multiplied here into a length and an angle: calc() cannot turn a px value into
+     the <angle> rotate() requires, and one invalid term drops the whole transform — beat
+     scale included. */
+  transform:
+    translateX(calc(var(--swipe-x, 0) * 1px))
+    rotate(calc(var(--swipe-x, 0) * 0.018deg))
+    scale(calc(1 + var(--beat) * 0.022));
+  opacity: var(--swipe-o, 1);
   transition:
     border-radius 0.7s var(--ease-out),
     width 0.7s var(--ease-out),
     height 0.7s var(--ease-out),
     transform 0.1s linear;
   will-change: transform;
+}
+
+/* While a finger is down the disc must track it exactly — any transition reads as lag. */
+body.is-swiping .disc {
+  transition: border-radius 0.7s var(--ease-out), width 0.7s var(--ease-out), height 0.7s var(--ease-out);
+}
+
+/* On release it either flies out (past the threshold) or springs back. */
+body.is-swipe-releasing .disc {
+  transition: transform 0.26s var(--ease-out), opacity 0.26s ease;
 }
 
 /* Viz modes: the cover becomes a spinning record, leaving the screen to the canvas while
@@ -466,7 +488,9 @@ body:not([data-mode="cover"]) .disc__label {
 body:not([data-mode="cover"]) .meta::before {
   content: "";
   position: absolute;
-  inset: -18px -26px;
+  /* Extends well past the text block on purpose: it also has to sit behind the progress bar
+     and its timestamps, which live in the next flex row. */
+  inset: -18px -26px -74px;
   z-index: -1;
   background: radial-gradient(ellipse at center, rgba(5, 5, 11, 0.8), rgba(5, 5, 11, 0.45) 55%, rgba(5, 5, 11, 0) 78%);
 }
@@ -554,6 +578,99 @@ body.is-changing .artist {
 @keyframes text-in {
   from { opacity: 0; transform: translateY(14px); filter: blur(10px); }
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* ============================================================ progress bar */
+
+/* The visible bar is 5px tall but the touch target is the whole padded block: a 5px scrub
+   target would be unusable with a thumb. Space is reserved even when there is no duration to
+   show, so the controls never jump as tracks change. */
+.progress {
+  --p: 0;
+  position: relative;
+  width: min(86vw, 460px);
+  padding: 14px 0 2px;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.4s var(--ease-out);
+  touch-action: none;
+}
+
+.progress[data-available="true"] {
+  opacity: 1;
+}
+
+/* With no duration to show, the invisible bar must not swallow swipes crossing that strip. */
+.progress[data-available="false"] {
+  pointer-events: none;
+}
+
+.progress[data-seekable="true"] .progress__bar {
+  cursor: pointer;
+}
+
+.progress__bar {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+}
+
+.progress__track {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+/* scaleX rather than width: the fill is repainted several times a second and a transform
+   stays on the compositor instead of relaying out the row. */
+.progress__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform: scaleX(var(--p));
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgb(var(--c3)), rgb(var(--c1)) 55%, rgb(var(--c2)));
+  box-shadow: 0 0 calc(6px + var(--beat) * 16px) rgba(var(--c1), calc(0.4 + var(--beat) * 0.4));
+}
+
+.progress__thumb {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--p) * 100%);
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 calc(4px + var(--beat) * 14px) rgba(var(--c1), 0.8);
+  transform: scale(0);
+  transition: transform 0.22s var(--ease-spring);
+}
+
+/* The handle only appears where it can actually be used, and grows while dragging. */
+.progress[data-seekable="true"] .progress__thumb {
+  transform: scale(1);
+}
+
+.progress.is-scrubbing .progress__bar {
+  height: 7px;
+}
+
+.progress[data-seekable="true"].is-scrubbing .progress__thumb {
+  transform: scale(1.55);
+}
+
+.progress__times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
 }
 
 /* ============================================================ controls */
@@ -735,8 +852,15 @@ body[data-state="playing"] .control__pulse {
     color: var(--ink);
   }
 
-  .disc,
   .ambient__art {
     transform: none !important;
+  }
+
+  .disc {
+    transform: translateX(calc(var(--swipe-x, 0) * 1px));
+  }
+
+  .progress__thumb {
+    transition: none;
   }
 }
