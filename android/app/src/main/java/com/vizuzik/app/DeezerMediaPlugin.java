@@ -144,15 +144,18 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
      * Cassette mode is drawn cassette-side up, i.e. landscape: forcing the activity into
      * landscape here — rather than leaving it to the CSS rotation trick alone — is what makes
      * the phone's own auto-rotate turn the screen for the user instead of asking them to fight
-     * a portrait lock to see it the right way up. SENSOR_LANDSCAPE (not USER_LANDSCAPE) ignores
-     * the system's rotation-lock toggle, since the whole point is that this mode itself decides.
+     * a portrait lock to see it the right way up. Deliberately plain LANDSCAPE rather than
+     * SENSOR_LANDSCAPE: the sensor variant also accepts the *reversed* landscape orientation
+     * (phone turned the other way round), and on this WebView that flips touch X but not the
+     * rendered layout, which is exactly what made the next/previous swipe feel backwards in
+     * this mode. A single fixed orientation has no such flip to get wrong.
      */
     @PluginMethod
     public void lockLandscape(PluginCall call) {
         getBridge().executeOnMainThread(() -> {
             Activity activity = getActivity();
             if (activity != null) {
-                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
             }
         });
         call.resolve();

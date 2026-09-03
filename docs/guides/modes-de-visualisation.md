@@ -23,7 +23,7 @@ Une étiquette apparaît brièvement pour nommer le mode. Le choix est mémoris�
 | `radial` | Corona | Couronne de rayons autour du disque, étincelles en orbite et ondes de choc à chaque impulsion. |
 | `aurora` | Aurore | Six rubans de lumière traversant l'écran, un par tranche de fréquence. |
 | `nebula` | Nébuleuse | Galaxie de particules en orbite laissant des traînées lumineuses. |
-| `cassette` | Cassette | Illustration plein écran d'une cassette audio — l'écran du téléphone devient la fenêtre d'un baladeur. Le boîtier ne bouge pas, mais les deux bobines (bande enroulée, dents du moyeu) tournent pendant la lecture et s'arrêtent à la pause ; les moyeux et la plaque de marque suivent la palette de la pochette, et la pochette du morceau en cours est imprimée sur l'étiquette. Ce mode force l'écran en paysage (voir plus bas) ; si le téléphone reste en portrait le temps que la rotation se fasse, l'illustration pivote pour rester plein écran. **Taper** l'écran replie les boutons de lecture et la barre de progression pour une vue dégagée (le titre/artiste reste visible) ; un second tap les ramène. Le titre/artiste et la barre de progression sont chacun sur une carte translucide plutôt qu'en texte flottant, pour rester lisibles quel que soit l'endroit où ils tombent sur l'illustration. |
+| `cassette` | Cassette | Illustration plein écran d'une cassette audio — l'écran du téléphone devient la fenêtre d'un baladeur. Le boîtier ne bouge pas, mais les deux bobines (bande enroulée, dents du moyeu) tournent pendant la lecture et s'arrêtent à la pause ; les moyeux et la plaque de marque suivent la palette de la pochette, et la pochette du morceau en cours est imprimée sur l'étiquette. Ce mode force l'écran en paysage (voir plus bas) ; si le téléphone reste en portrait le temps que la rotation se fasse, l'illustration pivote pour rester plein écran. **Taper** l'écran replie les boutons de lecture et la barre de progression pour une vue dégagée (le titre/artiste reste visible) ; un second tap les ramène. Le titre/artiste (près du haut, sur une carte translucide) et la barre de progression restent volontairement à l'écart des bobines. |
 
 Hors mode `cover`, la pochette se transforme en disque vinyle : elle rétrécit, s'arrondit,
 tourne pendant la lecture et s'arrête à la pause. En mode `cassette`, elle disparaît
@@ -34,7 +34,9 @@ complètement derrière l'illustration plein écran.
 En entrant en mode `cassette`, l'app demande à Android de forcer l'écran en paysage
 (`DeezerMedia.lockLandscape()`, natif — voir `docs/api/visualizer.md`) : l'auto-rotation du
 téléphone bascule alors l'écran d'elle-même, sans que l'utilisateur ait besoin de désactiver le
-verrouillage de rotation du système. En quittant ce mode, l'orientation redevient libre
+verrouillage de rotation du système. Une orientation paysage **fixe** (pas `SENSOR_LANDSCAPE`,
+qui accepte aussi le paysage inversé) : ce dernier faisait apparaître le glissement
+suivant/précédent inversé sur ce WebView. En quittant ce mode, l'orientation redevient libre
 (`unlockOrientation()`). Les boutons de lecture se replient en bas de l'écran une fois en
 paysage plutôt que de rester centrés verticalement, pour profiter d'un écran large et bas.
 

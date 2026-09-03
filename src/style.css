@@ -969,11 +969,17 @@ body[data-mode="cassette"] .player {
   justify-content: flex-end;
 }
 
-/* On a wide-but-short landscape screen the reels can still reach close to the bottom edge, so
-   the title/artist and the scrub bar get their own frosted card — the same chip language as
-   .capture-status/.mode-toggle — instead of floating text that would fight the artwork under
-   it for legibility wherever the two happen to land. */
+/* Pulled out of the footer entirely and pinned near the top instead — close to where the
+   label/album art already sit — so the title/artist never compete with the reels for space,
+   regardless of how the illustration happens to be cropped on a given screen. Still its own
+   frosted card (the same chip language as .capture-status/.mode-toggle) for legibility over
+   whatever ends up behind it. */
 body[data-mode="cassette"] .meta {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 74px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(78vw, 420px);
   background: rgba(10, 10, 20, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.1);
   -webkit-backdrop-filter: blur(16px);
