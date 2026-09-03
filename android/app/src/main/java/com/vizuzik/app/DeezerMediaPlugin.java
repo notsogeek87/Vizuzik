@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
 import android.os.Build;
@@ -103,7 +104,21 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             call.reject("unsupported");
             return;
         }
-        startActivityForResult(call, manager.createScreenCaptureIntent(), "handleCaptureResult");
+
+        Intent captureIntent;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14's default createScreenCaptureIntent() shows a "share a single app"
+            // picker first; on at least some devices, picking an app there just switches to it
+            // and never returns a grant, leaving the user stuck having to navigate back
+            // manually with nothing captured. Requesting the default display directly skips
+            // that picker and goes straight to the "entire screen" consent, which does work —
+            // and since we only ever read the audio track (no virtual display is ever created),
+            // capturing the whole screen vs. a single app makes no difference to us.
+            captureIntent = manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay());
+        } else {
+            captureIntent = manager.createScreenCaptureIntent();
+        }
+        startActivityForResult(call, captureIntent, "handleCaptureResult");
     }
 
     @ActivityCallback
