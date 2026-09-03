@@ -68,7 +68,7 @@ html, body {
   display: none;
 }
 
-.cover-wrap[data-mode="visualizer"] .cover {
+.cover-wrap:not([data-mode="cover"]) .cover {
   display: none;
 }
 
@@ -101,15 +101,21 @@ html, body {
 }
 
 .mode-toggle .icon-cover,
-.mode-toggle .icon-bars {
+.mode-toggle .icon-bars,
+.mode-toggle .icon-radial {
   display: none;
 }
 
+/* The icon always previews the mode a tap switches TO (cover -> bars -> radial -> cover). */
 .cover-wrap[data-mode="cover"] .mode-toggle .icon-bars {
   display: block;
 }
 
-.cover-wrap[data-mode="visualizer"] .mode-toggle .icon-cover {
+.cover-wrap[data-mode="bars"] .mode-toggle .icon-radial {
+  display: block;
+}
+
+.cover-wrap[data-mode="radial"] .mode-toggle .icon-cover {
   display: block;
 }
 

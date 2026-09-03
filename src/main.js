@@ -22,8 +22,10 @@ const els = {
 
 let isPlaying = false;
 
+const DISPLAY_MODES = ["cover", "bars", "radial"];
 const DISPLAY_MODE_KEY = "vizuzik:displayMode";
-let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) === "visualizer" ? "visualizer" : "cover";
+const storedMode = localStorage.getItem(DISPLAY_MODE_KEY);
+let displayMode = DISPLAY_MODES.includes(storedMode) ? storedMode : "cover";
 const visualizer = new Visualizer(els.visualizerCanvas);
 
 // Whether AudioCaptureService has been asked to capture Deezer's audio. Only real on Android
@@ -41,7 +43,8 @@ function stopCapture() {
 
 function applyDisplayMode() {
   els.coverWrap.dataset.mode = displayMode;
-  if (displayMode === "visualizer" && !els.player.hidden) {
+  if (displayMode !== "cover" && !els.player.hidden) {
+    visualizer.setStyle(displayMode);
     visualizer.start();
     if (!captureActive) {
       captureActive = true;
@@ -55,7 +58,8 @@ function applyDisplayMode() {
 }
 
 els.modeToggle.addEventListener("click", () => {
-  displayMode = displayMode === "cover" ? "visualizer" : "cover";
+  const nextIndex = (DISPLAY_MODES.indexOf(displayMode) + 1) % DISPLAY_MODES.length;
+  displayMode = DISPLAY_MODES[nextIndex];
   localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
   applyDisplayMode();
 });

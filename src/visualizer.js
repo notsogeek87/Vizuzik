@@ -21,6 +21,7 @@ export class Visualizer {
     this.running = false;
     this.rafId = null;
     this.isPlaying = false;
+    this.style = "bars";
 
     this.hue = 265;
     this.targetHue = 265;
@@ -61,6 +62,11 @@ export class Visualizer {
 
   setPlaying(isPlaying) {
     this.isPlaying = isPlaying;
+  }
+
+  /** Switches the visual style ("bars" or "radial"); same underlying levels drive both. */
+  setStyle(style) {
+    this.style = style;
   }
 
   /** Feeds a real-time loudness spectrum (0..1 per band) from AudioCaptureService. */
@@ -159,6 +165,19 @@ export class Visualizer {
 
   /** No real audio available (unsupported device, capture denied, or stream stalled): fake it. */
   _updateSynthetic(now) {
+    if (!this.isPlaying) {
+      // Music is paused/stopped: settle down to rest instead of endlessly wobbling — a few
+      // frames of decay rather than a hard cut, so it doesn't visibly snap to flat.
+      let sum = 0;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        this.bars[i] += (0 - this.bars[i]) * 0.15;
+        sum += this.bars[i];
+      }
+      this.avgLevel = sum / BAR_COUNT;
+      this.beatEnergy *= 0.85;
+      return;
+    }
+
     const t = (now - this.startTime) / 1000;
 
     if (now >= this.nextBeatAt) {
@@ -168,16 +187,13 @@ export class Visualizer {
     }
     this.beatEnergy *= 0.92;
 
-    const intensity = this.isPlaying ? 1 : 0.25;
-    const speed = this.isPlaying ? 1 : 0.35;
-
     let sum = 0;
     for (let i = 0; i < BAR_COUNT; i++) {
       const freq = 0.6 + i * 0.05;
-      const base = 0.5 + 0.5 * Math.sin(t * speed * freq + i * 0.4);
-      const wobble = 0.5 * Math.sin(t * speed * freq * 2.7 + i * 0.9);
+      const base = 0.5 + 0.5 * Math.sin(t * freq + i * 0.4);
+      const wobble = 0.5 * Math.sin(t * freq * 2.7 + i * 0.9);
       const beatShape = 0.6 + 0.4 * Math.sin(i * 1.7);
-      const value = clamp01((base * 0.55 + wobble * 0.25 + this.beatEnergy * beatShape * 0.7) * intensity);
+      const value = clamp01(base * 0.55 + wobble * 0.25 + this.beatEnergy * beatShape * 0.7);
       this.bars[i] = value;
       sum += value;
     }
@@ -208,7 +224,18 @@ export class Visualizer {
     const { ctx, width, height } = this;
     if (!width || !height) return;
     ctx.clearRect(0, 0, width, height);
+    this._drawBackground();
 
+    if (this.style === "radial") {
+      this._drawRadial();
+    } else {
+      this._drawParticles();
+      this._drawBars();
+    }
+  }
+
+  _drawBackground() {
+    const { ctx, width, height } = this;
     const bg = ctx.createRadialGradient(
       width / 2,
       height * 0.65,
@@ -221,7 +248,10 @@ export class Visualizer {
     bg.addColorStop(1, `hsla(${(this.hue + 40) % 360}, ${this.saturation}%, 6%, 1)`);
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
+  }
 
+  _drawParticles() {
+    const { ctx } = this;
     for (const p of this.particles) {
       ctx.globalAlpha = clamp01(p.life);
       ctx.fillStyle = `hsl(${p.hue}, 90%, 70%)`;
@@ -230,7 +260,10 @@ export class Visualizer {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+  }
 
+  _drawBars() {
+    const { ctx, width, height } = this;
     const gap = 3;
     const barWidth = (width - gap * (BAR_COUNT - 1)) / BAR_COUNT;
     const maxBarHeight = height * 0.7;
@@ -254,6 +287,63 @@ export class Visualizer {
       ctx.fill();
       ctx.globalAlpha = 1;
     }
+  }
+
+  /** Kaleidoscope-ish mirrored-petal flower, reactive to the same bars/beat data as the bars style. */
+  _drawRadial() {
+    const { ctx, width, height } = this;
+    const cx = width / 2;
+    const cy = height / 2;
+    const maxRadius = Math.min(width, height) * 0.46;
+    const petals = 8;
+    const angleStep = (Math.PI * 2) / petals;
+    const samplesPerPetal = Math.max(2, Math.round(BAR_COUNT / petals));
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.globalCompositeOperation = "lighter";
+    for (let p = 0; p < petals; p++) {
+      ctx.save();
+      ctx.rotate(p * angleStep + this.hue * 0.002);
+      this._drawPetal(maxRadius, samplesPerPetal);
+      ctx.restore();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
+
+    const glowRadius = maxRadius * (0.08 + this.beatEnergy * 0.06);
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
+    glow.addColorStop(0, `hsla(${this.hue}, 95%, 85%, 0.9)`);
+    glow.addColorStop(1, `hsla(${this.hue}, 95%, 60%, 0)`);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  _drawPetal(maxRadius, sampleCount) {
+    const { ctx } = this;
+    const halfAngle = ((Math.PI * 2) / 8 / 2) * 0.85;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let i = 0; i <= sampleCount; i++) {
+      const tt = i / sampleCount;
+      const angle = -halfAngle + tt * halfAngle * 2;
+      const level = this.bars[i % BAR_COUNT];
+      const r = maxRadius * (0.12 + level * 0.88);
+      const x = Math.sin(angle) * r;
+      const y = -Math.cos(angle) * r;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
+    grad.addColorStop(0, `hsla(${this.hue}, 95%, 70%, 0.85)`);
+    grad.addColorStop(0.6, `hsla(${(this.hue + 40) % 360}, 90%, 55%, 0.5)`);
+    grad.addColorStop(1, `hsla(${(this.hue + 80) % 360}, 90%, 45%, 0)`);
+    ctx.fillStyle = grad;
+    ctx.fill();
   }
 }
 
