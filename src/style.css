@@ -195,9 +195,9 @@ body:not([data-mode="cover"]) .scrim {
 
 /* ============================================================ cassette mode */
 
-/* A fixed, static full-screen illustration — the counterpoint to the spinning disc. Only
-   its accent gradient (the reel hubs and the write-protect tab) follows the album palette;
-   the shape itself never moves. */
+/* A fixed full-screen illustration — the counterpoint to the spinning disc. The shape itself
+   never moves; only the reels inside it turn (see .cassette__reel), and the accent gradient
+   (reel hubs, label tab) follows the album palette. */
 .cassette {
   position: fixed;
   inset: 0;
@@ -218,6 +218,41 @@ body[data-mode="cassette"] .cassette {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* The illustration is drawn cassette-side up, i.e. landscape. Held that way it needs no
+   help; held upright, it's rotated 90° and re-measured against the swapped viewport
+   (100vh/100vw) so the rotated box still runs edge to edge instead of leaving letterboxing. */
+@media (orientation: portrait) {
+  .cassette__art {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100vh;
+    height: 100vw;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+}
+
+@keyframes cassette-reel-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Real reels turn at slightly different rates as tape winds from one to the other; the two
+   durations here are a light nod to that without modelling it. */
+.cassette__reel {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: cassette-reel-spin 3.2s linear infinite;
+  animation-play-state: paused;
+}
+
+.cassette__reel--b {
+  animation-duration: 3.8s;
+}
+
+body[data-state="playing"] .cassette__reel {
+  animation-play-state: running;
 }
 
 .cassette__shell {
@@ -270,7 +305,8 @@ body[data-mode="cassette"] .cassette {
 }
 
 .cassette__guide,
-.cassette__screw {
+.cassette__screw,
+.cassette__notch {
   fill: rgba(247, 248, 252, 0.28);
 }
 
@@ -881,6 +917,63 @@ body.is-changing .artist {
   display: block;
 }
 
+/* Cassette mode expects the phone turned sideways, cassette-side up — the vertical stack
+   built for portrait wastes most of a short landscape screen. Dropping the (already hidden)
+   stage out of the layout and hugging the bottom edge instead reads like a Walkman's own
+   transport bar. */
+@media (orientation: landscape) {
+  body[data-mode="cassette"] .stage {
+    display: none;
+  }
+
+  body[data-mode="cassette"] .player {
+    justify-content: flex-end;
+    gap: 0.85rem;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 14px)
+      calc(env(safe-area-inset-right, 0px) + 22px)
+      calc(env(safe-area-inset-bottom, 0px) + 14px)
+      calc(env(safe-area-inset-left, 0px) + 22px);
+  }
+
+  body[data-mode="cassette"] .title {
+    font-size: clamp(1.05rem, 3.6vw, 1.4rem);
+  }
+
+  body[data-mode="cassette"] .artist {
+    font-size: clamp(0.8rem, 2.4vw, 0.95rem);
+  }
+
+  body[data-mode="cassette"] .progress {
+    width: min(70vw, 460px);
+    padding: 8px 0 4px;
+  }
+
+  body[data-mode="cassette"] .controls {
+    gap: 1.3rem;
+  }
+
+  body[data-mode="cassette"] .control--secondary {
+    width: 50px;
+    height: 50px;
+  }
+
+  body[data-mode="cassette"] .control--secondary svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  body[data-mode="cassette"] .control--primary {
+    width: 64px;
+    height: 64px;
+  }
+
+  body[data-mode="cassette"] .control--primary svg {
+    width: 28px;
+    height: 28px;
+  }
+}
+
 /* ============================================================ empty / permission */
 
 .message {
@@ -1113,6 +1206,7 @@ body.is-changing .artist {
   .blob,
   .disc__sheen,
   .disc__spin,
+  .cassette__reel,
   .title .marquee__text,
   .message__pulse,
   .sheet__wave span,

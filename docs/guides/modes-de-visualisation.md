@@ -23,7 +23,7 @@ Une étiquette apparaît brièvement pour nommer le mode. Le choix est mémoris�
 | `radial` | Corona | Couronne de rayons autour du disque, étincelles en orbite et ondes de choc à chaque impulsion. |
 | `aurora` | Aurore | Six rubans de lumière traversant l'écran, un par tranche de fréquence. |
 | `nebula` | Nébuleuse | Galaxie de particules en orbite laissant des traînées lumineuses. |
-| `cassette` | Cassette | Illustration fixe plein écran d'une cassette audio vue en portrait — l'écran du téléphone devient la fenêtre d'un baladeur. Rien n'y bouge ; seuls les moyeux des bobines suivent la palette de la pochette. |
+| `cassette` | Cassette | Illustration fixe plein écran d'une cassette audio — l'écran du téléphone devient la fenêtre d'un baladeur. Le boîtier ne bouge pas, mais les deux bobines tournent pendant la lecture et s'arrêtent à la pause ; leurs moyeux suivent la palette de la pochette. Dessinée à l'endroit tenue en paysage (comme un vrai baladeur) ; en portrait, l'illustration pivote pour rester plein écran. |
 
 Hors mode `cover`, la pochette se transforme en disque vinyle : elle rétrécit, s'arrondit,
 tourne pendant la lecture et s'arrête à la pause. En mode `cassette`, elle disparaît

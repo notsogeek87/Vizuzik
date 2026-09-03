@@ -91,7 +91,9 @@ Données d'analyse disponibles dans la méthode de dessin :
 Le contexte est déjà en composition `lighter` quand la scène est appelée : les formes
 s'additionnent, et le bloom est appliqué après.
 
-`cassette` déroge à cette recette : c'est une illustration fixe, plein écran, portée par
+`cassette` déroge à cette recette : c'est une illustration plein écran portée par
 `index.html`/`style.css` plutôt que par le canvas (voir `body[data-mode="cassette"] .cassette`
 dans `style.css`). Son `case` dans `_draw()` ne fait rien — `.fx` est caché par CSS dans ce
-mode — et elle est exclue de `_burstParticles()` pour rester réellement fixe.
+mode — et elle est exclue de `_burstParticles()` : rien n'y réagit au son. Les deux bobines
+tournent en CSS pendant la lecture (`.cassette__reel`, pilotée par `body[data-state="playing"]`,
+la même donnée que `.disc__spin`) mais à vitesse constante, pas sur le rythme.
