@@ -13,7 +13,7 @@ Le plugin expose désormais la position et la durée, et permet de se déplacer 
 |---|---|---|
 | `getNowPlaying()` | ajoute `duration`, `position` (ms) et `canSeek` | La position est résolue contre l'état **courant** de la session, pas celui figé au moment où le titre a été publié. |
 | `getPosition()` | `{ active, position, duration, isPlaying, canSeek }` | Volontairement sans la pochette : cet appel est répété toutes les 5 s et ré-encoder le bitmap en base64 à chaque fois serait du gaspillage. |
-| `seek({ position })` | position en ms | Rejette si la position est absente ou négative. |
+| `seek({ position })` | position en ms | Rejette si la position est absente ou négative. Voir le piège `getLong` ci-dessous. |
 
 L'événement `nowPlayingChanged` transporte les mêmes champs que `getNowPlaying()`.
 
@@ -24,6 +24,34 @@ session l'a mise à jour**, pas telle qu'elle est maintenant. Sans extrapolation
 resterait figée entre deux mises à jour de la session. `DeezerMediaBridge.resolvePosition()`
 avance donc la valeur depuis `getLastPositionUpdateTime()`, à la vitesse de lecture déclarée,
 et uniquement si l'état est `STATE_PLAYING`.
+
+### Piège : `PluginCall.getLong()` ne lit pas les entiers JS
+
+`getLong()` ne renvoie une valeur que si l'objet bridgé est **littéralement** une instance de
+`Long` :
+
+```java
+if (value instanceof Long) return (Long) value;
+return defaultValue;   // null
+```
+
+Or une position en millisecondes (`74123`) traverse le pont en `Integer`, et une position
+fractionnaire en `BigDecimal` — jamais en `Long` sauf au-delà de la plage `int`, soit environ
+24 jours de lecture. `getLong("position")` renvoyait donc `null` pour **toutes** les positions
+réelles, et chaque recherche était rejetée avant d'atteindre Deezer. La lecture se fait
+maintenant via `call.getData().optLong("position", -1)`, qui convertit le type numérique quel
+qu'il soit.
+
+Le même piège vaut pour `getInt()` et `getDouble()` : préférer `getData().optLong()` /
+`optInt()` / `optDouble()` pour tout nombre venant du JS.
+
+### Vérifier qu'une recherche a pris
+
+`MediaSession.seekTo()` est sans retour : une session peut accepter l'appel puis l'ignorer.
+`requestSeek()` (dans `src/main.js`) revérifie donc la position réelle 900 ms après, et si
+l'écart dépasse 4 s, remet la barre à sa vraie place et affiche « Deezer ignore le
+déplacement ». Un rejet immédiat affiche « Déplacement refusé ». Une barre qui ment sur la
+position atteinte est pire qu'un message honnête.
 
 ### `canSeek` — indicatif, pas bloquant
 

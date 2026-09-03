@@ -53,8 +53,50 @@ visualizer.setFocusElement(els.disc);
 
 const progress = new PlaybackProgress(
   { root: els.progress, bar: els.progressBar, elapsed: els.timeElapsed, total: els.timeTotal },
-  { onSeek: (position) => DeezerMedia.seek({ position }).catch(() => {}) }
+  { onSeek: (position) => requestSeek(position) }
 );
+
+/** Re-anchors the bar on whatever Deezer currently reports. */
+async function syncPosition() {
+  const state = await DeezerMedia.getPosition();
+  if (!state || !state.active) return null;
+  progress.setTrack({
+    position: state.position || 0,
+    duration: state.duration || 0,
+    isPlaying: !!state.isPlaying,
+  });
+  return state;
+}
+
+// How far playback may sit from the requested position before the seek counts as ignored.
+// Generous enough to cover the verification delay plus Deezer's own buffering.
+const SEEK_TOLERANCE_MS = 4000;
+const SEEK_VERIFY_DELAY_MS = 900;
+
+/**
+ * Seeking is fire-and-forget on the Android side: MediaSession.seekTo() can be accepted and
+ * then quietly ignored by the player. So the result is checked rather than assumed — a bar
+ * sitting at a position playback never reached is worse than an honest message.
+ */
+async function requestSeek(position) {
+  try {
+    await DeezerMedia.seek({ position });
+  } catch (err) {
+    showToast("Déplacement refusé", 2200);
+    syncPosition().catch(() => {});
+    return;
+  }
+  setTimeout(async () => {
+    try {
+      const state = await syncPosition();
+      if (state && Math.abs((state.position || 0) - position) > SEEK_TOLERANCE_MS) {
+        showToast("Deezer ignore le déplacement", 2600);
+      }
+    } catch (err) {
+      // Nothing to report: the periodic re-anchor will straighten the bar out anyway.
+    }
+  }, SEEK_VERIFY_DELAY_MS);
+}
 
 /* ------------------------------------------------------------------ reactive CSS vars */
 
@@ -174,14 +216,14 @@ function applyDisplayMode(announce) {
   // The disc changes size and shape over a 0.7s transition; the canvas needs the new centre
   // as it moves, or the corona would sit where the artwork used to be.
   scheduleFocusRefresh();
-  if (announce) showModeToast(MODE_LABELS[displayMode]);
+  if (announce) showToast(MODE_LABELS[displayMode]);
 }
 
-function showModeToast(label) {
+function showToast(label, durationMs = 1400) {
   els.modeToast.textContent = label;
   els.modeToast.classList.add("is-visible");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => els.modeToast.classList.remove("is-visible"), 1400);
+  toastTimer = setTimeout(() => els.modeToast.classList.remove("is-visible"), durationMs);
 }
 
 function cycleDisplayMode() {
@@ -431,20 +473,10 @@ function setNowPlaying(state) {
 // clock between updates. This re-anchors it against the real one often enough that drift never
 // becomes visible, using the position-only call so the album art isn't re-encoded every time.
 const POSITION_RESYNC_MS = 5000;
-setInterval(async () => {
+setInterval(() => {
   if (els.player.hidden || document.visibilityState !== "visible") return;
-  try {
-    const state = await DeezerMedia.getPosition();
-    if (state && state.active) {
-      progress.setTrack({
-        position: state.position || 0,
-        duration: state.duration || 0,
-        isPlaying: !!state.isPlaying,
-      });
-    }
-  } catch (err) {
-    // Older native build without getPosition(): the local clock alone still drives the bar.
-  }
+  // Older native build without getPosition(): the local clock alone still drives the bar.
+  syncPosition().catch(() => {});
 }, POSITION_RESYNC_MS);
 
 async function refresh() {
