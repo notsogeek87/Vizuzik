@@ -95,12 +95,16 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     @PluginMethod
     public void seek(PluginCall call) {
-        Long position = call.getLong("position");
-        if (position == null || position < 0) {
-            call.reject("position manquante");
+        // NOT call.getLong(): Capacitor only returns a value there when the bridged JSON object
+        // is literally an instance of Long, and a JS number small enough to be a position in
+        // milliseconds arrives as an Integer — so getLong() silently returned null and every
+        // seek was rejected before it reached Deezer. optLong() coerces whatever numeric type
+        // the bridge produced.
+        long target = call.getData().optLong("position", -1);
+        if (target < 0) {
+            call.reject("position manquante ou invalide");
             return;
         }
-        final long target = position;
         withTransportControls(call, controls -> controls.seekTo(target));
     }
 
