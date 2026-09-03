@@ -41,6 +41,7 @@ html, body {
 }
 
 .cover-wrap {
+  position: relative;
   width: min(70vw, 340px);
   aspect-ratio: 1 / 1;
   border-radius: 20px;
@@ -55,6 +56,61 @@ html, body {
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
+}
+
+.visualizer {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cover-wrap[data-mode="cover"] .visualizer {
+  display: none;
+}
+
+.cover-wrap[data-mode="visualizer"] .cover {
+  display: none;
+}
+
+.mode-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.mode-toggle:active {
+  transform: scale(0.9);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.mode-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.mode-toggle .icon-cover,
+.mode-toggle .icon-bars {
+  display: none;
+}
+
+.cover-wrap[data-mode="cover"] .mode-toggle .icon-bars {
+  display: block;
+}
+
+.cover-wrap[data-mode="visualizer"] .mode-toggle .icon-cover {
+  display: block;
 }
 
 .title {

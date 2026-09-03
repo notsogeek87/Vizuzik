@@ -10,8 +10,13 @@
     <div id="background" class="background"></div>
 
     <main id="player" class="player" hidden>
-      <div class="cover-wrap">
+      <div id="cover-wrap" class="cover-wrap" data-mode="cover">
         <div id="cover" class="cover"></div>
+        <canvas id="visualizer" class="visualizer"></canvas>
+        <button id="mode-toggle" class="mode-toggle" aria-label="Basculer pochette / visualiseur">
+          <svg class="icon-cover" viewBox="0 0 24 24"><path d="M4 5h16v14H4zm2 2v10h12V7zm2 8 3-4 2 2.5L15 9l3 6z" /></svg>
+          <svg class="icon-bars" viewBox="0 0 24 24"><path d="M5 10h2v9H5zm4-5h2v14H9zm4 3h2v11h-2zm4-6h2v17h-2z" /></svg>
+        </button>
       </div>
       <h1 id="title" class="title"></h1>
       <p id="artist" class="artist"></p>
