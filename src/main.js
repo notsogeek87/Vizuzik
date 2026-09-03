@@ -175,6 +175,11 @@ async function detectTvPlatform() {
     isTv = false;
   }
   if (isTv) document.body.dataset.platform = "tv";
+  // Locks the fixed landscape orientation right away rather than waiting for a track to start
+  // (applyDisplayMode(), the only other caller of syncOrientationLock(), doesn't run again until
+  // one does) — otherwise a TV stuck on the empty/permission screen never gets past whatever
+  // orientation the very first, pre-detection applyDisplayMode(false) call left it in.
+  syncOrientationLock();
 }
 
 /* ------------------------------------------------------------------ remote-control navigation */
@@ -535,6 +540,17 @@ function applyDisplayMode(announce) {
 // that often) so the native side isn't asked to re-apply the same orientation repeatedly.
 let orientationLockedFor = null;
 function syncOrientationLock() {
+  // A TV never rotates, so it never needs "unspecified" — and on at least one box, leaving it
+  // unspecified outside cassette mode let Android pick that device's *reversed* landscape as
+  // the natural one, rendering the whole UI upside down (see the fixed, non-reversed LANDSCAPE
+  // used below, same fix as lockLandscape() itself already applies natively). Checked first and
+  // tracked under its own key so it stays locked across every display mode, not just cassette.
+  if (isTv) {
+    if (orientationLockedFor === "tv") return;
+    orientationLockedFor = "tv";
+    DeezerMedia.lockLandscape().catch(() => {});
+    return;
+  }
   if (orientationLockedFor === displayMode) return;
   orientationLockedFor = displayMode;
   const request = displayMode === "cassette" ? DeezerMedia.lockLandscape() : DeezerMedia.unlockOrientation();
