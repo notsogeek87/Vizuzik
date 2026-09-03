@@ -7,11 +7,11 @@
 Sous le titre : le temps écoulé à gauche, la durée totale à droite, et une barre remplie aux
 couleurs de la pochette dont la lueur pulse sur les basses.
 
-- **Glisser la poignée** déplace la lecture dans le morceau.
+- **Appuyer** n'importe où sur le bloc de la barre (minutages compris) saute à cet endroit du
+  morceau ; **glisser** déplace la lecture en continu.
 - La barre **disparaît** quand Deezer n'annonce pas de durée (flux en direct, par exemple) ;
   la place reste réservée pour que les contrôles ne sautent pas d'un morceau à l'autre.
-- La poignée **n'apparaît pas** si la session Deezer n'autorise pas la recherche. La barre
-  reste alors purement indicative.
+- Si Deezer refuse la recherche, la barre revient à la position réelle dans les cinq secondes.
 
 Entre deux mises à jour de Deezer, la barre avance sur une horloge locale, resynchronisée
 toutes les cinq secondes sur la position réelle.

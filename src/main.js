@@ -421,7 +421,6 @@ function setNowPlaying(state) {
     position: state.position || 0,
     duration: state.duration || 0,
     isPlaying,
-    canSeek: !!state.canSeek,
   });
 
   setArtwork(state.albumArt || "");
@@ -441,7 +440,6 @@ setInterval(async () => {
         position: state.position || 0,
         duration: state.duration || 0,
         isPlaying: !!state.isPlaying,
-        canSeek: !!state.canSeek,
       });
     }
   } catch (err) {

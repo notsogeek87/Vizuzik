@@ -25,10 +25,13 @@ resterait figée entre deux mises à jour de la session. `DeezerMediaBridge.reso
 avance donc la valeur depuis `getLastPositionUpdateTime()`, à la vitesse de lecture déclarée,
 et uniquement si l'état est `STATE_PLAYING`.
 
-### `canSeek`
+### `canSeek` — indicatif, pas bloquant
 
-Vrai seulement si la session Deezer annonce `ACTION_SEEK_TO`. Quand c'est faux, la barre
-s'affiche mais n'est pas manipulable : pas de poignée, pas de glisser.
+Vrai seulement si la session Deezer annonce `ACTION_SEEK_TO`. **Ce drapeau ne conditionne pas
+l'interface :** en pratique les lecteurs acceptent couramment `seekTo()` sans l'annoncer, et
+s'en servir comme verrou rendait la barre totalement inerte sur l'appareil de test. La barre est
+donc manipulable dès qu'une durée est connue ; si une recherche est réellement refusée, le
+ré-ancrage suivant (5 s) remet la barre en place.
 
 ## `PlaybackProgress` (côté web)
 
@@ -43,7 +46,7 @@ const progress = new PlaybackProgress(
 
 | Méthode | Rôle |
 |---|---|
-| `setTrack({ position, duration, isPlaying, canSeek })` | Ré-ancre l'horloge locale. Ignoré pendant un glisser en cours : la position pointée par le doigt est plus récente que celle qui revient du natif. |
+| `setTrack({ position, duration, isPlaying })` | Ré-ancre l'horloge locale. Ignoré pendant un glisser en cours : la position pointée par le doigt est plus récente que celle qui revient du natif. |
 | `positionNow()` | Position courante en ms, extrapolée depuis l'ancre. |
 | `render(force)` | Met à jour le DOM. S'auto-limite à une mise à jour toutes les 120 ms — une barre qui avance d'un pixel par seconde n'a rien à gagner à 60 images par seconde. |
 
@@ -52,3 +55,10 @@ L'horloge tourne localement entre deux ancres ; `src/main.js` la ré-ancre toute
 
 Le rendu passe par `--p` (0..1) sur le conteneur : le remplissage est un `scaleX`, donc composé
 par le GPU au lieu de relayouter la ligne à chaque rafraîchissement.
+
+### Cible tactile
+
+Les écouteurs de pointeur sont posés sur le **bloc rembourré** (`#progress`, ~52 px de haut),
+pas sur la barre visible (6 px) : une bande de 6 px est intouchable au doigt. La géométrie, elle,
+est lue sur la barre, si bien qu'un appui n'importe où dans le bloc — y compris sur la ligne des
+minutages — se projette correctement sur la barre.

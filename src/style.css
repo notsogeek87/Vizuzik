@@ -582,14 +582,15 @@ body.is-changing .artist {
 
 /* ============================================================ progress bar */
 
-/* The visible bar is 5px tall but the touch target is the whole padded block: a 5px scrub
-   target would be unusable with a thumb. Space is reserved even when there is no duration to
+/* The visible bar is a few pixels tall, but this whole padded block — timestamps included —
+   is the scrub target, and it is what carries the pointer listeners (see progress.js). A 6px
+   strip is impossible to hit with a thumb. Space is reserved even when there is no duration to
    show, so the controls never jump as tracks change. */
 .progress {
   --p: 0;
   position: relative;
   width: min(86vw, 460px);
-  padding: 14px 0 2px;
+  padding: 20px 0 6px;
   flex: none;
   opacity: 0;
   transition: opacity 0.4s var(--ease-out);
@@ -605,14 +606,15 @@ body.is-changing .artist {
   pointer-events: none;
 }
 
-.progress[data-seekable="true"] .progress__bar {
+.progress[data-seekable="true"] {
   cursor: pointer;
 }
 
 .progress__bar {
   position: relative;
-  height: 5px;
+  height: 6px;
   border-radius: 999px;
+  transition: height 0.18s var(--ease-out);
 }
 
 .progress__track {
@@ -639,9 +641,9 @@ body.is-changing .artist {
   position: absolute;
   top: 50%;
   left: calc(var(--p) * 100%);
-  width: 12px;
-  height: 12px;
-  margin: -6px 0 0 -6px;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
   border-radius: 50%;
   background: var(--ink);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 calc(4px + var(--beat) * 14px) rgba(var(--c1), 0.8);
@@ -655,7 +657,7 @@ body.is-changing .artist {
 }
 
 .progress.is-scrubbing .progress__bar {
-  height: 7px;
+  height: 9px;
 }
 
 .progress[data-seekable="true"].is-scrubbing .progress__thumb {

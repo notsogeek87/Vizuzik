@@ -42,17 +42,20 @@ export class PlaybackProgress {
     this.lastElapsedLabel = null;
     this.lastTotalLabel = null;
 
-    els.bar.addEventListener("pointerdown", (e) => this._onPointerDown(e));
-    els.bar.addEventListener("pointermove", (e) => this._onPointerMove(e));
-    els.bar.addEventListener("pointerup", (e) => this._onPointerUp(e));
-    els.bar.addEventListener("pointercancel", () => this._cancelScrub());
+    // Pointers are taken on the padded root, not on the bar: the bar itself is a few pixels
+    // tall, which is impossible to hit with a thumb. Geometry still comes from the bar, so
+    // touching anywhere in the block (including the timestamps row) maps onto it.
+    els.root.addEventListener("pointerdown", (e) => this._onPointerDown(e));
+    els.root.addEventListener("pointermove", (e) => this._onPointerMove(e));
+    els.root.addEventListener("pointerup", (e) => this._onPointerUp(e));
+    els.root.addEventListener("pointercancel", () => this._cancelScrub());
   }
 
   /**
    * Re-anchors the local clock. `position` is the position at the instant the native side
    * resolved it, so "now" is the right anchor timestamp.
    */
-  setTrack({ position = 0, duration = 0, isPlaying = false, canSeek = false } = {}) {
+  setTrack({ position = 0, duration = 0, isPlaying = false } = {}) {
     // A seek in flight would otherwise be undone by the pre-seek position still coming back
     // from the poll; the scrub itself is the more recent truth until it lands.
     if (this.scrubRatio != null) return;
@@ -60,7 +63,11 @@ export class PlaybackProgress {
     this.anchorMs = clamp(position, 0, this.duration || position);
     this.anchorAt = performance.now();
     this.isPlaying = isPlaying;
-    this.canSeek = canSeek && this.duration > 0;
+    // Scrubbing is offered whenever there is a length to scrub through. The session's own
+    // ACTION_SEEK_TO flag is NOT used as the gate: players routinely accept seekTo() without
+    // advertising it, and gating on it left the bar completely inert. If a seek really is
+    // refused, the next re-anchor puts the bar back within a few seconds.
+    this.canSeek = this.duration > 0;
     this.els.root.dataset.available = this.duration > 0 ? "true" : "false";
     this.els.root.dataset.seekable = this.canSeek ? "true" : "false";
     this.render(true);
@@ -105,7 +112,7 @@ export class PlaybackProgress {
   _onPointerDown(event) {
     if (!this.canSeek || this.pointerId != null) return;
     this.pointerId = event.pointerId;
-    this.els.bar.setPointerCapture(event.pointerId);
+    this.els.root.setPointerCapture(event.pointerId);
     this.els.root.classList.add("is-scrubbing");
     this.scrubRatio = this._ratioFromEvent(event);
     this.render(true);
@@ -138,8 +145,8 @@ export class PlaybackProgress {
   }
 
   _releasePointer() {
-    if (this.pointerId != null && this.els.bar.hasPointerCapture(this.pointerId)) {
-      this.els.bar.releasePointerCapture(this.pointerId);
+    if (this.pointerId != null && this.els.root.hasPointerCapture(this.pointerId)) {
+      this.els.root.releasePointerCapture(this.pointerId);
     }
     this.pointerId = null;
     this.els.root.classList.remove("is-scrubbing");
