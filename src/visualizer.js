@@ -38,6 +38,7 @@ export class Visualizer {
     this.liveLevels = null;
     this.lastLiveAt = 0;
     this.prevBass = 0;
+    this.liveSilenceSince = null;
 
     this._onResize = () => this.resize();
     window.addEventListener("resize", this._onResize);
@@ -74,6 +75,22 @@ export class Visualizer {
     if (!levels || !levels.length) return;
     this.liveLevels = levels;
     this.lastLiveAt = performance.now();
+  }
+
+  /**
+   * Answers "is this actually reacting to Deezer's audio right now?" for the UI badge.
+   * - "simulated": no live data (unsupported device, capture denied, or the stream stalled).
+   * - "silent": live events ARE arriving, but every band has stayed near-zero for a while —
+   *   typically means Deezer opted out of playback capture (Android silently mutes it) rather
+   *   than a bug, since real playback almost never sits perfectly flat for seconds.
+   * - "live": receiving real, non-flat levels.
+   */
+  get captureStatus() {
+    const now = performance.now();
+    const hasLiveLevels = this.isPlaying && this.liveLevels && now - this.lastLiveAt < LIVE_LEVELS_TIMEOUT_MS;
+    if (!hasLiveLevels) return "simulated";
+    if (this.liveSilenceSince != null && now - this.liveSilenceSince > 3000) return "silent";
+    return "live";
   }
 
   resize() {
@@ -161,6 +178,12 @@ export class Visualizer {
     const bassRise = Math.max(0, bass - this.prevBass);
     this.prevBass = bass;
     this.beatEnergy = Math.max(this.beatEnergy * 0.9, clamp01(bassRise * 4));
+
+    if (this.avgLevel < 0.03) {
+      if (this.liveSilenceSince == null) this.liveSilenceSince = performance.now();
+    } else {
+      this.liveSilenceSince = null;
+    }
   }
 
   /** No real audio available (unsupported device, capture denied, or stream stalled): fake it. */

@@ -9,6 +9,7 @@ const els = {
   coverWrap: document.getElementById("cover-wrap"),
   cover: document.getElementById("cover"),
   visualizerCanvas: document.getElementById("visualizer"),
+  captureStatus: document.getElementById("capture-status"),
   modeToggle: document.getElementById("mode-toggle"),
   title: document.getElementById("title"),
   artist: document.getElementById("artist"),
@@ -63,6 +64,26 @@ els.modeToggle.addEventListener("click", () => {
   localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
   applyDisplayMode();
 });
+
+const CAPTURE_STATUS_LABELS = {
+  live: "● Direct",
+  silent: "● Direct (silencieux)",
+  simulated: "● Simulé",
+};
+
+// Answers "is this really reacting to Deezer's audio?" on-screen instead of leaving it a
+// mystery: the badge reflects the visualizer's own capture-vs-fallback state every tick.
+function updateCaptureStatusBadge() {
+  if (displayMode === "cover" || els.player.hidden) {
+    els.captureStatus.hidden = true;
+    return;
+  }
+  const status = visualizer.captureStatus;
+  els.captureStatus.hidden = false;
+  els.captureStatus.dataset.status = status;
+  els.captureStatus.textContent = CAPTURE_STATUS_LABELS[status];
+}
+setInterval(updateCaptureStatusBadge, 500);
 
 function showScreen(screen) {
   els.player.hidden = screen !== "player";

@@ -72,6 +72,27 @@ html, body {
   display: none;
 }
 
+.capture-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(249, 250, 251, 0.6);
+}
+
+.capture-status[data-status="live"] {
+  color: #4ade80;
+}
+
+.capture-status[data-status="silent"] {
+  color: #fbbf24;
+}
+
 .mode-toggle {
   position: absolute;
   top: 10px;
