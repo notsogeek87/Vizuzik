@@ -2,6 +2,7 @@ package com.vizuzik.app;
 
 import android.app.Activity;
 import android.app.UiModeManager;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -63,7 +64,16 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     public void requestPermission(PluginCall call) {
         Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getContext().startActivity(intent);
+        try {
+            getContext().startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            // Some Android TV builds don't ship the phone Settings app's notification-listener
+            // screen at all, so this intent resolves to nothing there — startActivity() would
+            // otherwise throw straight past the plugin and crash the whole app. Rejecting instead
+            // lets the web layer say so instead of the app just vanishing.
+            call.reject("unavailable");
+            return;
+        }
         call.resolve();
     }
 

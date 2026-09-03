@@ -865,7 +865,12 @@ async function refresh() {
 /* ------------------------------------------------------------------ wiring */
 
 els.grantAccess.addEventListener("click", () => {
-  DeezerMedia.requestPermission();
+  // Some Android TV builds have no notification-listener screen for the native side to open
+  // (see requestPermission() in DeezerMediaPlugin.java) — that now comes back as a rejection
+  // instead of crashing the app, so it needs somewhere to land here too.
+  DeezerMedia.requestPermission().catch(() => {
+    showToast("Réglage indisponible sur cet appareil", 2600);
+  });
 });
 
 els.playPause.addEventListener("click", () => {
