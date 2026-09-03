@@ -130,6 +130,23 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
+     * Whether real audio capture is possible on this device, and whether it is running right now.
+     * The web layer asks on every resume: its own flags live in the webview and are wiped whenever
+     * that is recreated, while AudioCaptureService keeps running across it. Without this, a
+     * returning user was shown "activate real audio" for a capture that was already live, and
+     * tapping it re-ran the system consent dialog for nothing.
+     */
+    @PluginMethod
+    public void getCaptureState(PluginCall call) {
+        JSObject result = new JSObject();
+        boolean supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            && getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE) != null;
+        result.put("supported", supported);
+        result.put("running", supported && AudioLevelsBridge.getInstance().isCapturing());
+        call.resolve(result);
+    }
+
+    /**
      * Requests the system MediaProjection consent needed to capture Deezer's own audio output
      * (Android 10+ only). Once granted, starts AudioCaptureService, which streams a real-time
      * loudness spectrum back via "audioLevels" events for as long as the service runs.
@@ -138,6 +155,14 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     public void startVisualizerCapture(PluginCall call) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             call.reject("unsupported");
+            return;
+        }
+        if (AudioLevelsBridge.getInstance().isCapturing()) {
+            // Already granted and running: showing the system dialog again would be pure noise,
+            // and accepting it would tear down the projection we're already using.
+            JSObject result = new JSObject();
+            result.put("alreadyRunning", true);
+            call.resolve(result);
             return;
         }
         MediaProjectionManager manager =
@@ -176,7 +201,9 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         serviceIntent.putExtra("resultCode", result.getResultCode());
         serviceIntent.putExtra("data", result.getData());
         ContextCompat.startForegroundService(getContext(), serviceIntent);
-        call.resolve();
+        JSObject granted = new JSObject();
+        granted.put("alreadyRunning", false);
+        call.resolve(granted);
     }
 
     @PluginMethod

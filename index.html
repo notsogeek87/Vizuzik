@@ -82,6 +82,29 @@
       </div>
     </main>
 
+    <!-- Shown once, just before the very first MediaProjection dialog. That dialog talks about
+         recording the screen, which is both alarming and wrong here; this says what Vizuzik
+         actually does with it, and which button to expect. -->
+    <div id="capture-sheet" class="sheet" hidden>
+      <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="capture-sheet-title">
+        <div class="sheet__wave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <h2 id="capture-sheet-title" class="sheet__title">Faire vibrer l'écran avec la musique</h2>
+        <p class="sheet__lead">
+          Vizuzik peut écouter le son de Deezer pour que les visuels suivent vraiment le morceau.
+        </p>
+        <ul class="sheet__points">
+          <li>Rien n'est enregistré ni envoyé : le son sert uniquement à animer cet écran.</li>
+          <li>Android va afficher sa fenêtre « enregistrer l'écran » : c'est son seul moyen de
+            prêter le son d'une autre app. Appuyez sur <b>Démarrer</b>.</li>
+          <li>Une seule fois : tant que Vizuzik reste ouvert, on ne vous la redemandera pas.</li>
+        </ul>
+        <button id="capture-accept" type="button" class="grant-button">Continuer</button>
+        <button id="capture-later" type="button" class="sheet__ghost">Plus tard</button>
+      </div>
+    </div>
+
     <div id="mode-toast" class="mode-toast" role="status" aria-live="polite"></div>
 
     <section id="empty" class="message" hidden>

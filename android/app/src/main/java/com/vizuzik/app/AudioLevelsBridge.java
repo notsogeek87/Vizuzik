@@ -20,8 +20,24 @@ final class AudioLevelsBridge {
     }
 
     private Listener listener;
+    // Written by AudioCaptureService, read by DeezerMediaPlugin from the web layer's thread:
+    // volatile rather than synchronized so a state query can never block on a capture callback.
+    private volatile boolean capturing;
 
     private AudioLevelsBridge() {}
+
+    /**
+     * Whether AudioCaptureService currently holds a live MediaProjection. The web layer asks on
+     * every resume: the answer is what lets it skip re-requesting a consent it already has, since
+     * its own JS state is lost whenever the webview is recreated but the service isn't.
+     */
+    boolean isCapturing() {
+        return capturing;
+    }
+
+    void markCapturing() {
+        capturing = true;
+    }
 
     synchronized void setListener(Listener listener) {
         this.listener = listener;
@@ -34,6 +50,7 @@ final class AudioLevelsBridge {
     }
 
     synchronized void publishStopped() {
+        capturing = false;
         if (listener != null) {
             listener.onCaptureStopped();
         }

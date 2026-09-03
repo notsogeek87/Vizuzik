@@ -153,6 +153,7 @@ public class AudioCaptureService extends Service {
         }
 
         running = true;
+        AudioLevelsBridge.getInstance().markCapturing();
         audioRecord.startRecording();
         captureThread = new Thread(this::captureLoop, "VizuzikAudioCapture");
         captureThread.start();
