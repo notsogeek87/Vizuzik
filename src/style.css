@@ -364,6 +364,7 @@ body[data-state="playing"] .cassette__reel {
   justify-content: space-between;
   gap: 12px;
   padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 0;
+  transition: opacity 0.3s ease;
 }
 
 .capture-status {
@@ -867,12 +868,13 @@ body.is-changing .artist {
 }
 
 /* Cassette mode has no stage to tap for the usual tap-to-cycle gesture, so a tap there instead
-   tucks the transport buttons, the scrub bar and the title/artist card away — a fully
-   unobstructed view of the cassette, restored by the next tap. Scoped to cassette mode so the
-   class can't linger visibly into another mode. */
+   tucks the transport buttons, the scrub bar, the title/artist card and the top bar (capture
+   badge + mode toggle) away — a fully unobstructed view of the cassette, restored by the next
+   tap. Scoped to cassette mode so the class can't linger visibly into another mode. */
 body[data-mode="cassette"].cassette-controls-hidden .controls,
 body[data-mode="cassette"].cassette-controls-hidden .progress,
-body[data-mode="cassette"].cassette-controls-hidden .meta {
+body[data-mode="cassette"].cassette-controls-hidden .meta,
+body[data-mode="cassette"].cassette-controls-hidden .topbar {
   opacity: 0;
   pointer-events: none;
 }
