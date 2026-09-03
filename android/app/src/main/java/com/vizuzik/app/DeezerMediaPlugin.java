@@ -39,7 +39,13 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     protected void handleOnStop() {
         DeezerMediaBridge.getInstance().setListener(null);
         AudioLevelsBridge.getInstance().setListener(null);
-        stopAudioCaptureService();
+        // Deliberately NOT stopping AudioCaptureService here: handleOnStop() fires on every
+        // brief backgrounding (switching apps, checking a notification), not just on actually
+        // closing Vizuzik. It's a real foreground service and is meant to keep running while
+        // backgrounded — stopping it here meant returning to the app never showed live audio
+        // again without redoing the whole consent flow, since nothing re-requested it. It's
+        // stopped for real in AudioCaptureService#onTaskRemoved(), when the user removes
+        // Vizuzik from recents.
     }
 
     @PluginMethod

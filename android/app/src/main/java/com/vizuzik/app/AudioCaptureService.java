@@ -248,6 +248,13 @@ public class AudioCaptureService extends Service {
         return null;
     }
 
+    /** Fires when the user actually removes Vizuzik from recents — the real "stop capturing" moment, as opposed to merely backgrounding the app for a bit. */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        stopSelf();
+        super.onTaskRemoved(rootIntent);
+    }
+
     @Override
     public void onDestroy() {
         running = false;
