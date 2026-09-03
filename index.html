@@ -31,8 +31,10 @@
          so holding the phone in landscape shows it the "right" way up (the app also asks the
          OS to actually rotate the screen — see DeezerMedia.lockLandscape() in main.js). The
          reels turn while a track is playing (see .cassette__reel), with a ring of wound "tape"
-         shrinking toward each hub's teeth; everything else stays put, and only the hubs and
-         the brand plate follow the album palette. -->
+         shrinking toward each hub's teeth. The current album art is set as #cassette-art's
+         href in main.js's setArtwork() and sits on the label, cropped to it and muted (see
+         .cassette__art-image), as if it had been printed there; a plain panel shows through
+         until the first track loads. -->
     <div id="cassette" class="cassette" aria-hidden="true">
       <svg class="cassette__art" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
         <defs>
@@ -44,6 +46,9 @@
             <stop offset="0" stop-color="#33333f" />
             <stop offset="1" stop-color="#131319" />
           </linearGradient>
+          <clipPath id="cassette-label-clip">
+            <rect x="22" y="20" width="228" height="58" rx="6" />
+          </clipPath>
         </defs>
 
         <rect class="cassette__shell" x="8" y="8" width="304" height="184" rx="16" />
@@ -51,10 +56,17 @@
         <path class="cassette__sheen" d="M30 11 Q13 11 13 28" />
 
         <rect class="cassette__label" x="22" y="20" width="228" height="58" rx="6" />
-        <line class="cassette__labelrule" x1="34" y1="32" x2="238" y2="32" />
-        <line class="cassette__labelline cassette__labelline--1" x1="34" y1="48" x2="206" y2="48" />
-        <line class="cassette__labelline cassette__labelline--2" x1="34" y1="62" x2="150" y2="62" />
-        <line class="cassette__labelline cassette__labelline--2" x1="214" y1="62" x2="238" y2="62" />
+        <image
+          id="cassette-art"
+          class="cassette__art-image"
+          x="22"
+          y="20"
+          width="228"
+          height="58"
+          preserveAspectRatio="xMidYMid slice"
+          clip-path="url(#cassette-label-clip)"
+        />
+        <rect class="cassette__label-frame" x="22" y="20" width="228" height="58" rx="6" />
         <rect class="cassette__brand" x="260" y="20" width="38" height="58" rx="6" fill="url(#cassette-accent)" />
         <line class="cassette__brandsheen" x1="268" y1="70" x2="290" y2="28" />
 

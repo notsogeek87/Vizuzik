@@ -14,6 +14,7 @@ const els = {
   stage: document.getElementById("stage"),
   disc: document.getElementById("disc"),
   cover: document.getElementById("cover"),
+  cassetteArt: document.getElementById("cassette-art"),
   captureStatus: document.getElementById("capture-status"),
   captureSheet: document.getElementById("capture-sheet"),
   captureAccept: document.getElementById("capture-accept"),
@@ -447,6 +448,9 @@ function applyDisplayMode(announce) {
   scheduleFocusRefresh();
   if (announce) showToast(MODE_LABELS[displayMode]);
   syncOrientationLock();
+  // Leaving cassette mode with its buttons tapped away shouldn't carry that into the next
+  // mode, or the next time cassette mode itself is picked again.
+  if (displayMode !== "cassette") document.body.classList.remove("cassette-controls-hidden");
 }
 
 // Cassette mode is drawn cassette-side up (landscape); rather than only relying on the CSS
@@ -599,16 +603,16 @@ function endGesture(event, cancelled) {
   }
 
   resetSwipe();
+  const isTap =
+    !cancelled && !g.dragging && performance.now() - g.t0 < TAP_MAX_MS && Math.abs(g.dy) < TAP_SLOP_PX;
   // A tap on the artwork still cycles visualizations — the obvious gesture on a screen you
   // look at from across the room, and the toast names what you landed on.
-  if (
-    !cancelled &&
-    !g.dragging &&
-    g.onStage &&
-    performance.now() - g.t0 < TAP_MAX_MS &&
-    Math.abs(g.dy) < TAP_SLOP_PX
-  ) {
+  if (isTap && g.onStage) {
     cycleDisplayMode();
+  } else if (isTap && displayMode === "cassette") {
+    // Cassette mode has no stage to tap (the artwork fills the screen): tapping it instead
+    // toggles the transport buttons out of the way, for an unobstructed view of the cassette.
+    document.body.classList.toggle("cassette-controls-hidden");
   }
 }
 
@@ -661,6 +665,9 @@ function setArtwork(art) {
   bgBack = swap;
 
   els.cover.style.backgroundImage = art ? `url("${art}")` : "";
+  // Plain attribute, not backgroundImage: it's an <image> inside the cassette's inline SVG,
+  // set as though it had been printed on the label — see .cassette__art-image in style.css.
+  els.cassetteArt.setAttribute("href", art || "");
 
   extractPalette(art).then((palette) => {
     visualizer.setPalette(palette);
