@@ -6,6 +6,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
+        android:banner="@drawable/tv_banner"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
@@ -17,9 +18,17 @@
             android:launchMode="singleTask"
             android:exported="true">
 
+            <!-- android.intent.category.LEANBACK_LAUNCHER is what makes Android TV's own home
+                 screen list this app at all — without it a sideloaded APK simply never shows up
+                 there, even though everything else about it (this same activity, the same web
+                 UI) already runs fine on a TV. Kept on the very same activity/intent-filter as
+                 the phone launcher entry rather than a separate alias: there is only one UI to
+                 launch into, it just adapts at runtime (see body[data-platform="tv"] in
+                 style.css and detectTvPlatform() in main.js). -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
 
         </activity>
@@ -55,6 +64,17 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
     </application>
+
+    <!-- Declared android:required="false" purely so the Play Store / package installer never
+         filters this APK out on a device that has neither (Android TV boxes: no touchscreen,
+         and only some declare the leanback feature themselves). Nothing here is required at
+         runtime — the app already works without either, this only affects who can install it. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
 
     <!-- Permissions -->
 

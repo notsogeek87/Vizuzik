@@ -1,9 +1,11 @@
 package com.vizuzik.app;
 
 import android.app.Activity;
+import android.app.UiModeManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
@@ -168,6 +170,23 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             }
         });
         call.resolve();
+    }
+
+    /**
+     * Whether this device is running as an Android TV (Leanback), so the web layer can switch to
+     * a 10-foot layout and D-pad navigation instead of guessing from screen size or input
+     * capability — both of which are unreliable (a TV remote's touchpad can still report a
+     * pointer). UiModeManager is Android's own authority on this, the same check Google's own TV
+     * samples use.
+     */
+    @PluginMethod
+    public void getPlatformInfo(PluginCall call) {
+        JSObject result = new JSObject();
+        UiModeManager uiModeManager = (UiModeManager) getContext().getSystemService(Context.UI_MODE_SERVICE);
+        boolean isTv = uiModeManager != null
+            && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
+        result.put("isTv", isTv);
+        call.resolve(result);
     }
 
     @PluginMethod

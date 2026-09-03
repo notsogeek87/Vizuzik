@@ -51,6 +51,12 @@ const MODE_LABELS = {
 let isPlaying = false;
 let currentArt = null;
 let currentTrackKey = null;
+// Android TV, confirmed by the native side (UiModeManager — see getPlatformInfo() in
+// DeezerMediaPlugin.java). Drives the 10-foot CSS (body[data-platform="tv"]) and the default-
+// focus calls below; the D-pad/media-key handling further down stays on regardless, since it's
+// inert without an actual keydown to react to and so never changes anything for a touch-only
+// phone. Resolved once at startup, before the first screen is shown — see detectTvPlatform().
+let isTv = false;
 // Set only right after openMusicApp() sent the user off to pick a track themselves (see the
 // startup IIFE near the bottom of this file). Cleared the moment either a track actually starts
 // (bringToFront() is attempted then) or the user manually returns first — see the
@@ -157,6 +163,71 @@ function writeVar(name, key, value) {
   root.style.setProperty(name, String(rounded));
 }
 
+/* ------------------------------------------------------------------ platform detection */
+
+async function detectTvPlatform() {
+  try {
+    const info = await DeezerMedia.getPlatformInfo();
+    isTv = !!(info && info.isTv);
+  } catch (err) {
+    // Older native build without getPlatformInfo(), or the web dev preview: behave exactly as
+    // on a phone rather than guessing from screen size or input capability.
+    isTv = false;
+  }
+  if (isTv) document.body.dataset.platform = "tv";
+}
+
+/* ------------------------------------------------------------------ remote-control navigation */
+
+// A TV remote (and anything else keyboard-driven) has no pointer, so every gesture-only action
+// elsewhere in this file — swipe the disc to skip a track, tap the stage to cycle modes — needs
+// a key-based way in. Buttons are already focusable; what Chromium's WebView doesn't do on its
+// own is move that focus when an arrow key is pressed, so that part happens by hand here. None
+// of this reacts unless something actually sends these key events, so it changes nothing for a
+// touch-only phone with no keyboard attached.
+function focusableControls() {
+  return Array.from(document.querySelectorAll("button")).filter((el) => {
+    if (el.disabled || el.closest("[hidden]")) return false;
+    return el.getClientRects().length > 0;
+  });
+}
+
+function moveFocus(step) {
+  const list = focusableControls();
+  if (!list.length) return;
+  const index = list.indexOf(document.activeElement);
+  const next = index === -1 ? 0 : (index + step + list.length) % list.length;
+  list[next].focus();
+}
+
+const FOCUS_STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+
+document.addEventListener("keydown", (event) => {
+  switch (event.key) {
+    case "MediaPlayPause":
+      event.preventDefault();
+      els.playPause.click();
+      return;
+    case "MediaTrackNext":
+      event.preventDefault();
+      DeezerMedia.next().catch(() => {});
+      return;
+    case "MediaTrackPrevious":
+      event.preventDefault();
+      DeezerMedia.previous().catch(() => {});
+      return;
+  }
+  if (event.key in FOCUS_STEP) {
+    event.preventDefault();
+    moveFocus(FOCUS_STEP[event.key]);
+  }
+});
+
+/** A remote needs something focused to start navigating from — a mouse/touch user never does. */
+function focusForRemote(el) {
+  if (isTv && el) el.focus();
+}
+
 /* ------------------------------------------------------------------ music app selection */
 
 // Vizuzik can follow either Deezer or Spotify. Resolved once at startup: whichever of the two
@@ -186,6 +257,7 @@ function rememberMusicApp(app) {
 function askMusicApp() {
   return new Promise((resolve) => {
     els.appSelect.hidden = false;
+    focusForRemote(els.selectDeezer);
     const pick = (app) => {
       els.selectDeezer.removeEventListener("click", onDeezer);
       els.selectSpotify.removeEventListener("click", onSpotify);
@@ -370,7 +442,10 @@ function openCaptureSheet() {
   clearTimeout(sheetCloseTimer);
   els.captureSheet.hidden = false;
   // One frame between "in the DOM" and "animating in", or the transition never plays.
-  requestAnimationFrame(() => els.captureSheet.classList.add("is-open"));
+  requestAnimationFrame(() => {
+    els.captureSheet.classList.add("is-open");
+    focusForRemote(els.captureAccept);
+  });
 }
 
 function closeCaptureSheet() {
@@ -631,6 +706,7 @@ function showScreen(screen) {
   if (screen === "player") {
     visualizer.start();
     scheduleFocusRefresh();
+    focusForRemote(els.playPause);
     // A track that starts after a gap is the natural moment to have the consent behind us.
     maybeAutoRequestCapture();
   } else {
@@ -644,6 +720,7 @@ function showScreen(screen) {
     writeVar("--beat", "beat", 0);
     writeVar("--level", "level", 0);
     writeVar("--bass", "bass", 0);
+    if (screen === "permission") focusForRemote(els.grantAccess);
   }
 }
 
@@ -831,6 +908,9 @@ window.addEventListener("resize", scheduleFocusRefresh);
 
 applyDisplayMode(false);
 (async () => {
+  // Settled before anything renders: showScreen()/askMusicApp() below use isTv to decide
+  // whether to plant the initial D-pad focus.
+  await detectTvPlatform();
   // Which app to follow has to be settled first: the native now-playing listener needs it
   // before refresh() can report anything meaningful, and it decides which app (if any) gets
   // auto-launched below.
