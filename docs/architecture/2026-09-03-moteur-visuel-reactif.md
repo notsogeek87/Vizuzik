@@ -19,8 +19,9 @@ objet**, tout en restant tenable sur une WebView Android de milieu de gamme.
 
 `#fx` est en `position: fixed; inset: 0` avec un `z-index` sous le contenu. Les scènes ne sont
 plus confinées à un carré : le spectre occupe toute la largeur, l'aurore traverse l'écran, la
-nébuleuse tourne autour de la pochette. Un `.scrim` en dégradé et une plaque d'ombre derrière
-le bloc titre/artiste garantissent la lisibilité du texte par-dessus.
+nébuleuse tourne autour de la pochette. Un `.scrim` en dégradé, plus une ombre portée sur le
+titre et l'artiste eux-mêmes, garantissent la lisibilité du texte par-dessus — l'ombre suit les
+lettres, là où une plaque derrière le bloc dessinait un rectangle visible.
 
 ### 2. Une seule boucle d'animation pour le canvas **et** le DOM
 

@@ -488,20 +488,10 @@ body:not([data-mode="cover"]) .disc__label {
   min-width: 0;
 }
 
-/* Painted behind the type only when the canvas is busy: a soft pool of shadow that keeps the
-   title readable over a bright ribbon or a spectrum peak, without a hard-edged plate.
-   It has to be a real element rather than a text-shadow, because the title's gradient is a
-   clipped background and would paint straight over any shadow. */
-body:not([data-mode="cover"]) .meta::before {
-  content: "";
-  position: absolute;
-  /* Extends well past the text block on purpose: it also has to sit behind the progress bar
-     and its timestamps, which live in the next flex row. */
-  inset: -18px -26px -74px;
-  z-index: -1;
-  background: radial-gradient(ellipse at center, rgba(5, 5, 11, 0.8), rgba(5, 5, 11, 0.45) 55%, rgba(5, 5, 11, 0) 78%);
-}
-
+/* Legibility over a bright ribbon comes from the type itself rather than a plate behind it: a
+   pool of shadow could not fade out inside its own box (a farthest-corner ellipse is still
+   painting where the box ends) and so drew a visible rectangle around the title. A shadow that
+   follows the glyphs has nothing to show when the canvas behind is already dark. */
 .title,
 .artist {
   margin: 0;
@@ -512,10 +502,20 @@ body:not([data-mode="cover"]) .meta::before {
   mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
 }
 
+/* The artist line is ordinary text, so an ordinary shadow does the job. */
+.artist {
+  text-shadow: 0 1px 3px rgba(5, 5, 11, 0.7), 0 2px 18px rgba(5, 5, 11, 0.85);
+}
+
 .title {
   font-size: clamp(1.35rem, 6vw, 1.9rem);
   font-weight: 800;
   letter-spacing: -0.02em;
+  /* The title needs drop-shadow() rather than text-shadow: its colour comes from a background
+     clipped to the text, and Chromium then composites a text-shadow *over* that gradient,
+     which greys the letters out instead of haloing them. drop-shadow works from the element as
+     it ends up rendered, gradient included. */
+  filter: drop-shadow(0 1px 3px rgba(5, 5, 11, 0.75)) drop-shadow(0 2px 14px rgba(5, 5, 11, 0.85));
 }
 
 /* A slow shimmer travels through the title in the artwork's colours — the detail that makes
@@ -680,6 +680,8 @@ body.is-changing .artist {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   color: var(--ink-dim);
+  /* Same reason as the title: these used to sit on the shadow pool that has been removed. */
+  text-shadow: 0 1px 10px rgba(5, 5, 11, 0.8);
 }
 
 /* ============================================================ controls */
