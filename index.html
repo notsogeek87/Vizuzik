@@ -220,10 +220,15 @@
     <section id="permission" class="message" hidden>
       <p>Vizuzik a besoin de l'accès aux notifications pour afficher et contrôler la lecture.</p>
       <button id="grant-access" type="button" class="grant-button">Autoriser l'accès</button>
-      <!-- Filled in and unhidden only when the system couldn't open the notification-access
-           screen directly (see requestPermission() in DeezerMediaPlugin.java) — a persistent
-           message here instead of a toast alone, since this screen is exactly where someone
-           stuck on that device is going to be looking. -->
+      <!-- The app already re-checks on its own whenever it comes back to the foreground
+           (see the visibilitychange listener in main.js); this is for when that hasn't
+           happened yet, or to confirm — with an actual answer instead of silence — that a
+           grant made through a fallback Settings screen (see the hint below) really landed. -->
+      <button id="recheck-access" type="button" class="text-button">Vérifier à nouveau</button>
+      <!-- Filled in and unhidden either when the system couldn't open the notification-access
+           screen directly (see requestPermission() in DeezerMediaPlugin.java), or after a
+           manual recheck still comes back empty — a persistent message here instead of a toast
+           alone, since this screen is exactly where someone stuck on that device is looking. -->
       <p id="permission-hint" class="hint" hidden></p>
     </section>
 

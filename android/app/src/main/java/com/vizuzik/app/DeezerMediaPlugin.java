@@ -3,6 +3,7 @@ package com.vizuzik.app;
 import android.app.Activity;
 import android.app.UiModeManager;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -14,6 +15,7 @@ import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.os.Build;
 import android.provider.Settings;
+import android.service.notification.NotificationListenerService;
 import android.util.Base64;
 
 import androidx.activity.result.ActivityResult;
@@ -58,6 +60,23 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         JSObject result = new JSObject();
         result.put("granted", isNotificationAccessGranted());
         call.resolve(result);
+    }
+
+    /**
+     * Asks the system to rebind NowPlayingListenerService right now. Granting notification
+     * access is supposed to do this on its own, but on at least one device — one whose Settings
+     * app has no screen for ACTION_NOTIFICATION_LISTENER_SETTINGS at all, granted through
+     * whatever alternate path its Settings app actually offers (see the requestPermission()
+     * fallback above) — the service was left never bound, so nothing it tracks ever reached
+     * DeezerMediaBridge even though access showed as granted. The web layer calls this once,
+     * right after checkPermission() first reports granted this session (see refresh() in
+     * main.js), rather than leaving a correctly-granted user stuck with no way back short of a
+     * reboot.
+     */
+    @PluginMethod
+    public void requestListenerRebind(PluginCall call) {
+        NotificationListenerService.requestRebind(new ComponentName(getContext(), NowPlayingListenerService.class));
+        call.resolve();
     }
 
     @PluginMethod

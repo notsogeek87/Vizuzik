@@ -33,6 +33,7 @@ const els = {
   empty: document.getElementById("empty"),
   permission: document.getElementById("permission"),
   grantAccess: document.getElementById("grant-access"),
+  recheckAccess: document.getElementById("recheck-access"),
   permissionHint: document.getElementById("permission-hint"),
   appSelect: document.getElementById("app-select"),
   selectDeezer: document.getElementById("select-deezer"),
@@ -853,11 +854,23 @@ setInterval(() => {
   syncPosition().catch(() => {});
 }, POSITION_RESYNC_MS);
 
+// Whether notification access was already seen granted, so the first time it flips from false
+// to true this session can be told apart from "still granted, as it already was". Some devices
+// grant that access through a path (see the fallback in requestPermission()) that doesn't
+// actually rebind NowPlayingListenerService the way the standard settings toggle does, leaving
+// it connected to nothing until something nudges it — see requestListenerRebind() below.
+let notificationAccessKnownGranted = false;
+
 async function refresh() {
   const { granted } = await DeezerMedia.checkPermission();
   if (!granted) {
+    notificationAccessKnownGranted = false;
     showScreen("permission");
     return;
+  }
+  if (!notificationAccessKnownGranted) {
+    notificationAccessKnownGranted = true;
+    DeezerMedia.requestListenerRebind().catch(() => {});
   }
   const state = await DeezerMedia.getNowPlaying();
   setNowPlaying(state);
@@ -893,6 +906,19 @@ els.grantAccess.addEventListener("click", () => {
     .catch(() => {
       setPermissionHint("Cet appareil ne propose pas ce réglage : Vizuzik ne peut pas l'autoriser ici.");
     });
+});
+
+els.recheckAccess.addEventListener("click", async () => {
+  const { granted } = await DeezerMedia.checkPermission();
+  if (granted) {
+    setPermissionHint("");
+    refresh().catch(() => {});
+  } else {
+    setPermissionHint(
+      "Toujours pas détecté. Vérifiez que « Vizuzik » est bien coché dans la liste des accès " +
+        "aux notifications, puis réessayez."
+    );
+  }
 });
 
 els.playPause.addEventListener("click", () => {

@@ -1131,6 +1131,26 @@ body[data-mode="cassette"] .progress {
   transform: scale(0.95);
 }
 
+/* Secondary, low-emphasis action next to .grant-button — "check again" is a fallback for when
+   the primary button's system screen doesn't exist or doesn't reflect a grant made elsewhere
+   (see requestListenerRebind() in main.js), so it reads as an aside, not a second main choice. */
+.text-button {
+  margin-top: 0.3rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: rgba(247, 248, 252, 0.55);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-button:active {
+  color: var(--ink);
+}
+
 /* ============================================================ capture sheet */
 
 /* The one screen shown before Android's MediaProjection dialog. It exists so that dialog —
@@ -1293,6 +1313,7 @@ body[data-mode="cassette"] .progress {
 .mode-toggle:focus-visible,
 .capture-status:focus-visible,
 .grant-button:focus-visible,
+.text-button:focus-visible,
 .sheet__ghost:focus-visible {
   outline: 3px solid rgba(var(--c1), 0.9);
   outline-offset: 4px;
