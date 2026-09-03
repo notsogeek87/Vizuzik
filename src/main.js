@@ -1,16 +1,21 @@
 import { registerPlugin } from "@capacitor/core";
-import { Visualizer } from "./visualizer.js";
+import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
+import { extractPalette } from "./palette.js";
 
 const DeezerMedia = registerPlugin("DeezerMedia");
 
 const els = {
   background: document.getElementById("background"),
+  backgroundNext: document.getElementById("background-next"),
+  fx: document.getElementById("fx"),
+  topbar: document.getElementById("topbar"),
   player: document.getElementById("player"),
-  coverWrap: document.getElementById("cover-wrap"),
+  stage: document.getElementById("stage"),
+  disc: document.getElementById("disc"),
   cover: document.getElementById("cover"),
-  visualizerCanvas: document.getElementById("visualizer"),
   captureStatus: document.getElementById("capture-status"),
   modeToggle: document.getElementById("mode-toggle"),
+  modeToast: document.getElementById("mode-toast"),
   title: document.getElementById("title"),
   artist: document.getElementById("artist"),
   playPause: document.getElementById("play-pause"),
@@ -21,13 +26,49 @@ const els = {
   grantAccess: document.getElementById("grant-access"),
 };
 
-let isPlaying = false;
+const root = document.documentElement;
+const MODE_LABELS = {
+  cover: "Pochette",
+  bars: "Spectre",
+  radial: "Corona",
+  aurora: "Aurore",
+  nebula: "Nébuleuse",
+};
 
-const DISPLAY_MODES = ["cover", "bars", "radial"];
+let isPlaying = false;
+let currentArt = null;
+let currentTrackKey = null;
+
 const DISPLAY_MODE_KEY = "vizuzik:displayMode";
 const storedMode = localStorage.getItem(DISPLAY_MODE_KEY);
-let displayMode = DISPLAY_MODES.includes(storedMode) ? storedMode : "cover";
-const visualizer = new Visualizer(els.visualizerCanvas);
+let displayMode = VISUAL_STYLES.includes(storedMode) ? storedMode : "cover";
+
+const visualizer = new Visualizer(els.fx);
+visualizer.setFocusElement(els.disc);
+
+/* ------------------------------------------------------------------ reactive CSS vars */
+
+// The visualizer owns the only animation frame loop in the app; the DOM's beat-reactive
+// styling rides along on it through three custom properties. Values are written only when
+// they actually move, so a quiet passage costs no style invalidation at all.
+const cssState = { beat: -1, level: -1, bass: -1 };
+
+visualizer.onFrame = ({ beat, level, bass }) => {
+  writeVar("--beat", "beat", beat);
+  writeVar("--level", "level", level);
+  writeVar("--bass", "bass", bass);
+};
+
+// Quantised to 50 steps: finer than the eye can follow on a glow, and it keeps a quiet
+// passage from invalidating styles on every single frame.
+function writeVar(name, key, value) {
+  const rounded = Math.round(value * 50) / 50;
+  if (rounded === cssState[key]) return;
+  cssState[key] = rounded;
+  root.style.setProperty(name, String(rounded));
+}
+
+/* ------------------------------------------------------------------ audio capture */
 
 // Whether AudioCaptureService has been asked to capture Deezer's audio. Only real on Android
 // 10+ and after the user grants the system's capture consent; otherwise the visualizer simply
@@ -48,7 +89,6 @@ function clearCaptureWatchdog() {
 }
 
 function stopCapture() {
-  visualizer.stop();
   clearCaptureWatchdog();
   if (captureActive) {
     captureActive = false;
@@ -57,8 +97,8 @@ function stopCapture() {
 }
 
 // Requesting real audio capture is a separate, explicit action from picking a visual style
-// (triggered by tapping the capture-status badge itself) — switching between cover/bars/radial
-// never pops the system permission dialog as a surprise.
+// (triggered by tapping the capture-status badge itself) — switching visualizations never
+// pops the system permission dialog as a surprise.
 function requestCapture() {
   if (captureActive) return;
   captureActive = true;
@@ -80,35 +120,16 @@ function requestCapture() {
   });
 }
 
-function applyDisplayMode() {
-  els.coverWrap.dataset.mode = displayMode;
-  if (displayMode !== "cover" && !els.player.hidden) {
-    visualizer.setStyle(displayMode);
-    visualizer.start();
-  } else {
-    stopCapture();
-  }
-}
-
-els.modeToggle.addEventListener("click", () => {
-  const nextIndex = (DISPLAY_MODES.indexOf(displayMode) + 1) % DISPLAY_MODES.length;
-  displayMode = DISPLAY_MODES[nextIndex];
-  localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
-  applyDisplayMode();
-});
-
-els.captureStatus.addEventListener("click", requestCapture);
-
 const CAPTURE_STATUS_LABELS = {
-  live: "● Direct",
-  silent: "● Direct (silencieux)",
+  live: "● Son réel",
+  silent: "● Son réel (silencieux)",
 };
 
 // Answers "is this really reacting to Deezer's audio?" on-screen instead of leaving it a
 // mystery, and doubles as the button to opt in: tapping it while simulated is what triggers
 // the system permission request (see requestCapture()).
 function updateCaptureStatusBadge() {
-  if (displayMode === "cover" || els.player.hidden) {
+  if (els.player.hidden) {
     els.captureStatus.hidden = true;
     return;
   }
@@ -132,34 +153,148 @@ function updateCaptureStatusBadge() {
 }
 setInterval(updateCaptureStatusBadge, 500);
 
+/* ------------------------------------------------------------------ display modes */
+
+let toastTimer = null;
+
+function applyDisplayMode(announce) {
+  document.body.dataset.mode = displayMode;
+  visualizer.setStyle(displayMode);
+  // The disc changes size and shape over a 0.7s transition; the canvas needs the new centre
+  // as it moves, or the corona would sit where the artwork used to be.
+  scheduleFocusRefresh();
+  if (announce) showModeToast(MODE_LABELS[displayMode]);
+}
+
+function showModeToast(label) {
+  els.modeToast.textContent = label;
+  els.modeToast.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => els.modeToast.classList.remove("is-visible"), 1400);
+}
+
+function cycleDisplayMode() {
+  const nextIndex = (VISUAL_STYLES.indexOf(displayMode) + 1) % VISUAL_STYLES.length;
+  displayMode = VISUAL_STYLES[nextIndex];
+  localStorage.setItem(DISPLAY_MODE_KEY, displayMode);
+  applyDisplayMode(true);
+}
+
+function scheduleFocusRefresh() {
+  for (const delay of [0, 120, 320, 560, 760]) {
+    setTimeout(() => visualizer.updateFocus(), delay);
+  }
+}
+
+els.modeToggle.addEventListener("click", cycleDisplayMode);
+// Tapping the artwork itself cycles visualizations too: the obvious gesture on a screen you
+// look at from a distance, and the toast names what you just landed on.
+els.stage.addEventListener("click", cycleDisplayMode);
+els.captureStatus.addEventListener("click", requestCapture);
+
+/* ------------------------------------------------------------------ now playing */
+
 function showScreen(screen) {
   els.player.hidden = screen !== "player";
+  els.topbar.hidden = screen !== "player";
   els.empty.hidden = screen !== "empty";
   els.permission.hidden = screen !== "permission";
+
+  if (screen === "player") {
+    visualizer.start();
+    scheduleFocusRefresh();
+  } else {
+    visualizer.stop();
+    visualizer.clear();
+    stopCapture();
+    // Leave the ambient layer at rest rather than frozen mid-pulse.
+    writeVar("--beat", "beat", 0);
+    writeVar("--level", "level", 0);
+    writeVar("--bass", "bass", 0);
+  }
+}
+
+/**
+ * Cross-fades the blurred backdrop between two stacked layers, so a track change dissolves
+ * instead of blinking, and recolours the whole UI from the new artwork.
+ */
+let bgFront = els.background;
+let bgBack = els.backgroundNext;
+
+function setArtwork(art) {
+  if (art === currentArt) return;
+  currentArt = art;
+
+  bgBack.style.backgroundImage = art ? `url("${art}")` : "";
+  bgBack.style.opacity = "1";
+  bgFront.style.opacity = "0";
+  const swap = bgFront;
+  bgFront = bgBack;
+  bgBack = swap;
+
+  els.cover.style.backgroundImage = art ? `url("${art}")` : "";
+
+  extractPalette(art).then((palette) => {
+    visualizer.setPalette(palette);
+    palette.colors.forEach((rgb, i) => {
+      root.style.setProperty(`--c${i + 1}`, rgb.join(", "));
+    });
+  });
+}
+
+/** Restarts the entrance animations; the reflow is what makes a re-added class replay. */
+function playTrackChangeAnimation() {
+  document.body.classList.remove("is-changing");
+  void document.body.offsetWidth;
+  document.body.classList.add("is-changing");
+  setTimeout(() => document.body.classList.remove("is-changing"), 900);
+}
+
+/**
+ * Scrolls a title that doesn't fit rather than truncating it — on a display you glance at
+ * from across the room, seeing the whole name matters more than a tidy ellipsis.
+ */
+function setScrollingText(span, text) {
+  span.classList.remove("is-scrolling");
+  span.textContent = text;
+  requestAnimationFrame(() => {
+    const container = span.parentElement;
+    if (!container) return;
+    const overflow = span.scrollWidth - container.clientWidth;
+    if (overflow <= 4) return;
+    const distance = overflow + 16;
+    span.style.setProperty("--marquee-distance", `${distance}px`);
+    span.style.setProperty("--marquee-duration", `${Math.max(9, distance / 26 + 7)}s`);
+    span.classList.add("is-scrolling");
+  });
 }
 
 function setNowPlaying(state) {
   if (!state || !state.active) {
     showScreen("empty");
-    els.background.style.backgroundImage = "";
-    stopCapture();
+    currentTrackKey = null;
     return;
   }
 
   showScreen("player");
-  els.title.textContent = state.title || "Titre inconnu";
-  els.artist.textContent = state.artist || "";
+
+  const title = state.title || "Titre inconnu";
+  const artist = state.artist || "";
+  const trackKey = `${title}::${artist}`;
+  if (trackKey !== currentTrackKey) {
+    currentTrackKey = trackKey;
+    setScrollingText(els.title, title);
+    setScrollingText(els.artist, artist);
+    playTrackChangeAnimation();
+  }
 
   isPlaying = !!state.isPlaying;
   els.playPause.dataset.state = isPlaying ? "playing" : "paused";
+  document.body.dataset.state = isPlaying ? "playing" : "paused";
   visualizer.setPlaying(isPlaying);
 
-  const art = state.albumArt || "";
-  els.cover.style.backgroundImage = art ? `url(${art})` : "";
-  els.background.style.backgroundImage = art ? `url(${art})` : "";
-  if (art) visualizer.setColorFromImage(art);
-
-  applyDisplayMode();
+  setArtwork(state.albumArt || "");
+  applyDisplayMode(false);
 }
 
 async function refresh() {
@@ -171,6 +306,8 @@ async function refresh() {
   const state = await DeezerMedia.getNowPlaying();
   setNowPlaying(state);
 }
+
+/* ------------------------------------------------------------------ wiring */
 
 els.grantAccess.addEventListener("click", () => {
   DeezerMedia.requestPermission();
@@ -203,7 +340,14 @@ DeezerMedia.addListener("audioCaptureStopped", () => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
     refresh();
+  } else {
+    // Nothing to animate against a hidden screen; rAF would be throttled anyway, but this
+    // also drops the offscreen buffers' work entirely.
+    visualizer.stop();
   }
 });
 
+window.addEventListener("resize", scheduleFocusRefresh);
+
+applyDisplayMode(false);
 refresh();

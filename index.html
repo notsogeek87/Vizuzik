@@ -3,48 +3,82 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#05050b" />
     <title>Vizuzik</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
-  <body>
-    <div id="background" class="background"></div>
+  <body data-mode="cover" data-state="paused">
+    <!-- Ambient layer: the blurred artwork, three drifting colour blobs pulled from that
+         artwork, and a vignette. It breathes with the beat via the --beat custom property. -->
+    <div class="ambient" aria-hidden="true">
+      <div id="background" class="ambient__art"></div>
+      <div id="background-next" class="ambient__art ambient__art--next"></div>
+      <div class="ambient__blobs">
+        <span class="blob blob--1"></span>
+        <span class="blob blob--2"></span>
+        <span class="blob blob--3"></span>
+      </div>
+      <div class="ambient__vignette"></div>
+    </div>
+
+    <!-- The visualizer canvas sits behind the whole UI, full-bleed. -->
+    <canvas id="fx" class="fx" aria-hidden="true"></canvas>
+    <div class="scrim" aria-hidden="true"></div>
+
+    <header id="topbar" class="topbar" hidden>
+      <button id="capture-status" type="button" class="capture-status" hidden></button>
+      <button id="mode-toggle" type="button" class="mode-toggle" aria-label="Changer la visualisation">
+        <svg class="icon icon-cover" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zm2 2v10h12V7zm2 8 3-4 2 2.5L15 9l3 6z" /></svg>
+        <svg class="icon icon-bars" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10h2v9H5zm4-5h2v14H9zm4 3h2v11h-2zm4-6h2v17h-2z" /></svg>
+        <svg class="icon icon-radial" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.1 6.5L21 11l-6.9 2.5L12 20l-2.1-6.5L3 11l6.9-2.5L12 2z" /></svg>
+        <svg class="icon icon-aurora" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8c3-3 5 3 8 0s5-3 8 0l2 2c-3-3-5 3-8 0s-5-3-8 0zm0 7c3-3 5 3 8 0s5-3 8 0l2 2c-3-3-5 3-8 0s-5-3-8 0z" /></svg>
+        <svg class="icon icon-nebula" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0-6c1 0 1.6 1.4 1.9 3.5C15.8 4.3 17.2 3.7 18 4.4c.8.8.2 2.2-1.1 4.1 2.1.3 3.5.9 3.5 1.9s-1.4 1.6-3.5 1.9c1.3 1.9 1.9 3.3 1.1 4.1-.8.7-2.2.1-4.1-1.2C13.6 17.4 13 18.8 12 18.8s-1.6-1.4-1.9-3.6c-1.9 1.3-3.3 1.9-4.1 1.2-.8-.8-.2-2.2 1.1-4.1C5 12 3.6 11.4 3.6 10.4S5 8.8 7.1 8.5C5.8 6.6 5.2 5.2 6 4.4c.8-.7 2.2-.1 4.1 1.1C10.4 3.4 11 2 12 2z" /></svg>
+      </button>
+    </header>
 
     <main id="player" class="player" hidden>
-      <div id="cover-wrap" class="cover-wrap" data-mode="cover">
-        <div id="cover" class="cover"></div>
-        <canvas id="visualizer" class="visualizer"></canvas>
-        <button id="capture-status" type="button" class="capture-status" hidden></button>
-        <button id="mode-toggle" class="mode-toggle" aria-label="Changer l'affichage (pochette / barres / radial)">
-          <svg class="icon-cover" viewBox="0 0 24 24"><path d="M4 5h16v14H4zm2 2v10h12V7zm2 8 3-4 2 2.5L15 9l3 6z" /></svg>
-          <svg class="icon-bars" viewBox="0 0 24 24"><path d="M5 10h2v9H5zm4-5h2v14H9zm4 3h2v11h-2zm4-6h2v17h-2z" /></svg>
-          <svg class="icon-radial" viewBox="0 0 24 24"><path d="M12 2l2.1 6.5L21 11l-6.9 2.5L12 20l-2.1-6.5L3 11l6.9-2.5L12 2z" /></svg>
-        </button>
+      <div id="stage" class="stage">
+        <div id="disc" class="disc">
+          <div class="disc__spin">
+            <div id="cover" class="cover"></div>
+            <div class="disc__grooves"></div>
+          </div>
+          <div class="disc__sheen"></div>
+          <div class="disc__label"></div>
+        </div>
       </div>
-      <h1 id="title" class="title"></h1>
-      <p id="artist" class="artist"></p>
+
+      <div class="meta">
+        <h1 class="title"><span id="title" class="marquee__text"></span></h1>
+        <p class="artist"><span id="artist" class="marquee__text"></span></p>
+      </div>
 
       <div class="controls">
-        <button id="previous" class="control control--secondary" aria-label="Précédent">
-          <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
+        <button id="previous" type="button" class="control control--secondary" aria-label="Précédent">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
         </button>
-        <button id="play-pause" class="control control--primary" data-state="paused" aria-label="Lecture / Pause">
-          <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-          <svg class="icon-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
+        <button id="play-pause" type="button" class="control control--primary" data-state="paused" aria-label="Lecture / Pause">
+          <span class="control__pulse" aria-hidden="true"></span>
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
         </button>
-        <button id="next" class="control control--secondary" aria-label="Suivant">
-          <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z" /></svg>
+        <button id="next" type="button" class="control control--secondary" aria-label="Suivant">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z" /></svg>
         </button>
       </div>
     </main>
 
-    <section id="empty" class="empty" hidden>
+    <div id="mode-toast" class="mode-toast" role="status" aria-live="polite"></div>
+
+    <section id="empty" class="message" hidden>
+      <div class="message__pulse" aria-hidden="true"></div>
       <p>Aucune lecture Deezer en cours.</p>
       <p class="hint">Lance un titre dans l'app Deezer.</p>
     </section>
 
-    <section id="permission" class="permission" hidden>
+    <section id="permission" class="message" hidden>
       <p>Vizuzik a besoin de l'accès aux notifications pour afficher et contrôler la lecture Deezer.</p>
-      <button id="grant-access" class="grant-button">Autoriser l'accès</button>
+      <button id="grant-access" type="button" class="grant-button">Autoriser l'accès</button>
     </section>
 
     <script type="module" src="/src/main.js"></script>

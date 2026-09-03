@@ -1,3 +1,33 @@
+/* ============================================================================
+   Vizuzik — full-screen now-playing display.
+
+   Everything reactive is driven by three custom properties written once per
+   animation frame from main.js (see the visualizer's onFrame callback):
+     --beat   0..1  impulse that spikes on each detected kick and decays
+     --level  0..1  smoothed overall loudness
+     --bass   0..1  smoothed low-end energy
+   and by a palette extracted from the album art:
+     --c1 --c2 --c3  "r, g, b" triplets, usable as rgb(var(--c1) / .5)
+
+   Keeping the reactive surface to a handful of properties means the beat drives
+   the layout through compositor-friendly transforms and opacities only — no
+   per-frame layout, no per-frame style recalculation of the whole tree.
+   ============================================================================ */
+
+:root {
+  --c1: 124, 92, 255;
+  --c2: 236, 72, 153;
+  --c3: 56, 189, 248;
+  --beat: 0;
+  --level: 0;
+  --bass: 0;
+  --ink: #f7f8fc;
+  --ink-dim: rgba(247, 248, 252, 0.62);
+  --void: #05050b;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -6,208 +36,565 @@
   display: none !important;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #0b0b0f;
-  color: #f9fafb;
+  background: var(--void);
+  color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-.background {
+/* ============================================================ ambient layer */
+
+.ambient {
   position: fixed;
-  inset: -10%;
-  background-position: center;
-  background-size: cover;
-  filter: blur(40px) brightness(0.45);
-  transform: scale(1.1);
-  transition: background-image 0.4s ease;
-}
-
-.player {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.5rem;
-  padding: env(safe-area-inset-top, 24px) 24px env(safe-area-inset-bottom, 24px);
-  text-align: center;
-}
-
-.cover-wrap {
-  position: relative;
-  width: min(70vw, 340px);
-  aspect-ratio: 1 / 1;
-  border-radius: 20px;
+  inset: 0;
+  z-index: 0;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  background: var(--void);
 }
 
-.cover {
-  width: 100%;
-  height: 100%;
-  background-color: #1f2937;
+/* Two stacked artwork layers cross-fade on track change, so the background melts
+   from one cover to the next instead of blinking. */
+.ambient__art {
+  position: absolute;
+  inset: -12%;
   background-position: center;
   background-size: cover;
-  background-repeat: no-repeat;
+  filter: blur(56px) saturate(1.5) brightness(0.5);
+  transform: scale(calc(1.12 + var(--level) * 0.05 + var(--beat) * 0.02));
+  transition: transform 0.12s linear, opacity 0.9s ease;
+  will-change: transform;
 }
 
-.visualizer {
+.ambient__art--next {
+  opacity: 0;
+}
+
+/* No blur filter here on purpose: the blobs are already soft radial gradients, so a
+   full-screen blur over three constantly-moving layers would cost a large slice of the frame
+   budget and change almost nothing on screen. */
+.ambient__blobs {
+  position: absolute;
+  inset: -20%;
+  opacity: calc(0.5 + var(--level) * 0.45);
+  transition: opacity 0.2s linear;
+}
+
+/* Three slow-drifting colour clouds in the artwork's own accents. Together with the
+   blurred cover they give the screen depth that a flat gradient never has. */
+.blob {
+  position: absolute;
+  width: 62vmax;
+  height: 62vmax;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.blob--1 {
+  background: radial-gradient(circle, rgba(var(--c1), 0.55), rgba(var(--c1), 0) 68%);
+  top: -18%;
+  left: -16%;
+  animation: drift-a 26s ease-in-out infinite;
+}
+
+.blob--2 {
+  background: radial-gradient(circle, rgba(var(--c2), 0.45), rgba(var(--c2), 0) 68%);
+  bottom: -22%;
+  right: -18%;
+  animation: drift-b 32s ease-in-out infinite;
+}
+
+.blob--3 {
+  background: radial-gradient(circle, rgba(var(--c3), 0.4), rgba(var(--c3), 0) 68%);
+  top: 22%;
+  right: -26%;
+  animation: drift-c 38s ease-in-out infinite;
+}
+
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(14vw, 10vh, 0) scale(1.18); }
+  66% { transform: translate3d(-8vw, 16vh, 0) scale(0.92); }
+}
+
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
+  40% { transform: translate3d(-16vw, -12vh, 0) scale(0.88); }
+  75% { transform: translate3d(6vw, -18vh, 0) scale(1.2); }
+}
+
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(0.95); }
+  50% { transform: translate3d(-20vw, 12vh, 0) scale(1.25); }
+}
+
+.ambient__vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 32%, rgba(5, 5, 11, 0.72) 100%),
+    linear-gradient(to bottom, rgba(5, 5, 11, 0.55), transparent 28%, transparent 62%, rgba(5, 5, 11, 0.78));
+}
+
+/* ============================================================ visualizer canvas */
+
+.fx {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
+  opacity: 0.42;
+  transition: opacity 0.6s var(--ease-out);
+  pointer-events: none;
 }
 
-.cover-wrap[data-mode="cover"] .visualizer {
-  display: none;
+/* In cover mode the canvas is only a halo around the artwork; in every other mode it
+   becomes the main event and comes forward. */
+body:not([data-mode="cover"]) .fx {
+  opacity: 1;
 }
 
-.cover-wrap:not([data-mode="cover"]) .cover {
-  display: none;
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(5, 5, 11, 0.88) 0%, rgba(5, 5, 11, 0.45) 24%, rgba(5, 5, 11, 0.12) 42%, transparent 58%);
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out);
+}
+
+/* Only needed once the canvas is busy behind the text and controls. */
+body:not([data-mode="cover"]) .scrim {
+  opacity: 1;
+}
+
+/* ============================================================ top bar */
+
+.topbar {
+  position: fixed;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 0;
 }
 
 .capture-status {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: 3px 8px;
-  border: none;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(10, 10, 20, 0.4);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   font-family: inherit;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  color: rgba(249, 250, 251, 0.6);
+  letter-spacing: 0.01em;
+  color: rgba(247, 248, 252, 0.55);
   cursor: default;
+  max-width: 62vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .capture-status[data-status="live"] {
-  color: #4ade80;
+  color: #6ee7a8;
+  border-color: rgba(110, 231, 168, 0.35);
+  box-shadow: 0 0 calc(8px + var(--beat) * 20px) rgba(110, 231, 168, 0.35);
 }
 
 .capture-status[data-status="silent"] {
   color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
 }
 
 /* Only actionable while simulated and idle: tapping it is how you opt in to real audio
    capture, instead of the system permission dialog popping up as a surprise on mode switch. */
 .capture-status[data-status="simulated"]:not(:disabled) {
-  background: rgba(59, 130, 246, 0.9);
+  background: linear-gradient(135deg, rgba(var(--c1), 0.9), rgba(var(--c2), 0.9));
+  border-color: transparent;
   color: #fff;
   cursor: pointer;
 }
 
 .capture-status[data-status="simulated"]:not(:disabled):active {
-  background: rgba(37, 99, 235, 0.95);
+  transform: scale(0.96);
 }
 
 .mode-toggle {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 36px;
-  height: 36px;
-  border: none;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
-  color: #f9fafb;
+  background: rgba(10, 10, 20, 0.4);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.1s ease, background 0.15s ease;
+  transition: transform 0.18s var(--ease-spring), background 0.2s ease;
 }
 
 .mode-toggle:active {
-  transform: scale(0.9);
-  background: rgba(0, 0, 0, 0.6);
+  transform: scale(0.88) rotate(-12deg);
 }
 
-.mode-toggle svg {
-  width: 18px;
-  height: 18px;
+.mode-toggle .icon {
+  width: 20px;
+  height: 20px;
   fill: currentColor;
-}
-
-.mode-toggle .icon-cover,
-.mode-toggle .icon-bars,
-.mode-toggle .icon-radial {
   display: none;
 }
 
-/* The icon always previews the mode a tap switches TO (cover -> bars -> radial -> cover). */
-.cover-wrap[data-mode="cover"] .mode-toggle .icon-bars {
+/* The icon shows the mode currently on screen. */
+body[data-mode="cover"] .mode-toggle .icon-cover,
+body[data-mode="bars"] .mode-toggle .icon-bars,
+body[data-mode="radial"] .mode-toggle .icon-radial,
+body[data-mode="aurora"] .mode-toggle .icon-aurora,
+body[data-mode="nebula"] .mode-toggle .icon-nebula {
   display: block;
+  animation: icon-pop 0.45s var(--ease-spring);
 }
 
-.cover-wrap[data-mode="bars"] .mode-toggle .icon-radial {
-  display: block;
+@keyframes icon-pop {
+  from { transform: scale(0.4) rotate(-90deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
 }
 
-.cover-wrap[data-mode="radial"] .mode-toggle .icon-cover {
-  display: block;
+.mode-toast {
+  position: fixed;
+  z-index: 6;
+  top: calc(env(safe-area-inset-top, 0px) + 72px);
+  right: 16px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(10, 10, 20, 0.55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(var(--c1), 0.35);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.35s var(--ease-spring);
+}
+
+.mode-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ============================================================ player */
+
+.player {
+  position: relative;
+  z-index: 4;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 72px) 24px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  text-align: center;
+}
+
+/* Fixed-size stage: the artwork shrinks into a disc between modes, but the stage keeps
+   its footprint so the title and controls never jump around underneath. */
+.stage {
+  position: relative;
+  width: min(74vw, 340px);
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.disc {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 22px;
+  /* The glow breathes with the kick; the colour comes from the artwork itself. */
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.55),
+    0 0 calc(30px + var(--beat) * 70px) rgba(var(--c1), calc(0.28 + var(--beat) * 0.4)),
+    0 0 calc(60px + var(--beat) * 110px) rgba(var(--c2), calc(0.12 + var(--beat) * 0.25));
+  transform: scale(calc(1 + var(--beat) * 0.022));
+  transition:
+    border-radius 0.7s var(--ease-out),
+    width 0.7s var(--ease-out),
+    height 0.7s var(--ease-out),
+    transform 0.1s linear;
+  will-change: transform;
+}
+
+/* Viz modes: the cover becomes a spinning record, leaving the screen to the canvas while
+   keeping the artwork present as the centre of the composition. */
+body:not([data-mode="cover"]) .disc {
+  width: 52%;
+  height: 52%;
+  border-radius: 50%;
+}
+
+.disc__spin {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  animation: spin 16s linear infinite;
+  animation-play-state: paused;
+}
+
+body:not([data-mode="cover"])[data-state="playing"] .disc__spin {
+  animation-play-state: running;
+}
+
+/* In cover mode the artwork must stay upright — a rotating album cover just reads as broken. */
+body[data-mode="cover"] .disc__spin {
+  animation: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.cover {
+  width: 100%;
+  height: 100%;
+  background-color: #14141f;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* Vinyl grooves, only once the artwork has become a record. */
+.disc__grooves {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out);
+  background: repeating-radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 0, 0, 0.28) 0 1px,
+    rgba(255, 255, 255, 0.05) 1px 2.5px,
+    transparent 2.5px 10px
+  );
+}
+
+body:not([data-mode="cover"]) .disc__grooves {
+  opacity: 0.38;
+}
+
+/* The spindle hole, and a soft specular sweep that crosses the artwork every few seconds. */
+.disc__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 13%;
+  height: 13%;
+  margin: -6.5% 0 0 -6.5%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--void) 34%, rgba(var(--c1), 0.85) 38%, rgba(var(--c2), 0.5) 70%, transparent 72%);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.5s var(--ease-out), transform 0.6s var(--ease-spring);
+}
+
+body:not([data-mode="cover"]) .disc__label {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.disc__sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.16) 47%, rgba(255, 255, 255, 0.03) 52%, transparent 60%);
+  background-size: 260% 260%;
+  animation: sheen 7s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes sheen {
+  0%, 62% { background-position: 130% 0; }
+  100% { background-position: -60% 0; }
+}
+
+/* ============================================================ metadata */
+
+.meta {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Painted behind the type only when the canvas is busy: a soft pool of shadow that keeps the
+   title readable over a bright ribbon or a spectrum peak, without a hard-edged plate.
+   It has to be a real element rather than a text-shadow, because the title's gradient is a
+   clipped background and would paint straight over any shadow. */
+body:not([data-mode="cover"]) .meta::before {
+  content: "";
+  position: absolute;
+  inset: -18px -26px;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, rgba(5, 5, 11, 0.8), rgba(5, 5, 11, 0.45) 55%, rgba(5, 5, 11, 0) 78%);
+}
+
+.title,
+.artist {
+  margin: 0;
+  max-width: min(88vw, 520px);
+  overflow: hidden;
+  white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
 }
 
 .title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0;
-  max-width: 90vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: clamp(1.35rem, 6vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* A slow shimmer travels through the title in the artwork's colours — the detail that makes
+   the type feel lit rather than printed. It lives on the inner span, not the heading: a
+   clipped background does not follow a transformed child, so putting it on the heading would
+   leave a long, scrolling title painted in nothing at all. */
+.title .marquee__text {
+  background: linear-gradient(100deg, var(--ink) 20%, rgb(var(--c1)) 38%, rgb(var(--c3)) 50%, var(--ink) 68%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6.5s linear infinite;
+}
+
+/* Both animations have to be redeclared together: the marquee and the shimmer share the
+   span's animation property. */
+.title .marquee__text.is-scrolling {
+  animation: shimmer 6.5s linear infinite, marquee var(--marquee-duration, 12s) linear infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -130% 0; }
 }
 
 .artist {
-  font-size: 1.05rem;
-  font-weight: 400;
-  color: rgba(249, 250, 251, 0.7);
-  margin: 0;
-  max-width: 90vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: clamp(0.95rem, 4vw, 1.1rem);
+  font-weight: 500;
+  color: var(--ink-dim);
 }
+
+.marquee__text {
+  display: inline-block;
+}
+
+/* Titles that don't fit scroll gently instead of being cut with an ellipsis: on a display
+   you glance at from across the room, the full name matters. */
+.marquee__text.is-scrolling {
+  animation: marquee var(--marquee-duration, 12s) linear infinite;
+}
+
+@keyframes marquee {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(calc(-1 * var(--marquee-distance, 0px))); }
+}
+
+/* Track change: the artwork lands, the type resolves out of a blur. */
+body.is-changing .disc {
+  animation: disc-land 0.85s var(--ease-out);
+}
+
+body.is-changing .title {
+  animation: text-in 0.7s var(--ease-out);
+}
+
+body.is-changing .artist {
+  animation: text-in 0.7s 0.08s var(--ease-out) both;
+}
+
+@keyframes disc-land {
+  0% { transform: scale(0.86) rotate(-4deg); filter: brightness(2.2); }
+  55% { transform: scale(1.04) rotate(1deg); filter: brightness(1.1); }
+  100% { transform: scale(1) rotate(0); filter: brightness(1); }
+}
+
+@keyframes text-in {
+  from { opacity: 0; transform: translateY(14px); filter: blur(10px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* ============================================================ controls */
 
 .controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2rem;
-  margin-top: 1rem;
+  gap: 1.9rem;
+  flex: none;
 }
 
 .control {
-  border: none;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f9fafb;
+  background: rgba(255, 255, 255, 0.07);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.1s ease, background 0.15s ease;
+  transition: transform 0.2s var(--ease-spring), background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .control:active {
-  transform: scale(0.92);
+  transform: scale(0.9);
   background: rgba(255, 255, 255, 0.16);
 }
 
 .control svg {
   fill: currentColor;
+  position: relative;
+  z-index: 1;
 }
 
 .control--secondary {
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
 }
 
 .control--secondary svg {
@@ -215,20 +602,44 @@ html, body {
   height: 26px;
 }
 
-.control--primary {
-  width: 76px;
-  height: 76px;
-  background: #f9fafb;
-  color: #0b0b0f;
+.control--secondary:active {
+  box-shadow: 0 0 24px rgba(var(--c3), 0.5);
 }
 
-.control--primary:active {
-  background: #e5e7eb;
+.control--primary {
+  width: 78px;
+  height: 78px;
+  border-color: transparent;
+  background: linear-gradient(145deg, #ffffff, #dfe3ee);
+  color: #08080f;
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.45),
+    0 0 calc(14px + var(--beat) * 44px) rgba(var(--c1), calc(0.35 + var(--beat) * 0.4));
 }
 
 .control--primary svg {
   width: 34px;
   height: 34px;
+}
+
+/* A ring that expands out of the play button on every kick — the whole UI stays on the beat,
+   not just the canvas. */
+.control__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--c1), 0.7);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body[data-state="playing"] .control__pulse {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.85); opacity: 0; }
 }
 
 .icon-pause {
@@ -243,38 +654,89 @@ html, body {
   display: block;
 }
 
-.empty,
-.permission {
+/* ============================================================ empty / permission */
+
+.message {
   position: relative;
-  z-index: 1;
+  z-index: 4;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  padding: 0 32px;
+  gap: 0.8rem;
+  padding: 0 34px;
   text-align: center;
-  color: rgba(249, 250, 251, 0.85);
+  color: rgba(247, 248, 252, 0.88);
+  font-size: 1rem;
+  line-height: 1.5;
+  animation: text-in 0.6s var(--ease-out);
 }
 
-.empty .hint {
-  color: rgba(249, 250, 251, 0.5);
+.message p {
+  margin: 0;
+  max-width: 30ch;
+}
+
+.message .hint {
+  color: rgba(247, 248, 252, 0.45);
   font-size: 0.9rem;
 }
 
+/* A slow breathing orb so the "nothing playing" screen still feels alive and on-brand. */
+.message__pulse {
+  width: 92px;
+  height: 92px;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--c1), 0.55), rgba(var(--c2), 0.15) 60%, transparent 72%);
+  animation: breathe 3.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(0.85); opacity: 0.55; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
 .grant-button {
-  margin-top: 0.5rem;
-  padding: 0.75rem 1.5rem;
+  margin-top: 0.6rem;
+  padding: 0.85rem 1.7rem;
   border: none;
   border-radius: 999px;
-  background: #f9fafb;
-  color: #0b0b0f;
+  background: linear-gradient(135deg, rgb(var(--c1)), rgb(var(--c2)));
+  color: #fff;
+  font-family: inherit;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 12px 34px rgba(var(--c1), 0.45);
+  transition: transform 0.2s var(--ease-spring);
 }
 
 .grant-button:active {
-  background: #e5e7eb;
+  transform: scale(0.95);
+}
+
+/* ============================================================ reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .blob,
+  .disc__sheen,
+  .disc__spin,
+  .title .marquee__text,
+  .control__pulse,
+  .message__pulse,
+  .marquee__text.is-scrolling {
+    animation: none !important;
+  }
+
+  .title .marquee__text {
+    background: none;
+    color: var(--ink);
+  }
+
+  .disc,
+  .ambient__art {
+    transform: none !important;
+  }
 }
