@@ -33,9 +33,23 @@ const visualizer = new Visualizer(els.visualizerCanvas);
 // 10+ and after the user grants the system's capture consent; otherwise the visualizer simply
 // never receives "audioLevels" events and keeps its own simulated animation.
 let captureActive = false;
+// Why capture isn't live right now, surfaced in the badge instead of a silent guess: the
+// native call's own rejection reason ("unsupported"/"denied"), "service arrêté" if
+// AudioCaptureService died on its own, or "aucune réponse" if the call resolved but no
+// audioLevels event ever showed up (covers a stuck/hung native call too).
+let lastCaptureError = null;
+let captureWatchdog = null;
+
+function clearCaptureWatchdog() {
+  if (captureWatchdog != null) {
+    clearTimeout(captureWatchdog);
+    captureWatchdog = null;
+  }
+}
 
 function stopCapture() {
   visualizer.stop();
+  clearCaptureWatchdog();
   if (captureActive) {
     captureActive = false;
     DeezerMedia.stopVisualizerCapture().catch(() => {});
@@ -49,9 +63,21 @@ function applyDisplayMode() {
     visualizer.start();
     if (!captureActive) {
       captureActive = true;
-      DeezerMedia.startVisualizerCapture().catch(() => {
-        captureActive = false;
-      });
+      lastCaptureError = null;
+      DeezerMedia.startVisualizerCapture()
+        .then(() => {
+          clearCaptureWatchdog();
+          captureWatchdog = setTimeout(() => {
+            if (visualizer.captureStatus === "simulated") {
+              lastCaptureError = "aucune réponse";
+              captureActive = false;
+            }
+          }, 8000);
+        })
+        .catch((err) => {
+          captureActive = false;
+          lastCaptureError = (err && err.message) || String(err);
+        });
     }
   } else {
     stopCapture();
@@ -81,7 +107,8 @@ function updateCaptureStatusBadge() {
   const status = visualizer.captureStatus;
   els.captureStatus.hidden = false;
   els.captureStatus.dataset.status = status;
-  els.captureStatus.textContent = CAPTURE_STATUS_LABELS[status];
+  els.captureStatus.textContent =
+    status === "simulated" && lastCaptureError ? `● Simulé (${lastCaptureError})` : CAPTURE_STATUS_LABELS[status];
 }
 setInterval(updateCaptureStatusBadge, 500);
 
@@ -141,10 +168,16 @@ els.next.addEventListener("click", () => DeezerMedia.next());
 
 DeezerMedia.addListener("nowPlayingChanged", setNowPlaying);
 DeezerMedia.addListener("audioLevels", (data) => {
-  if (data && data.levels) visualizer.setLevels(data.levels);
+  if (data && data.levels) {
+    visualizer.setLevels(data.levels);
+    clearCaptureWatchdog();
+    lastCaptureError = null;
+  }
 });
 DeezerMedia.addListener("audioCaptureStopped", () => {
   captureActive = false;
+  lastCaptureError = lastCaptureError || "service arrêté";
+  clearCaptureWatchdog();
 });
 
 document.addEventListener("visibilitychange", () => {
