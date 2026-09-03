@@ -77,12 +77,15 @@ html, body {
   top: 10px;
   left: 10px;
   padding: 3px 8px;
+  border: none;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.45);
+  font-family: inherit;
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: rgba(249, 250, 251, 0.6);
+  cursor: default;
 }
 
 .capture-status[data-status="live"] {
@@ -91,6 +94,18 @@ html, body {
 
 .capture-status[data-status="silent"] {
   color: #fbbf24;
+}
+
+/* Only actionable while simulated and idle: tapping it is how you opt in to real audio
+   capture, instead of the system permission dialog popping up as a surprise on mode switch. */
+.capture-status[data-status="simulated"]:not(:disabled) {
+  background: rgba(59, 130, 246, 0.9);
+  color: #fff;
+  cursor: pointer;
+}
+
+.capture-status[data-status="simulated"]:not(:disabled):active {
+  background: rgba(37, 99, 235, 0.95);
 }
 
 .mode-toggle {

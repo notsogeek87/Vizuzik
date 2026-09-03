@@ -56,30 +56,35 @@ function stopCapture() {
   }
 }
 
+// Requesting real audio capture is a separate, explicit action from picking a visual style
+// (triggered by tapping the capture-status badge itself) — switching between cover/bars/radial
+// never pops the system permission dialog as a surprise.
+function requestCapture() {
+  if (captureActive) return;
+  captureActive = true;
+  lastCaptureError = null;
+  // Armed the moment the call goes out — not after it resolves — so a native call that
+  // never settles at all (neither resolve nor reject, e.g. the system consent flow never
+  // returning a result) still surfaces a reason instead of leaving the badge blank forever.
+  clearCaptureWatchdog();
+  captureWatchdog = setTimeout(() => {
+    if (visualizer.captureStatus === "simulated") {
+      lastCaptureError = "aucune réponse (la fenêtre système n'a jamais rendu la main)";
+      captureActive = false;
+    }
+  }, 8000);
+  DeezerMedia.startVisualizerCapture().catch((err) => {
+    clearCaptureWatchdog();
+    captureActive = false;
+    lastCaptureError = (err && err.message) || String(err);
+  });
+}
+
 function applyDisplayMode() {
   els.coverWrap.dataset.mode = displayMode;
   if (displayMode !== "cover" && !els.player.hidden) {
     visualizer.setStyle(displayMode);
     visualizer.start();
-    if (!captureActive) {
-      captureActive = true;
-      lastCaptureError = null;
-      // Armed the moment the call goes out — not after it resolves — so a native call that
-      // never settles at all (neither resolve nor reject, e.g. the system consent flow never
-      // returning a result) still surfaces a reason instead of leaving the badge blank forever.
-      clearCaptureWatchdog();
-      captureWatchdog = setTimeout(() => {
-        if (visualizer.captureStatus === "simulated") {
-          lastCaptureError = "aucune réponse (la fenêtre système n'a jamais rendu la main)";
-          captureActive = false;
-        }
-      }, 8000);
-      DeezerMedia.startVisualizerCapture().catch((err) => {
-        clearCaptureWatchdog();
-        captureActive = false;
-        lastCaptureError = (err && err.message) || String(err);
-      });
-    }
   } else {
     stopCapture();
   }
@@ -92,14 +97,16 @@ els.modeToggle.addEventListener("click", () => {
   applyDisplayMode();
 });
 
+els.captureStatus.addEventListener("click", requestCapture);
+
 const CAPTURE_STATUS_LABELS = {
   live: "● Direct",
   silent: "● Direct (silencieux)",
-  simulated: "● Simulé",
 };
 
 // Answers "is this really reacting to Deezer's audio?" on-screen instead of leaving it a
-// mystery: the badge reflects the visualizer's own capture-vs-fallback state every tick.
+// mystery, and doubles as the button to opt in: tapping it while simulated is what triggers
+// the system permission request (see requestCapture()).
 function updateCaptureStatusBadge() {
   if (displayMode === "cover" || els.player.hidden) {
     els.captureStatus.hidden = true;
@@ -108,8 +115,20 @@ function updateCaptureStatusBadge() {
   const status = visualizer.captureStatus;
   els.captureStatus.hidden = false;
   els.captureStatus.dataset.status = status;
-  els.captureStatus.textContent =
-    status === "simulated" && lastCaptureError ? `● Simulé (${lastCaptureError})` : CAPTURE_STATUS_LABELS[status];
+
+  if (status !== "simulated") {
+    els.captureStatus.textContent = CAPTURE_STATUS_LABELS[status];
+    els.captureStatus.disabled = true;
+    return;
+  }
+
+  if (captureActive) {
+    els.captureStatus.textContent = "● Connexion…";
+    els.captureStatus.disabled = true;
+  } else {
+    els.captureStatus.textContent = lastCaptureError ? `↻ Réessayer (${lastCaptureError})` : "▶ Activer le son réel";
+    els.captureStatus.disabled = false;
+  }
 }
 setInterval(updateCaptureStatusBadge, 500);
 
