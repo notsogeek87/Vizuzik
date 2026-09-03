@@ -44,6 +44,7 @@ const MODE_LABELS = {
   radial: "Corona",
   aurora: "Aurore",
   nebula: "Nébuleuse",
+  cassette: "Cassette",
 };
 
 let isPlaying = false;

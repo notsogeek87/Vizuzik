@@ -1,4 +1,4 @@
-# Les cinq modes de visualisation
+# Les six modes de visualisation
 
 **Pour qui :** utilisateurs de l'application, et toute personne qui veut comprendre ce que
 montre chaque mode.
@@ -23,9 +23,11 @@ Une étiquette apparaît brièvement pour nommer le mode. Le choix est mémoris�
 | `radial` | Corona | Couronne de rayons autour du disque, étincelles en orbite et ondes de choc à chaque impulsion. |
 | `aurora` | Aurore | Six rubans de lumière traversant l'écran, un par tranche de fréquence. |
 | `nebula` | Nébuleuse | Galaxie de particules en orbite laissant des traînées lumineuses. |
+| `cassette` | Cassette | Illustration fixe plein écran d'une cassette audio vue en portrait — l'écran du téléphone devient la fenêtre d'un baladeur. Rien n'y bouge ; seuls les moyeux des bobines suivent la palette de la pochette. |
 
 Hors mode `cover`, la pochette se transforme en disque vinyle : elle rétrécit, s'arrondit,
-tourne pendant la lecture et s'arrête à la pause.
+tourne pendant la lecture et s'arrête à la pause. En mode `cassette`, elle disparaît
+complètement derrière l'illustration plein écran.
 
 ## Ce qui réagit en dehors du canvas
 

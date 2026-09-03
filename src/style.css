@@ -167,6 +167,17 @@ body:not([data-mode="cover"]) .fx {
   opacity: 1;
 }
 
+/* Cassette mode replaces the canvas scene and the disc with one fixed full-screen
+   illustration — nothing here reacts to the beat, on purpose (see .cassette below). */
+body[data-mode="cassette"] .fx {
+  opacity: 0;
+}
+
+body[data-mode="cassette"] .stage {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .scrim {
   position: fixed;
   inset: 0;
@@ -180,6 +191,95 @@ body:not([data-mode="cover"]) .fx {
 /* Only needed once the canvas is busy behind the text and controls. */
 body:not([data-mode="cover"]) .scrim {
   opacity: 1;
+}
+
+/* ============================================================ cassette mode */
+
+/* A fixed, static full-screen illustration — the counterpoint to the spinning disc. Only
+   its accent gradient (the reel hubs and the write-protect tab) follows the album palette;
+   the shape itself never moves. */
+.cassette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s var(--ease-out);
+}
+
+body[data-mode="cassette"] .cassette {
+  opacity: 1;
+}
+
+/* Edge-to-edge and cropped to fill rather than letterboxed: the phone's own screen is meant
+   to read as the cassette window, the way a Walkman's door frames the tape inside it. */
+.cassette__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cassette__shell {
+  fill: rgba(247, 248, 252, 0.05);
+  stroke: rgba(247, 248, 252, 0.32);
+  stroke-width: 2;
+}
+
+.cassette__label {
+  fill: rgba(247, 248, 252, 0.07);
+  stroke: rgba(247, 248, 252, 0.22);
+  stroke-width: 1.5;
+}
+
+.cassette__labelline {
+  stroke-linecap: round;
+  stroke-width: 3;
+}
+
+.cassette__labelline--1 {
+  stroke: rgba(247, 248, 252, 0.4);
+}
+
+.cassette__labelline--2 {
+  stroke: rgba(247, 248, 252, 0.22);
+}
+
+.cassette__window {
+  fill: rgba(5, 5, 11, 0.55);
+  stroke: rgba(247, 248, 252, 0.18);
+  stroke-width: 1.5;
+}
+
+.cassette__tape {
+  fill: none;
+  stroke: rgba(247, 248, 252, 0.28);
+  stroke-width: 3;
+}
+
+.cassette__reelring {
+  fill: none;
+  stroke: rgba(247, 248, 252, 0.32);
+  stroke-width: 2;
+}
+
+.cassette__spokes line {
+  stroke: rgba(5, 5, 11, 0.6);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.cassette__guide,
+.cassette__screw {
+  fill: rgba(247, 248, 252, 0.28);
+}
+
+.cassette__stop--a {
+  stop-color: rgb(var(--c1));
+}
+
+.cassette__stop--b {
+  stop-color: rgb(var(--c2));
 }
 
 /* ============================================================ top bar */
@@ -273,7 +373,8 @@ body[data-mode="cover"] .mode-toggle .icon-cover,
 body[data-mode="bars"] .mode-toggle .icon-bars,
 body[data-mode="radial"] .mode-toggle .icon-radial,
 body[data-mode="aurora"] .mode-toggle .icon-aurora,
-body[data-mode="nebula"] .mode-toggle .icon-nebula {
+body[data-mode="nebula"] .mode-toggle .icon-nebula,
+body[data-mode="cassette"] .mode-toggle .icon-cassette {
   display: block;
   animation: icon-pop 0.45s var(--ease-spring);
 }
@@ -331,12 +432,13 @@ body[data-mode="nebula"] .mode-toggle .icon-nebula {
    its footprint so the title and controls never jump around underneath. */
 .stage {
   position: relative;
-  width: min(74vw, 340px);
+  width: min(78vw, 366px);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
+  transition: opacity 0.5s var(--ease-out);
 }
 
 .disc {
@@ -384,8 +486,8 @@ body.is-swipe-releasing .disc {
 /* Viz modes: the cover becomes a spinning record, leaving the screen to the canvas while
    keeping the artwork present as the centre of the composition. */
 body:not([data-mode="cover"]) .disc {
-  width: 52%;
-  height: 52%;
+  width: 58%;
+  height: 58%;
   border-radius: 50%;
 }
 

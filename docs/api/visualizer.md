@@ -90,3 +90,8 @@ Données d'analyse disponibles dans la méthode de dessin :
 
 Le contexte est déjà en composition `lighter` quand la scène est appelée : les formes
 s'additionnent, et le bloom est appliqué après.
+
+`cassette` déroge à cette recette : c'est une illustration fixe, plein écran, portée par
+`index.html`/`style.css` plutôt que par le canvas (voir `body[data-mode="cassette"] .cassette`
+dans `style.css`). Son `case` dans `_draw()` ne fait rien — `.fx` est caché par CSS dans ce
+mode — et elle est exclue de `_burstParticles()` pour rester réellement fixe.

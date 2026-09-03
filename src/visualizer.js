@@ -9,17 +9,20 @@
 // impulses left are pulse() calls for events that really happened (a track change, play/pause,
 // a swipe, a mode change).
 //
-// One analysis pass feeds five scenes:
-//   cover   - a restrained halo around the artwork (the art stays the hero)
-//   bars    - a mirrored spectrum stage, bass at the centre, treble at the edges
-//   radial  - a reactive corona ringing the spinning disc
-//   aurora  - flowing light ribbons, one per frequency slice
-//   nebula  - an orbiting particle galaxy with motion trails
+// One analysis pass feeds six scenes:
+//   cover    - a restrained halo around the artwork (the art stays the hero)
+//   bars     - a mirrored spectrum stage, bass at the centre, treble at the edges
+//   radial   - a reactive corona ringing the spinning disc
+//   aurora   - flowing light ribbons, one per frequency slice
+//   nebula   - an orbiting particle galaxy with motion trails
+//   cassette - a fixed full-screen illustration, drawn once in CSS/HTML rather than here (see
+//              index.html and style.css): the counterpoint to the spinning disc, so it never
+//              reacts to the beat and this engine draws nothing for it
 //
 // Everything is drawn additively and then bloomed by blitting the frame back over itself
 // through a blur, which is what gives the neon "lit from within" look at almost no cost.
 
-export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula"];
+export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cassette"];
 
 // Matches AudioCaptureService's BAND_COUNT on the native side so live levels map 1:1 with
 // no interpolation needed.
@@ -447,7 +450,7 @@ export class Visualizer {
   }
 
   _burstParticles() {
-    if (this.style === "cover" || this.style === "aurora") return;
+    if (this.style === "cover" || this.style === "aurora" || this.style === "cassette") return;
     const count = Math.round((this.style === "nebula" ? 10 : 6) * this.quality);
     const max = this.style === "nebula" ? 220 : 120;
     for (let i = 0; i < count && this.particles.length < max; i++) {
@@ -502,6 +505,10 @@ export class Visualizer {
         break;
       case "nebula":
         this._drawNebula(ctx, dt);
+        break;
+      case "cassette":
+        // Nothing to draw: the CSS layer carries the whole scene, and .fx is hidden in this
+        // mode anyway (see body[data-mode="cassette"] .fx in style.css).
         break;
       default:
         this._drawCoverHalo(ctx);

@@ -10,9 +10,10 @@ notifications) pour pouvoir afficher et contrôler la lecture.
 
 ## Le visuel
 
-Cinq modes, en boucle via le bouton en haut à droite ou en touchant la pochette : **Pochette**,
-**Spectre**, **Corona**, **Aurore**, **Nébuleuse**. Les couleurs de toute l'interface sont
-extraites de la pochette du morceau en cours, et la lueur pulse sur les basses.
+Six modes, en boucle via le bouton en haut à droite ou en touchant la pochette : **Pochette**,
+**Spectre**, **Corona**, **Aurore**, **Nébuleuse**, **Cassette**. Les couleurs de toute
+l'interface sont extraites de la pochette du morceau en cours, et la lueur pulse sur les
+basses.
 
 Sans capture du son, l'application n'invente aucun rythme : le disque tourne, les scènes
 coulent sur des vagues lentes, les couleurs voyagent d'un accent de la pochette au suivant, et
