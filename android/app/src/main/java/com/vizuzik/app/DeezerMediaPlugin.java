@@ -1,33 +1,44 @@
 package com.vizuzik.app;
 
+import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
+import android.os.Build;
 import android.provider.Settings;
 import android.util.Base64;
 
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Set;
 
 @CapacitorPlugin(name = "DeezerMedia")
-public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener {
+public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
     @Override
     protected void handleOnStart() {
         DeezerMediaBridge.getInstance().setListener(this);
+        AudioLevelsBridge.getInstance().setListener(this);
     }
 
     @Override
     protected void handleOnStop() {
         DeezerMediaBridge.getInstance().setListener(null);
+        AudioLevelsBridge.getInstance().setListener(null);
+        stopAudioCaptureService();
     }
 
     @PluginMethod
@@ -73,6 +84,69 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     @Override
     public void onNowPlayingChanged(DeezerMediaBridge.NowPlaying nowPlaying) {
         notifyListeners("nowPlayingChanged", toJs(nowPlaying));
+    }
+
+    /**
+     * Requests the system MediaProjection consent needed to capture Deezer's own audio output
+     * (Android 10+ only). Once granted, starts AudioCaptureService, which streams a real-time
+     * loudness spectrum back via "audioLevels" events for as long as the service runs.
+     */
+    @PluginMethod
+    public void startVisualizerCapture(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            call.reject("unsupported");
+            return;
+        }
+        MediaProjectionManager manager =
+            (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        if (manager == null) {
+            call.reject("unsupported");
+            return;
+        }
+        startActivityForResult(call, manager.createScreenCaptureIntent(), "handleCaptureResult");
+    }
+
+    @ActivityCallback
+    private void handleCaptureResult(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            return;
+        }
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
+            call.reject("denied");
+            return;
+        }
+        Intent serviceIntent = new Intent(getContext(), AudioCaptureService.class);
+        serviceIntent.putExtra("resultCode", result.getResultCode());
+        serviceIntent.putExtra("data", result.getData());
+        ContextCompat.startForegroundService(getContext(), serviceIntent);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopVisualizerCapture(PluginCall call) {
+        stopAudioCaptureService();
+        call.resolve();
+    }
+
+    private void stopAudioCaptureService() {
+        getContext().stopService(new Intent(getContext(), AudioCaptureService.class));
+    }
+
+    @Override
+    public void onLevels(float[] levels) {
+        JSArray array = new JSArray();
+        for (float level : levels) {
+            // put(Object) never throws, unlike put(double) — avoids a checked JSONException here.
+            array.put((Object) level);
+        }
+        JSObject result = new JSObject();
+        result.put("levels", array);
+        notifyListeners("audioLevels", result);
+    }
+
+    @Override
+    public void onCaptureStopped() {
+        notifyListeners("audioCaptureStopped", new JSObject());
     }
 
     private interface TransportAction {

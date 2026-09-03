@@ -26,12 +26,31 @@ const DISPLAY_MODE_KEY = "vizuzik:displayMode";
 let displayMode = localStorage.getItem(DISPLAY_MODE_KEY) === "visualizer" ? "visualizer" : "cover";
 const visualizer = new Visualizer(els.visualizerCanvas);
 
+// Whether AudioCaptureService has been asked to capture Deezer's audio. Only real on Android
+// 10+ and after the user grants the system's capture consent; otherwise the visualizer simply
+// never receives "audioLevels" events and keeps its own simulated animation.
+let captureActive = false;
+
+function stopCapture() {
+  visualizer.stop();
+  if (captureActive) {
+    captureActive = false;
+    DeezerMedia.stopVisualizerCapture().catch(() => {});
+  }
+}
+
 function applyDisplayMode() {
   els.coverWrap.dataset.mode = displayMode;
   if (displayMode === "visualizer" && !els.player.hidden) {
     visualizer.start();
+    if (!captureActive) {
+      captureActive = true;
+      DeezerMedia.startVisualizerCapture().catch(() => {
+        captureActive = false;
+      });
+    }
   } else {
-    visualizer.stop();
+    stopCapture();
   }
 }
 
@@ -51,7 +70,7 @@ function setNowPlaying(state) {
   if (!state || !state.active) {
     showScreen("empty");
     els.background.style.backgroundImage = "";
-    visualizer.stop();
+    stopCapture();
     return;
   }
 
@@ -96,6 +115,12 @@ els.previous.addEventListener("click", () => DeezerMedia.previous());
 els.next.addEventListener("click", () => DeezerMedia.next());
 
 DeezerMedia.addListener("nowPlayingChanged", setNowPlaying);
+DeezerMedia.addListener("audioLevels", (data) => {
+  if (data && data.levels) visualizer.setLevels(data.levels);
+});
+DeezerMedia.addListener("audioCaptureStopped", () => {
+  captureActive = false;
+});
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {

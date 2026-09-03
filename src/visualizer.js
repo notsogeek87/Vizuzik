@@ -1,16 +1,18 @@
-const BAR_COUNT = 40;
+// Matches AudioCaptureService's BAND_COUNT on the native side (android/.../AudioCaptureService.java)
+// so live levels map 1:1 onto bars with no interpolation needed.
+const BAR_COUNT = 32;
 const PARTICLE_MAX = 60;
+const LIVE_LEVELS_TIMEOUT_MS = 500;
 
 function clamp01(value) {
   return value < 0 ? 0 : value > 1 ? 1 : value;
 }
 
 /**
- * Ambient, WMP-style canvas visualizer. There is no access to the actual audio
- * stream (Vizuzik only reads Deezer's MediaSession metadata), so the motion is a
- * simulated pseudo-beat: layered oscillators give an organic base motion, and a
- * randomly-timed "kick" scheduler injects punchy pulses so bars and particles feel
- * like they're following a rhythm rather than just drifting.
+ * WMP-style canvas visualizer. When AudioCaptureService is capturing Deezer's real audio
+ * output (Android 10+, user-granted), bars follow the actual spectrum via setLevels(). If
+ * capture is unavailable or hasn't reported in a while, motion falls back to a simulated
+ * pseudo-beat (layered oscillators + a randomly-timed "kick" scheduler) so it never looks frozen.
  */
 export class Visualizer {
   constructor(canvas) {
@@ -26,10 +28,15 @@ export class Visualizer {
 
     this.bars = new Array(BAR_COUNT).fill(0);
     this.particles = [];
+    this.avgLevel = 0;
 
     this.beatEnergy = 0;
     this.nextBeatAt = 0;
     this.startTime = 0;
+
+    this.liveLevels = null;
+    this.lastLiveAt = 0;
+    this.prevBass = 0;
 
     this._onResize = () => this.resize();
     window.addEventListener("resize", this._onResize);
@@ -54,6 +61,13 @@ export class Visualizer {
 
   setPlaying(isPlaying) {
     this.isPlaying = isPlaying;
+  }
+
+  /** Feeds a real-time loudness spectrum (0..1 per band) from AudioCaptureService. */
+  setLevels(levels) {
+    if (!levels || !levels.length) return;
+    this.liveLevels = levels;
+    this.lastLiveAt = performance.now();
   }
 
   resize() {
@@ -112,6 +126,39 @@ export class Visualizer {
 
   _update() {
     const now = performance.now();
+    const hasLiveLevels = this.isPlaying && this.liveLevels && now - this.lastLiveAt < LIVE_LEVELS_TIMEOUT_MS;
+
+    const speed = this.isPlaying ? 1 : 0.35;
+    if (hasLiveLevels) {
+      this._updateFromLiveLevels();
+    } else {
+      this._updateSynthetic(now);
+    }
+
+    this.hue += (this.targetHue - this.hue) * 0.02;
+    this.hue = (this.hue + speed * 0.08) % 360;
+
+    this._updateParticles();
+  }
+
+  /** Drives bars directly from the real spectrum reported by AudioCaptureService. */
+  _updateFromLiveLevels() {
+    let sum = 0;
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const target = clamp01(this.liveLevels[i] || 0);
+      this.bars[i] += (target - this.bars[i]) * 0.55;
+      sum += target;
+    }
+    this.avgLevel = sum / BAR_COUNT;
+
+    const bass = clamp01(((this.liveLevels[0] || 0) + (this.liveLevels[1] || 0) + (this.liveLevels[2] || 0)) / 3);
+    const bassRise = Math.max(0, bass - this.prevBass);
+    this.prevBass = bass;
+    this.beatEnergy = Math.max(this.beatEnergy * 0.9, clamp01(bassRise * 4));
+  }
+
+  /** No real audio available (unsupported device, capture denied, or stream stalled): fake it. */
+  _updateSynthetic(now) {
     const t = (now - this.startTime) / 1000;
 
     if (now >= this.nextBeatAt) {
@@ -124,19 +171,22 @@ export class Visualizer {
     const intensity = this.isPlaying ? 1 : 0.25;
     const speed = this.isPlaying ? 1 : 0.35;
 
+    let sum = 0;
     for (let i = 0; i < BAR_COUNT; i++) {
       const freq = 0.6 + i * 0.05;
       const base = 0.5 + 0.5 * Math.sin(t * speed * freq + i * 0.4);
       const wobble = 0.5 * Math.sin(t * speed * freq * 2.7 + i * 0.9);
       const beatShape = 0.6 + 0.4 * Math.sin(i * 1.7);
-      let value = base * 0.55 + wobble * 0.25 + this.beatEnergy * beatShape * 0.7;
-      this.bars[i] = clamp01(value * intensity);
+      const value = clamp01((base * 0.55 + wobble * 0.25 + this.beatEnergy * beatShape * 0.7) * intensity);
+      this.bars[i] = value;
+      sum += value;
     }
+    this.avgLevel = sum / BAR_COUNT;
+  }
 
-    this.hue += (this.targetHue - this.hue) * 0.02;
-    this.hue = (this.hue + speed * 0.08) % 360;
-
-    if (this.isPlaying && Math.random() < 0.15 + this.beatEnergy * 0.4 && this.particles.length < PARTICLE_MAX) {
+  _updateParticles() {
+    const spawnChance = this.isPlaying ? 0.12 + this.avgLevel * 0.5 + this.beatEnergy * 0.3 : 0;
+    if (Math.random() < spawnChance && this.particles.length < PARTICLE_MAX) {
       this.particles.push({
         x: Math.random() * this.width,
         y: this.height,
