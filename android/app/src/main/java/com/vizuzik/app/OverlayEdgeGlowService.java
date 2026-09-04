@@ -75,7 +75,18 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForegroundNotification();
+        try {
+            startForegroundNotification();
+        } catch (Exception e) {
+            // A misdeclared foreground-service type (this exact bug already happened once — see
+            // the microphone-type commit) throws here, not somewhere easy to catch downstream:
+            // this runs on the main thread with nothing above it, so an uncaught exception here
+            // takes down the entire app, not just this service. Never again for the sake of a
+            // border glow — stop cleanly instead.
+            Log.w(TAG, "startForegroundNotification", e);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !Settings.canDrawOverlays(this)) {
             // Below Android 8 TYPE_APPLICATION_OVERLAY doesn't exist; without the "display over
@@ -189,14 +200,18 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build();
-        // MICROPHONE is included unconditionally (not only once maybeStartMicCapture() actually
-        // succeeds): the type has to be declared before the mic is touched, and re-calling
-        // startForeground() later with a wider type is more moving parts than just declaring the
-        // capability from the very first call — a declared-but-unused type is harmless.
+        // Declaring FOREGROUND_SERVICE_TYPE_MICROPHONE without RECORD_AUDIO already granted
+        // doesn't just skip the capability — startForeground() throws a SecurityException on the
+        // spot and takes the whole app down with it, since this runs on the main thread with
+        // nothing above it to catch that. So the bit is only ever included once the permission
+        // is confirmed, checked fresh on every call rather than assumed from a stored flag.
+        boolean canUseMic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED;
         int type;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                | (canUseMic ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && canUseMic) {
             type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
         } else {
             type = 0;
