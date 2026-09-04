@@ -62,6 +62,13 @@ final class EdgeGlowView extends View {
     // surfacing a live counter in its own notification) without needing a logcat capture from
     // the person testing it — see the service for why this was worth adding.
     private Runnable tickListener;
+    // Diagnostic only, temporary: a plain tick counter drawn directly on the glow itself, in case
+    // the notification counter turns out to be hidden behind "silent notifications" collapsing on
+    // some devices (IMPORTANCE_MIN notifications are collapsed there by default) — this can't be
+    // missed since it's part of the exact thing being watched. Remove alongside the notification
+    // counter once the freeze reports are resolved.
+    private int debugTickCount;
+    private final Paint debugPaint = new Paint();
 
     private int[][] fromPalette = FALLBACK_PALETTE;
     private int[][] toPalette = FALLBACK_PALETTE;
@@ -92,6 +99,10 @@ final class EdgeGlowView extends View {
         super(context);
         density = context.getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
+        debugPaint.setColor(Color.WHITE);
+        debugPaint.setTextSize(28f * density);
+        debugPaint.setShadowLayer(6f * density, 0, 0, Color.BLACK);
+        debugPaint.setAntiAlias(true);
     }
 
     void setPalette(int[][] palette) {
@@ -185,6 +196,7 @@ final class EdgeGlowView extends View {
             beatEnergy *= (float) Math.pow(0.9, dtMs / PULSE_DECAY_MS);
 
             ambientPhase += dtMs;
+            debugTickCount++;
 
             invalidate();
             if (tickListener != null) tickListener.run();
@@ -240,6 +252,9 @@ final class EdgeGlowView extends View {
         drawEdge(canvas, 0, height - thickness, width, thickness, edgeColor, transparent, false); // bottom
         drawEdgeVertical(canvas, 0, 0, thickness, height, edgeColor, transparent, true); // left
         drawEdgeVertical(canvas, width - thickness, 0, thickness, height, edgeColor, transparent, false); // right
+
+        // Diagnostic only, temporary — see the field comment above.
+        canvas.drawText("tick " + debugTickCount, 24f * density, 60f * density, debugPaint);
     }
 
     private void drawEdge(Canvas canvas, float left, float top, float w, float h, int from, int to, boolean fromTop) {
