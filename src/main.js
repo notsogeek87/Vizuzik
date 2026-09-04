@@ -2,7 +2,6 @@ import { registerPlugin } from "@capacitor/core";
 import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
 import { extractPalette } from "./palette.js";
 import { PlaybackProgress } from "./progress.js";
-import { MicCapture } from "./mic.js";
 
 const DeezerMedia = registerPlugin("DeezerMedia");
 
@@ -310,9 +309,10 @@ async function resolveMusicApp() {
 /* ------------------------------------------------------------------ audio source */
 
 // Vizuzik can drive the visualizer from three sources, cycled by tapping the badge:
-//   mic  - the phone's own microphone (getUserMedia). No MediaProjection consent needed, just
-//          the ordinary RECORD_AUDIO permission, which Android remembers for good — so this is
-//          the only source it's safe to start on its own, and the default.
+//   mic  - the phone's own microphone (native AudioRecord, see MicCaptureThread.java). No
+//          MediaProjection consent needed, just the ordinary RECORD_AUDIO permission, which
+//          Android remembers for good — so this is the only source it's safe to start on its
+//          own, and the default.
 //   real - the tracked app's own audio output, via Android's MediaProjection ("share your
 //          screen") consent. That dialog cannot be avoided and Android makes you face it again
 //          every single app launch, so it is NEVER requested automatically — only an explicit
@@ -342,33 +342,33 @@ function rememberAudioSource(value) {
 
 /* --- microphone --- */
 
-const mic = new MicCapture();
-let micSupported = mic.supported;
+// Deliberately native (DeezerMedia.startMicCapture(), see MicCaptureThread.java) rather than the
+// WebView's own getUserMedia(): a getUserMedia() audio stream is WebRTC-shaped under the hood,
+// and Chromium switches Android's audio mode into its "in a call" state for as long as it's
+// open — which, over Bluetooth, is exactly what told a connected car head unit to treat Vizuzik
+// coming back to the foreground as an incoming call, cutting the car's own media playback the
+// way it would for a real one. A plain AudioRecord on the native side never touches that mode.
+let micSupported = true;
 let micRunning = false;
 let micPending = false;
 let micError = null;
-
-mic.onLevels = (levels) => {
-  if (audioSource === "mic") visualizer.setLevels(levels);
-};
 
 function startMic() {
   if (micRunning || micPending || !micSupported) return;
   micPending = true;
   micError = null;
-  mic
-    .start()
+  DeezerMedia.startMicCapture()
     .then(() => {
       micPending = false;
       micRunning = true;
     })
     .catch((err) => {
       micPending = false;
-      const name = err && err.name;
-      if (name === "NotFoundError" || name === "NotSupportedError" || name === "OverconstrainedError") {
+      const reason = (err && err.message) || String(err);
+      if (reason === "unsupported") {
         micSupported = false;
         micError = "micro indisponible";
-      } else if (name === "NotAllowedError" || name === "SecurityError") {
+      } else if (reason === "denied") {
         micError = "autorisation refusée";
       } else {
         micError = "erreur micro";
@@ -377,9 +377,10 @@ function startMic() {
 }
 
 function stopMic() {
-  mic.stop();
+  if (!micRunning && !micPending) return;
   micRunning = false;
   micPending = false;
+  DeezerMedia.stopMicCapture().catch(() => {});
 }
 
 /* --- app audio (MediaProjection) --- */
@@ -1056,6 +1057,14 @@ DeezerMedia.addListener("audioLevels", (data) => {
     capturePending = false;
     clearCaptureWatchdog();
     lastCaptureError = null;
+  }
+});
+DeezerMedia.addListener("micLevels", (data) => {
+  if (data && data.levels) {
+    if (audioSource === "mic") visualizer.setLevels(data.levels);
+    micRunning = true;
+    micPending = false;
+    micError = null;
   }
 });
 DeezerMedia.addListener("audioCaptureStopped", () => {

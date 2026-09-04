@@ -1,5 +1,6 @@
 package com.vizuzik.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.UiModeManager;
 import android.content.ActivityNotFoundException;
@@ -24,17 +25,29 @@ import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Set;
 
-@CapacitorPlugin(name = "DeezerMedia")
+@CapacitorPlugin(
+    name = "DeezerMedia",
+    permissions = { @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "microphone") }
+)
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
+
+    // Owned directly (no Service, no singleton bridge): mic capture only ever runs while the
+    // webview is alive and Vizuzik is in the foreground (see applyAudioSource() in main.js,
+    // which stops it the moment the app is backgrounded), so its lifetime can just follow the
+    // plugin's own.
+    private MicCaptureThread micCaptureThread;
 
     @Override
     protected void handleOnStart() {
@@ -53,6 +66,11 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         // again without redoing the whole consent flow, since nothing re-requested it. It's
         // stopped for real in AudioCaptureService#onTaskRemoved(), when the user removes
         // Vizuzik from recents.
+        //
+        // The mic thread has no such reason to survive: it isn't a Service, and the whole point
+        // of it is that it's cheap to re-acquire, so any teardown of this plugin/webview takes
+        // it down too rather than leaking a live AudioRecord.
+        stopMicCaptureInternal();
     }
 
     @PluginMethod
@@ -392,6 +410,67 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     private void stopAudioCaptureService() {
         getContext().stopService(new Intent(getContext(), AudioCaptureService.class));
+    }
+
+    /**
+     * Starts the "micro" source: a plain AudioRecord on the phone's own microphone (see
+     * MicCaptureThread for why it's deliberately not the WebView's getUserMedia()). Just the
+     * ordinary RECORD_AUDIO runtime permission — requested here if not already granted — with no
+     * system consent dialog and no MediaProjection, so unlike startVisualizerCapture() this is
+     * safe to call from an automatic, no-user-gesture path.
+     */
+    @PluginMethod
+    public void startMicCapture(PluginCall call) {
+        if (micCaptureThread != null) {
+            call.resolve();
+            return;
+        }
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            beginMicCapture(call);
+        } else {
+            requestPermissionForAlias("microphone", call, "handleMicPermissionResult");
+        }
+    }
+
+    @PermissionCallback
+    private void handleMicPermissionResult(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            beginMicCapture(call);
+        } else {
+            call.reject("denied");
+        }
+    }
+
+    private void beginMicCapture(PluginCall call) {
+        MicCaptureThread thread = new MicCaptureThread(levels -> {
+            JSArray array = new JSArray();
+            for (float level : levels) {
+                array.put((Object) level);
+            }
+            JSObject result = new JSObject();
+            result.put("levels", array);
+            notifyListeners("micLevels", result);
+        });
+        if (!thread.prepare()) {
+            call.reject("unsupported");
+            return;
+        }
+        micCaptureThread = thread;
+        thread.start();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopMicCapture(PluginCall call) {
+        stopMicCaptureInternal();
+        call.resolve();
+    }
+
+    private void stopMicCaptureInternal() {
+        if (micCaptureThread != null) {
+            micCaptureThread.stopCapture();
+            micCaptureThread = null;
+        }
     }
 
     @Override

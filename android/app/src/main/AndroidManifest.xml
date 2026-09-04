@@ -82,11 +82,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
-    <!-- Micro mode: Capacitor's own WebChromeClient already requests these at runtime the moment
-         the page calls getUserMedia({audio: true}) — see BridgeWebChromeClient in
-         @capacitor/android — they just need to be declared here for that request to be legal. -->
+    <!-- Micro mode: a plain AudioRecord on the phone's own mic (see MicCaptureThread.java),
+         deliberately not the WebView's getUserMedia() — that path is WebRTC-shaped under the
+         hood and pulls Android's audio mode into its "in a call" state for as long as it's open,
+         which over Bluetooth is what makes a connected car head unit switch into its own
+         phone-call UI. DeezerMediaPlugin requests this at runtime itself (the "microphone"
+         permission alias), same as any other dangerous permission. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Without this, PackageManager#getApplicationInfo(...) / getLaunchIntentForPackage(...)
          can fail on Android 11+ package-visibility restrictions, breaking both the UID lookup
