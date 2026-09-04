@@ -9,6 +9,7 @@ import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
@@ -17,6 +18,9 @@ import android.view.WindowManager;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
+
+import java.text.DateFormat;
+import java.util.Date;
 
 /**
  * Draws EdgeGlowView as a touch-transparent window on top of whatever app is in front — Deezer,
@@ -38,15 +42,24 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
     private static final int NOTIFICATION_ID = 4243;
 
     private WindowManager windowManager;
+    private NotificationManager notificationManager;
     private EdgeGlowView glowView;
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
 
+    // Diagnostic only, temporary: proves whether EdgeGlowView's render loop is actually still
+    // ticking on a given device by surfacing a live counter in this service's own ongoing
+    // notification — the one thing observable without a logcat capture from whoever is testing
+    // it. To remove once the "the glow looks frozen" reports are resolved one way or the other.
+    private int tickCount;
+    private long lastNotificationUpdateAtMs;
+
     @Override
     public void onCreate() {
         super.onCreate();
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        notificationManager = getSystemService(NotificationManager.class);
     }
 
     @Override
@@ -103,23 +116,42 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             return false;
         }
         glowView = view;
+        glowView.setTickListener(this::onGlowTick);
         return true;
     }
 
+    /**
+     * Diagnostic only (see the field comments above): bumps a counter and, once a second,
+     * rewrites the ongoing notification with it plus a wall-clock time. If this stops advancing
+     * in the notification shade while the glow itself looks frozen, the render loop genuinely
+     * isn't ticking on that device; if it keeps advancing while the glow still looks frozen, the
+     * bug is downstream of the loop (drawing or window compositing), not the loop itself.
+     */
+    private void onGlowTick() {
+        tickCount++;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastNotificationUpdateAtMs < 1000) return;
+        lastNotificationUpdateAtMs = now;
+        startForegroundNotification("Effets actifs — image #" + tickCount + " (" + DateFormat.getTimeInstance().format(new Date()) + ")");
+    }
+
     private void startForegroundNotification() {
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+        startForegroundNotification("Effets visuels actifs par-dessus l'app de musique");
+    }
+
+    private void startForegroundNotification(String text) {
+        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Effets par-dessus l'app de musique",
                 NotificationManager.IMPORTANCE_MIN
             );
             channel.setDescription("Contour lumineux affiché par-dessus Deezer ou Spotify.");
-            manager.createNotificationChannel(channel);
+            notificationManager.createNotificationChannel(channel);
         }
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Vizuzik")
-            .setContentText("Effets visuels actifs par-dessus l'app de musique")
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)

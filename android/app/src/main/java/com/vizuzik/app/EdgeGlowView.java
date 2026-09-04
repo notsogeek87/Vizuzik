@@ -58,6 +58,10 @@ final class EdgeGlowView extends View {
     private final float density;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tick = this::onTick;
+    // Diagnostic only: lets OverlayEdgeGlowService prove the loop is actually still running (by
+    // surfacing a live counter in its own notification) without needing a logcat capture from
+    // the person testing it — see the service for why this was worth adding.
+    private Runnable tickListener;
 
     private int[][] fromPalette = FALLBACK_PALETTE;
     private int[][] toPalette = FALLBACK_PALETTE;
@@ -94,6 +98,10 @@ final class EdgeGlowView extends View {
         fromPalette = currentPalette();
         toPalette = palette != null ? palette : FALLBACK_PALETTE;
         paletteBlendStartMs = SystemClock.elapsedRealtime();
+    }
+
+    void setTickListener(Runnable listener) {
+        this.tickListener = listener;
     }
 
     void setLive(boolean live) {
@@ -179,6 +187,7 @@ final class EdgeGlowView extends View {
             ambientPhase += dtMs;
 
             invalidate();
+            if (tickListener != null) tickListener.run();
         } catch (Exception e) {
             Log.w(TAG, "onTick", e);
         } finally {
