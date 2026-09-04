@@ -10,6 +10,7 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.WindowManager;
 
@@ -32,6 +33,7 @@ import androidx.core.app.ServiceCompat;
  */
 public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
+    private static final String TAG = "OverlayEdgeGlow";
     private static final String CHANNEL_ID = "vizuzik_overlay";
     private static final int NOTIFICATION_ID = 4243;
 
@@ -57,8 +59,16 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             return START_NOT_STICKY;
         }
 
-        if (glowView == null) {
-            addOverlayView();
+        if (glowView == null && !addOverlayView()) {
+            // addView() can still throw even with the permission granted — some OEM skins gate
+            // TYPE_APPLICATION_OVERLAY further, or the grant hasn't fully propagated yet. This
+            // runs on the app's main thread like everything else in the process: an uncaught
+            // exception here would crash Vizuzik itself, not just this service, so failing to
+            // add the view is treated as "can't run right now" rather than left to propagate.
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+        if (glowView != null) {
             DeezerMediaBridge.getInstance().addListener(this);
             AudioLevelsBridge.getInstance().addListener(this);
             onNowPlayingChanged(DeezerMediaBridge.getInstance().getLastNowPlaying());
@@ -66,8 +76,9 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
         return START_STICKY;
     }
 
-    private void addOverlayView() {
-        glowView = new EdgeGlowView(this);
+    /** @return whether the view was actually added. */
+    private boolean addOverlayView() {
+        EdgeGlowView view = new EdgeGlowView(this);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -83,7 +94,14 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
-        windowManager.addView(glowView, params);
+        try {
+            windowManager.addView(view, params);
+        } catch (Exception e) {
+            Log.w(TAG, "Impossible d'ajouter la fenêtre du contour lumineux", e);
+            return false;
+        }
+        glowView = view;
+        return true;
     }
 
     private void startForegroundNotification() {
@@ -116,12 +134,26 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
         String trackKey = nowPlaying.title + "::" + nowPlaying.artist;
         if (trackKey.equals(lastTrackKey)) return;
         lastTrackKey = trackKey;
-        glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
+        // Runs on the main thread (MediaController.Callback dispatch) like the rest of this
+        // service — same reasoning as EdgeGlowView's own try/catch: a bad frame of artwork must
+        // never be able to bring down the whole app.
+        try {
+            glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
+        } catch (Exception e) {
+            Log.w(TAG, "onNowPlayingChanged", e);
+        }
     }
 
     @Override
     public void onLevels(float[] levels) {
-        if (glowView != null) glowView.pushLevels(levels);
+        // Called on AudioCaptureService's own capture thread, not the main thread — but an
+        // uncaught exception on any thread still takes down the whole app by default, so this
+        // gets the same guard as the main-thread callbacks above.
+        try {
+            if (glowView != null) glowView.pushLevels(levels);
+        } catch (Exception e) {
+            Log.w(TAG, "onLevels", e);
+        }
     }
 
     @Override
@@ -148,8 +180,9 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
         if (glowView != null && windowManager != null) {
             try {
                 windowManager.removeView(glowView);
-            } catch (IllegalArgumentException ignored) {
-                // Already detached.
+            } catch (Exception ignored) {
+                // Already detached, or some other teardown quirk — either way, nothing left to
+                // clean up here, and onDestroy() must never itself be the thing that crashes.
             }
             glowView = null;
         }

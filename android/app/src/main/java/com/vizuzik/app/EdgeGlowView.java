@@ -7,6 +7,7 @@ import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Shader;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.Choreographer;
 import android.view.View;
 
@@ -26,6 +27,7 @@ import android.view.View;
  */
 final class EdgeGlowView extends View implements Choreographer.FrameCallback {
 
+    private static final String TAG = "EdgeGlowView";
     private static final int[][] FALLBACK_PALETTE = {
         { 124, 92, 255 },
         { 236, 72, 153 },
@@ -128,30 +130,49 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
 
     @Override
     public void doFrame(long frameTimeNanos) {
-        long now = SystemClock.elapsedRealtime();
-        long dtMs = Math.max(0, Math.min(200, now - lastFrameMs));
-        lastFrameMs = now;
+        // This callback and onDraw() below both run on the app's single main thread — the same
+        // one the whole webview and every Activity run on. An exception escaping either of them
+        // would crash the entire app, not just this decorative overlay, so both are defensive
+        // about anything unexpected (a null palette entry, a transient view-detach race) rather
+        // than ever letting that happen for the sake of a border glow.
+        try {
+            long now = SystemClock.elapsedRealtime();
+            long dtMs = Math.max(0, Math.min(200, now - lastFrameMs));
+            lastFrameMs = now;
 
-        colorShift = (colorShift + dtMs / (float) COLOR_TRAVEL_MS * 3f) % 3f;
+            colorShift = (colorShift + dtMs / (float) COLOR_TRAVEL_MS * 3f) % 3f;
 
-        if (pendingBeat) {
-            pendingBeat = false;
-            beatEnergy = 1f;
+            if (pendingBeat) {
+                pendingBeat = false;
+                beatEnergy = 1f;
+            }
+            // Same 0.9-per-~16.7ms decay as visualizer.js's beatEnergy *= 0.9, scaled to whatever
+            // this loop's actual frame interval turns out to be.
+            beatEnergy *= (float) Math.pow(0.9, dtMs / 16.7);
+
+            ambientPhase += dtMs;
+
+            invalidate();
+        } catch (Exception e) {
+            Log.w(TAG, "doFrame", e);
+        } finally {
+            // Roughly 24fps: plenty smooth for a soft border glow, a third of the redraw work of
+            // a full 60fps loop for something that runs for as long as the music plays underneath.
+            // Kept outside the try body so one bad frame doesn't also kill every frame after it.
+            Choreographer.getInstance().postFrameCallback(this);
         }
-        // Same 0.9-per-~16.7ms decay as visualizer.js's beatEnergy *= 0.9, scaled to whatever
-        // this loop's actual frame interval turns out to be.
-        beatEnergy *= (float) Math.pow(0.9, dtMs / 16.7);
-
-        ambientPhase += dtMs;
-
-        invalidate();
-        // Roughly 24fps: plenty smooth for a soft border glow, a third of the redraw work of a
-        // full 60fps loop for something that runs for as long as the music plays underneath.
-        Choreographer.getInstance().postFrameCallback(this);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
+        try {
+            drawGlow(canvas);
+        } catch (Exception e) {
+            Log.w(TAG, "onDraw", e);
+        }
+    }
+
+    private void drawGlow(Canvas canvas) {
         int width = getWidth();
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
