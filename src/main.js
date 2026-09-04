@@ -764,12 +764,10 @@ function updateOverlayStatusBadge() {
   }
   els.overlayStatus.hidden = false;
 
-  if (!overlayPermissionGranted) {
-    setOverlayBadge("simulated", "▶ Effets sur Deezer");
-    return;
-  }
-  if (!edgeOverlayEnabled) {
-    setOverlayBadge("simulated", "○ Effets sur Deezer");
+  // Whether it's the system permission or just the setting that's missing, the action is the
+  // same tap either way — no reason to tell the two apart in the label itself.
+  if (!overlayPermissionGranted || !edgeOverlayEnabled) {
+    setOverlayBadge("simulated", "▶ Activer les effets sur Deezer");
     return;
   }
   setOverlayBadge(edgeOverlayRunning ? "live" : "silent", edgeOverlayRunning ? "● Effets actifs" : "● Effets prêts");

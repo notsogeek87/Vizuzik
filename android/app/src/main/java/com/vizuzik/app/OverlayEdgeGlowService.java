@@ -40,6 +40,8 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
     private WindowManager windowManager;
     private EdgeGlowView glowView;
     private String lastTrackKey;
+    private boolean lastIsPlaying;
+    private boolean hasLastIsPlaying;
 
     @Override
     public void onCreate() {
@@ -131,17 +133,29 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
     @Override
     public void onNowPlayingChanged(DeezerMediaBridge.NowPlaying nowPlaying) {
         if (glowView == null || nowPlaying == null) return;
+
+        // A real event, same two the full-screen player pulses on (see setNowPlaying() in
+        // main.js): a new track landing, or play/pause toggling. Without AudioLevelsBridge
+        // running (no "son réel" capture granted), these are the *only* honest impulses the
+        // glow is allowed — ambient mode breathes on its own otherwise, but never invents a beat.
         String trackKey = nowPlaying.title + "::" + nowPlaying.artist;
-        if (trackKey.equals(lastTrackKey)) return;
-        lastTrackKey = trackKey;
-        // Runs on the main thread (MediaController.Callback dispatch) like the rest of this
-        // service — same reasoning as EdgeGlowView's own try/catch: a bad frame of artwork must
-        // never be able to bring down the whole app.
-        try {
-            glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
-        } catch (Exception e) {
-            Log.w(TAG, "onNowPlayingChanged", e);
+        boolean isNewTrack = !trackKey.equals(lastTrackKey);
+        if (isNewTrack) {
+            lastTrackKey = trackKey;
+            // Runs on the main thread (MediaController.Callback dispatch) like the rest of this
+            // service — same reasoning as EdgeGlowView's own try/catch: a bad frame of artwork
+            // must never be able to bring down the whole app.
+            try {
+                glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
+            } catch (Exception e) {
+                Log.w(TAG, "onNowPlayingChanged", e);
+            }
+            glowView.pulse(1f);
+        } else if (hasLastIsPlaying && nowPlaying.isPlaying != lastIsPlaying) {
+            glowView.pulse(0.55f);
         }
+        lastIsPlaying = nowPlaying.isPlaying;
+        hasLastIsPlaying = true;
     }
 
     @Override

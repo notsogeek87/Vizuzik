@@ -86,6 +86,16 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
         }
     }
 
+    /**
+     * A real, honest impulse — a track change or a play/pause — the only kind ambient mode is
+     * allowed to show (see docs/architecture/2026-09-03-rythme-hors-capture.md: no invented
+     * beat, but a real event may still land visibly). Called from OverlayEdgeGlowService.
+     * Harmless in live mode too: real beats already drive beatEnergy just as strongly.
+     */
+    void pulse(float strength) {
+        beatEnergy = Math.max(beatEnergy, clamp01(strength));
+    }
+
     /** Called from AudioCaptureService's capture thread via AudioLevelsBridge. */
     void pushLevels(float[] bands) {
         if (bands == null || bands.length == 0) return;
@@ -178,11 +188,13 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
         if (width <= 0 || height <= 0) return;
 
         int color = displayColor();
+        // beatEnergy carries either a real detected beat (live) or a real event's pulse() —
+        // track change, play/pause — in both regimes; see pulse() above for why ambient mode is
+        // still allowed this much.
+        float pulse = clamp01(beatEnergy);
         float strength;
-        float pulse;
         if (live) {
             strength = clamp01(level);
-            pulse = clamp01(beatEnergy);
         } else {
             // Slow, symmetric breathing — no beat, no invented tempo, just three incommensurate
             // waves summed and rescaled into a gentle 0.25..0.55 band.
@@ -190,7 +202,6 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
             double b = Math.sin(ambientPhase / 48_000.0 * Math.PI * 2 + 1.7);
             double c = Math.sin(ambientPhase / 82_000.0 * Math.PI * 2 + 3.1);
             strength = (float) (0.4 + (a + b + c) / 3.0 * 0.15);
-            pulse = 0f;
         }
 
         float thicknessDp = 10f + strength * 30f + pulse * 16f;
