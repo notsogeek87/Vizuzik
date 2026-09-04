@@ -6,9 +6,10 @@ import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Shader;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
-import android.view.Choreographer;
 import android.view.View;
 
 /**
@@ -27,9 +28,17 @@ import android.view.View;
  * color itself drifts across the current track's three accent colors, and a real event (a track
  * change, a play/pause) is still allowed an honest pulse — see pulse() below.
  */
-final class EdgeGlowView extends View implements Choreographer.FrameCallback {
+final class EdgeGlowView extends View {
 
     private static final String TAG = "EdgeGlowView";
+    // A plain Handler loop rather than Choreographer.postFrameCallback(): this view belongs to a
+    // Service's overlay window, not an Activity, and on-device testing showed Choreographer's
+    // vsync-driven callbacks never firing a second time for it on at least one device/Android
+    // build — leaving the very first frame on screen forever, a border that looked "on" but
+    // never moved. A Handler tied to the main Looper's own message queue has no such dependency
+    // on the window being considered for vsync by the system; a plain border glow doesn't need
+    // frame-perfect vsync timing anyway.
+    private static final long FRAME_INTERVAL_MS = 42; // ~24fps
     private static final int[][] FALLBACK_PALETTE = {
         { 124, 92, 255 },
         { 236, 72, 153 },
@@ -47,6 +56,8 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
 
     private final Paint paint = new Paint();
     private final float density;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable tick = this::onTick;
 
     private int[][] fromPalette = FALLBACK_PALETTE;
     private int[][] toPalette = FALLBACK_PALETTE;
@@ -137,22 +148,21 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         lastFrameMs = SystemClock.elapsedRealtime();
-        Choreographer.getInstance().postFrameCallback(this);
+        handler.post(tick);
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        Choreographer.getInstance().removeFrameCallback(this);
+        handler.removeCallbacks(tick);
         super.onDetachedFromWindow();
     }
 
-    @Override
-    public void doFrame(long frameTimeNanos) {
-        // This callback and onDraw() below both run on the app's single main thread — the same
-        // one the whole webview and every Activity run on. An exception escaping either of them
-        // would crash the entire app, not just this decorative overlay, so both are defensive
-        // about anything unexpected (a null palette entry, a transient view-detach race) rather
-        // than ever letting that happen for the sake of a border glow.
+    private void onTick() {
+        // This and onDraw() below both run on the app's single main thread — the same one the
+        // whole webview and every Activity run on. An exception escaping either of them would
+        // crash the entire app, not just this decorative overlay, so both are defensive about
+        // anything unexpected (a null palette entry, a transient view-detach race) rather than
+        // ever letting that happen for the sake of a border glow.
         try {
             long now = SystemClock.elapsedRealtime();
             long dtMs = Math.max(0, Math.min(200, now - lastFrameMs));
@@ -170,12 +180,10 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
 
             invalidate();
         } catch (Exception e) {
-            Log.w(TAG, "doFrame", e);
+            Log.w(TAG, "onTick", e);
         } finally {
-            // Roughly 24fps: plenty smooth for a soft border glow, a third of the redraw work of
-            // a full 60fps loop for something that runs for as long as the music plays underneath.
-            // Kept outside the try body so one bad frame doesn't also kill every frame after it.
-            Choreographer.getInstance().postFrameCallback(this);
+            // Kept outside the try body so one bad tick doesn't also kill every tick after it.
+            handler.postDelayed(tick, FRAME_INTERVAL_MS);
         }
     }
 
