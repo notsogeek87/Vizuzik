@@ -189,9 +189,18 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build();
-        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-            ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            : 0;
+        // MICROPHONE is included unconditionally (not only once maybeStartMicCapture() actually
+        // succeeds): the type has to be declared before the mic is touched, and re-calling
+        // startForeground() later with a wider type is more moving parts than just declaring the
+        // capability from the very first call — a declared-but-unused type is harmless.
+        int type;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        } else {
+            type = 0;
+        }
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type);
     }
 

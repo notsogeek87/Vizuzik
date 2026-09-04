@@ -134,6 +134,15 @@ choix qu'il représente, pas au-delà. Un service en arrière-plan ne pouvant pa
 de permission, l'absence de `RECORD_AUDIO` déjà accordé fait simplement retomber sur le régime
 ambiant plutôt que d'échouer.
 
+**Piège rencontré :** la capture démarrait bien, mais s'arrêtait silencieusement au bout de
+quelques secondes — Android coupe l'accès au micro en arrière-plan à un service de premier plan
+qui n'a pas déclaré le type `microphone` (obligatoire à partir d'Android 14, mais la restriction
+existe dès Android 10). `OverlayEdgeGlowService` ne déclarait que `specialUse`. Corrigé en
+déclarant les deux types à la fois dans le manifeste (`specialUse|microphone`) et dans l'appel à
+`startForeground()`, dès le tout premier démarrage du service — pas seulement une fois que
+`maybeStartMicCapture()` réussit réellement, pour ne pas avoir à rappeler `startForeground()` une
+seconde fois avec un type élargi.
+
 ### Vizuzik n'ouvre plus Deezer/Spotify tout seul
 
 [Choisir puis lancer l'app de musique soi-même](2026-09-03-lancement-automatique-deezer.md)
