@@ -367,6 +367,8 @@ body[data-state="playing"] .cassette__reel {
   transition: opacity 0.3s ease;
 }
 
+/* Always tappable: this badge is the switcher between the three audio sources (mic → real →
+   off), not just a one-shot opt-in — see cycleAudioSource() in main.js. */
 .capture-status {
   padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -379,11 +381,15 @@ body[data-state="playing"] .cassette__reel {
   font-weight: 600;
   letter-spacing: 0.01em;
   color: rgba(247, 248, 252, 0.55);
-  cursor: default;
+  cursor: pointer;
   max-width: 62vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.capture-status:active {
+  transform: scale(0.96);
 }
 
 .capture-status[data-status="live"] {
@@ -397,17 +403,11 @@ body[data-state="playing"] .cassette__reel {
   border-color: rgba(251, 191, 36, 0.3);
 }
 
-/* Only actionable while simulated and idle: tapping it is how you opt in to real audio
-   capture, instead of the system permission dialog popping up as a surprise on mode switch. */
-.capture-status[data-status="simulated"]:not(:disabled) {
+/* The "not currently listening" look — off, or mic/real idle and waiting for a tap. */
+.capture-status[data-status="simulated"] {
   background: linear-gradient(135deg, rgba(var(--c1), 0.9), rgba(var(--c2), 0.9));
   border-color: transparent;
   color: #fff;
-  cursor: pointer;
-}
-
-.capture-status[data-status="simulated"]:not(:disabled):active {
-  transform: scale(0.96);
 }
 
 .mode-toggle {

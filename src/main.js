@@ -2,6 +2,7 @@ import { registerPlugin } from "@capacitor/core";
 import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
 import { extractPalette } from "./palette.js";
 import { PlaybackProgress } from "./progress.js";
+import { MicCapture } from "./mic.js";
 
 const DeezerMedia = registerPlugin("DeezerMedia");
 
@@ -306,19 +307,103 @@ async function resolveMusicApp() {
   return resolved;
 }
 
-/* ------------------------------------------------------------------ audio capture */
+/* ------------------------------------------------------------------ audio source */
 
-// Real capture needs Android's MediaProjection consent — the system "start recording" dialog.
-// It cannot be avoided (CAPTURE_AUDIO_OUTPUT is a privileged permission), so everything here is
-// about meeting it as rarely as possible: explain it once before it appears, keep the grant it
-// produces alive for as long as the app lives, and never re-ask on a whim.
+// Vizuzik can drive the visualizer from three sources, cycled by tapping the badge:
+//   mic  - the phone's own microphone (getUserMedia). No MediaProjection consent needed, just
+//          the ordinary RECORD_AUDIO permission, which Android remembers for good — so this is
+//          the only source it's safe to start on its own, and the default.
+//   real - the tracked app's own audio output, via Android's MediaProjection ("share your
+//          screen") consent. That dialog cannot be avoided and Android makes you face it again
+//          every single app launch, so it is NEVER requested automatically — only an explicit
+//          tap on the badge starts it.
+//   off  - neither: the visualizer falls back to its own ambient animation.
+const AUDIO_SOURCES = ["mic", "real", "off"];
+const AUDIO_SOURCE_KEY = "vizuzik:audioSource";
 
-const CAPTURE_INTENT_KEY = "vizuzik:realAudio";
+function readAudioSource() {
+  try {
+    const stored = localStorage.getItem(AUDIO_SOURCE_KEY);
+    return AUDIO_SOURCES.includes(stored) ? stored : "mic";
+  } catch (err) {
+    return "mic";
+  }
+}
 
-// "on" once a grant actually went through, "off" once the user declined it, null while they've
-// never been asked. An "on" user is taken straight to the system dialog on the next launch
-// rather than having to find the badge first and then face the dialog anyway.
-let captureIntent = readCaptureIntent();
+let audioSource = readAudioSource();
+
+function rememberAudioSource(value) {
+  try {
+    localStorage.setItem(AUDIO_SOURCE_KEY, value);
+  } catch (err) {
+    /* see readAudioSource() */
+  }
+}
+
+/* --- microphone --- */
+
+const mic = new MicCapture();
+let micSupported = mic.supported;
+let micRunning = false;
+let micPending = false;
+let micError = null;
+
+mic.onLevels = (levels) => {
+  if (audioSource === "mic") visualizer.setLevels(levels);
+};
+
+function startMic() {
+  if (micRunning || micPending || !micSupported) return;
+  micPending = true;
+  micError = null;
+  mic
+    .start()
+    .then(() => {
+      micPending = false;
+      micRunning = true;
+    })
+    .catch((err) => {
+      micPending = false;
+      const name = err && err.name;
+      if (name === "NotFoundError" || name === "NotSupportedError" || name === "OverconstrainedError") {
+        micSupported = false;
+        micError = "micro indisponible";
+      } else if (name === "NotAllowedError" || name === "SecurityError") {
+        micError = "autorisation refusée";
+      } else {
+        micError = "erreur micro";
+      }
+    });
+}
+
+function stopMic() {
+  mic.stop();
+  micRunning = false;
+  micPending = false;
+}
+
+/* --- app audio (MediaProjection) --- */
+
+// Whether the first-ever explainer sheet has already been shown and accepted — only ever
+// written "on"; there is no automatic re-request left to guard against (see AUDIO_SOURCES above).
+const CAPTURE_SHEET_SEEN_KEY = "vizuzik:realAudio";
+
+function hasCaptureSheetBeenSeen() {
+  try {
+    return localStorage.getItem(CAPTURE_SHEET_SEEN_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function rememberCaptureSheetSeen() {
+  try {
+    localStorage.setItem(CAPTURE_SHEET_SEEN_KEY, "on");
+  } catch (err) {
+    /* see hasCaptureSheetBeenSeen() */
+  }
+}
+
 // Assumed until the native side says otherwise, so an older native build without
 // getCaptureState() still gets the manual badge rather than a permanently disabled one.
 let captureSupported = true;
@@ -326,12 +411,6 @@ let captureSupported = true;
 // in the webview and are wiped whenever it's recreated; the service outlives that.
 let captureRunning = false;
 let capturePending = false;
-// Set once the native side has answered (or proved too old to answer). Nothing is requested
-// before that: asking blind would mean a round-trip for a capture that may already be running,
-// or on a device that can't capture at all.
-let captureStateKnown = false;
-// At most one automatic request per app session — a decline is never nagged.
-let autoRequested = false;
 let lastCaptureError = null;
 let captureWatchdog = null;
 
@@ -341,25 +420,6 @@ const CAPTURE_ERROR_LABELS = {
   unsupported: "appareil non compatible",
 };
 
-function readCaptureIntent() {
-  try {
-    const stored = localStorage.getItem(CAPTURE_INTENT_KEY);
-    return stored === "on" || stored === "off" ? stored : null;
-  } catch (err) {
-    // Storage disabled: the flow still works, it just asks again next launch.
-    return null;
-  }
-}
-
-function rememberCaptureIntent(value) {
-  captureIntent = value;
-  try {
-    localStorage.setItem(CAPTURE_INTENT_KEY, value);
-  } catch (err) {
-    /* see readCaptureIntent() */
-  }
-}
-
 function clearCaptureWatchdog() {
   if (captureWatchdog != null) {
     clearTimeout(captureWatchdog);
@@ -367,10 +427,7 @@ function clearCaptureWatchdog() {
   }
 }
 
-/**
- * Re-reads the native capture state and, if the user already opted in, gets the consent out of
- * the way immediately. Called on launch and on every resume.
- */
+/** Re-reads the native capture state. Called on launch and on every resume. */
 async function syncCaptureState() {
   try {
     const state = await DeezerMedia.getCaptureState();
@@ -384,19 +441,10 @@ async function syncCaptureState() {
   } catch (err) {
     // Older native build without getCaptureState(): leave the manual badge as the only path.
   }
-  captureStateKnown = true;
-  maybeAutoRequestCapture();
-}
-
-// The whole point of remembering the opt-in: a returning user gets the system dialog once, at a
-// moment they're already looking at the player, instead of tapping a badge to summon it. Guarded
-// so it can never fire in the background, on a screen that isn't the player, or a second time.
-function maybeAutoRequestCapture() {
-  if (!captureStateKnown || captureIntent !== "on" || !captureSupported) return;
-  if (autoRequested || captureRunning || capturePending) return;
-  if (els.player.hidden || document.visibilityState !== "visible") return;
-  autoRequested = true;
-  startCapture();
+  // A returning user whose service died in the background (or who switched away from "real"
+  // last session) is never re-prompted here — only applyAudioSource() reacting to an explicit
+  // tap ever calls startCapture(). This purely reconciles the badge with reality.
+  applyAudioSource();
 }
 
 function startCapture() {
@@ -421,7 +469,6 @@ function startCapture() {
       clearCaptureWatchdog();
       capturePending = false;
       captureRunning = true;
-      rememberCaptureIntent("on");
     })
     .catch((err) => {
       clearCaptureWatchdog();
@@ -429,16 +476,30 @@ function startCapture() {
       const reason = (err && err.message) || String(err);
       if (reason === "unsupported") {
         captureSupported = false;
-      } else if (reason === "denied") {
-        // Declining is an answer, not a failure: remember it so no later launch pops the dialog
-        // again by itself. The badge is still there if they change their mind.
-        rememberCaptureIntent("off");
       }
       lastCaptureError = CAPTURE_ERROR_LABELS[reason] || reason;
     });
 }
 
-/* --- the explainer sheet --- */
+function stopCapture() {
+  if (!captureRunning && !capturePending) return;
+  clearCaptureWatchdog();
+  captureRunning = false;
+  capturePending = false;
+  DeezerMedia.stopVisualizerCapture().catch(() => {});
+}
+
+/** Starts real capture, showing the one-time explainer sheet first if it's never been seen. */
+function activateRealCapture() {
+  if (captureRunning || capturePending || !captureSupported) return;
+  if (!hasCaptureSheetBeenSeen()) {
+    openCaptureSheet();
+    return;
+  }
+  startCapture();
+}
+
+/* --- the explainer sheet (real capture only) --- */
 
 // Shown once, before the very first system dialog. The dialog itself talks about recording the
 // screen, which is alarming and misleading here; arriving at it already knowing what it's for
@@ -462,56 +523,97 @@ function closeCaptureSheet() {
   }, 260);
 }
 
-function onCaptureBadgeClick() {
-  if (captureRunning || capturePending) return;
-  // First time only: explain, then hand over to the system. Afterwards they know what's coming,
-  // so an extra screen would just be another tap between them and the music.
-  if (captureIntent === null) {
-    openCaptureSheet();
-    return;
+/* --- orchestration --- */
+
+/**
+ * Stops whichever source(s) aren't selected and starts the selected one — but only while the
+ * player is actually on screen and foregrounded, so nothing ever runs (or gets requested)
+ * against an empty or backgrounded app.
+ *
+ * `userInitiated` gates real capture specifically: starting it means the system MediaProjection
+ * dialog, which Android re-shows on every request with no memory of past grants — so it is only
+ * ever requested from an actual tap on the badge (see cycleAudioSource()), never from launch,
+ * resume, or a track change reconciling this against the native state.
+ */
+function applyAudioSource({ userInitiated = false } = {}) {
+  if (audioSource !== "real") stopCapture();
+  if (audioSource !== "mic" && (micRunning || micPending)) stopMic();
+
+  if (els.player.hidden || document.visibilityState !== "visible") return;
+
+  if (audioSource === "mic") {
+    startMic();
+  } else if (audioSource === "real" && userInitiated) {
+    activateRealCapture();
   }
-  startCapture();
+}
+
+function cycleAudioSource() {
+  const nextIndex = (AUDIO_SOURCES.indexOf(audioSource) + 1) % AUDIO_SOURCES.length;
+  audioSource = AUDIO_SOURCES[nextIndex];
+  rememberAudioSource(audioSource);
+  applyAudioSource({ userInitiated: true });
+  updateCaptureStatusBadge();
 }
 
 /* --- the badge --- */
 
-// Answers "is this really reacting to Deezer's audio?" on-screen instead of leaving it a
-// mystery, and doubles as the way to opt in: tapping it while inactive is what starts the
-// consent flow (see onCaptureBadgeClick()).
+// Answers "is this really reacting to real audio right now?" on-screen instead of leaving it a
+// mystery, and doubles as the source switcher: tapping it cycles mic → real → off → mic.
 function updateCaptureStatusBadge() {
-  // Nothing to offer on a device that can't capture, and nothing to report off the player.
-  if (els.player.hidden || !captureSupported) {
+  if (els.player.hidden) {
     els.captureStatus.hidden = true;
     return;
   }
   els.captureStatus.hidden = false;
 
-  if (capturePending) {
-    setBadge("simulated", "● Connexion…", true);
+  if (audioSource === "off") {
+    setBadge("simulated", "○ Ambiance");
     return;
   }
 
+  if (audioSource === "mic") {
+    if (!micSupported) {
+      setBadge("simulated", micError ? `↻ Micro (${micError})` : "Micro indisponible");
+      return;
+    }
+    if (micPending) {
+      setBadge("simulated", "● Connexion micro…");
+      return;
+    }
+    if (micRunning) {
+      const status = visualizer.captureStatus;
+      if (status === "silent") setBadge("silent", "● Micro (silencieux)");
+      else if (status === "live") setBadge("live", "● Micro");
+      else setBadge("live", isPlaying ? "● Micro (signal faible)" : "● Micro prêt");
+      return;
+    }
+    setBadge("simulated", micError ? `↻ Micro (${micError})` : "▶ Activer le micro");
+    return;
+  }
+
+  // audioSource === "real"
+  if (!captureSupported) {
+    setBadge("simulated", "Son réel indisponible");
+    return;
+  }
+  if (capturePending) {
+    setBadge("simulated", "● Connexion…");
+    return;
+  }
   if (captureRunning) {
     const status = visualizer.captureStatus;
-    if (status === "silent") {
-      setBadge("silent", "● Son réel (silencieux)", true);
-    } else if (status === "live") {
-      setBadge("live", "● Son réel", true);
-    } else {
-      // Capture is alive but no levels are coming through: normal while paused, and worth
-      // saying plainly rather than inviting a pointless second trip through the dialog.
-      setBadge("live", isPlaying ? "● Son réel (signal faible)" : "● Son réel prêt", true);
-    }
+    if (status === "silent") setBadge("silent", "● Son réel (silencieux)");
+    else if (status === "live") setBadge("live", "● Son réel");
+    else setBadge("live", isPlaying ? "● Son réel (signal faible)" : "● Son réel prêt");
     return;
   }
-
-  setBadge("simulated", lastCaptureError ? `↻ Son réel (${lastCaptureError})` : "▶ Activer le son réel", false);
+  setBadge("simulated", lastCaptureError ? `↻ Son réel (${lastCaptureError})` : "▶ Activer le son réel");
 }
 
-function setBadge(status, label, disabled) {
+function setBadge(status, label) {
   els.captureStatus.dataset.status = status;
   els.captureStatus.textContent = label;
-  els.captureStatus.disabled = disabled;
 }
 
 setInterval(updateCaptureStatusBadge, 500);
@@ -581,9 +683,10 @@ function scheduleFocusRefresh() {
 }
 
 els.modeToggle.addEventListener("click", cycleDisplayMode);
-els.captureStatus.addEventListener("click", onCaptureBadgeClick);
+els.captureStatus.addEventListener("click", cycleAudioSource);
 els.captureAccept.addEventListener("click", () => {
   closeCaptureSheet();
+  rememberCaptureSheetSeen();
   startCapture();
 });
 els.captureLater.addEventListener("click", closeCaptureSheet);
@@ -725,12 +828,15 @@ function showScreen(screen) {
     visualizer.start();
     scheduleFocusRefresh();
     focusForRemote(els.playPause);
-    // A track that starts after a gap is the natural moment to have the consent behind us.
-    maybeAutoRequestCapture();
+    applyAudioSource();
   } else {
     visualizer.stop();
     visualizer.clear();
-    // Deliberately NOT stopping the capture here. This screen is reached whenever Deezer's
+    // The mic has nothing to listen for off the player screen, so it's released here — unlike
+    // real capture just below, re-acquiring it costs nothing (RECORD_AUDIO stays granted, no
+    // dialog reappears).
+    if (micRunning || micPending) stopMic();
+    // Deliberately NOT stopping real capture here. This screen is reached whenever Deezer's
     // session merely goes quiet between tracks or on a pause, and tearing the projection down
     // there meant the system consent dialog had to be faced all over again the moment music
     // came back. The service stops on its own when Vizuzik leaves recents.
@@ -943,7 +1049,7 @@ DeezerMedia.addListener("nowPlayingChanged", (state) => {
 });
 DeezerMedia.addListener("audioLevels", (data) => {
   if (data && data.levels) {
-    visualizer.setLevels(data.levels);
+    if (audioSource === "real") visualizer.setLevels(data.levels);
     // Levels arriving are proof the capture is live, even if this webview was recreated after
     // the grant and never saw the call that produced it.
     captureRunning = true;
@@ -970,6 +1076,9 @@ document.addEventListener("visibilitychange", () => {
     // Nothing to animate against a hidden screen; rAF would be throttled anyway, but this
     // also drops the offscreen buffers' work entirely.
     visualizer.stop();
+    // Same reasoning as leaving the player screen (see showScreen()): the mic costs nothing to
+    // re-acquire, so it's released the moment Vizuzik isn't the thing on screen.
+    if (micRunning || micPending) stopMic();
   }
 });
 
@@ -1002,8 +1111,8 @@ applyDisplayMode(false);
   } else if (app && els.player.hidden) {
     // No session at all: there is no last track to resume, so nothing short of opening the app
     // lets the user pick one. Once they start something, the notification listener picks it up
-    // and maybeAutoRequestCapture() takes the system consent dialog off their hands too, same
-    // as any other launch — and the nowPlayingChanged listener above tries to bring Vizuzik back.
+    // and showScreen("player") arms the mic (see applyAudioSource()), same as any other launch —
+    // and the nowPlayingChanged listener above tries to bring Vizuzik back.
     awaitingFirstTrackAfterLaunch = true;
     DeezerMedia.openMusicApp({ app }).catch(() => {});
   }
