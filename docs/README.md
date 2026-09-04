@@ -18,6 +18,9 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
   — comment Vizuzik décide s'il suit Deezer ou Spotify, pourquoi il ne demande qu'en cas
   d'ambiguïté réelle, et pourquoi il ouvre l'app choisie au lancement plutôt que d'attendre
   qu'on le fasse.
+- [Un contour lumineux par-dessus Deezer, façon MuViz Edge](architecture/2026-09-04-contour-lumineux-par-dessus-deezer.md)
+  — l'overlay décoratif dessiné sur les bords de l'écran par-dessus l'app de musique elle-même,
+  qui s'allume et s'éteint tout seul selon la lecture et selon qui est au premier plan.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des scènes.

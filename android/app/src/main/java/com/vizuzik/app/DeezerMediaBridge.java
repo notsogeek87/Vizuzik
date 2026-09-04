@@ -5,11 +5,15 @@ import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.os.SystemClock;
 
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
+
 /**
  * In-process singleton shared between NowPlayingListenerService (which tracks the currently
- * targeted app's MediaSession — Deezer or Spotify, see MusicAppPreference) and DeezerMediaPlugin
- * (which exposes it to the web layer). Both run in the app's default process, so a static holder
- * is enough — no IPC needed.
+ * targeted app's MediaSession — Deezer or Spotify, see MusicAppPreference) and its two
+ * consumers, DeezerMediaPlugin (exposes it to the web layer) and OverlayEdgeGlowService (drives
+ * the edge-glow overlay drawn over the tracked app itself). All run in the app's default
+ * process, so a static holder is enough — no IPC needed.
  */
 final class DeezerMediaBridge {
 
@@ -83,15 +87,21 @@ final class DeezerMediaBridge {
 
     private MediaController controller;
     private NowPlaying lastNowPlaying;
-    private Listener listener;
+    // A Set, not a single field: the plugin (web layer) and the overlay service both need every
+    // update, at the same time, without either displacing the other the way a single mutable
+    // field would. Copy-on-write because updates are rare (a track or state change) next to how
+    // often a listener set membership is merely iterated.
+    private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
 
     private DeezerMediaBridge() {}
 
-    synchronized void setListener(Listener listener) {
-        this.listener = listener;
-        if (listener != null) {
-            listener.onNowPlayingChanged(lastNowPlaying);
-        }
+    synchronized void addListener(Listener listener) {
+        listeners.add(listener);
+        listener.onNowPlayingChanged(lastNowPlaying);
+    }
+
+    void removeListener(Listener listener) {
+        listeners.remove(listener);
     }
 
     synchronized void setController(MediaController controller) {
@@ -108,7 +118,7 @@ final class DeezerMediaBridge {
 
     synchronized void updateNowPlaying(NowPlaying nowPlaying) {
         this.lastNowPlaying = nowPlaying;
-        if (listener != null) {
+        for (Listener listener : listeners) {
             listener.onNowPlayingChanged(nowPlaying);
         }
     }
@@ -116,7 +126,7 @@ final class DeezerMediaBridge {
     synchronized void clear() {
         this.controller = null;
         this.lastNowPlaying = null;
-        if (listener != null) {
+        for (Listener listener : listeners) {
             listener.onNowPlayingChanged(null);
         }
     }

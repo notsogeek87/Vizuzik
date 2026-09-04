@@ -1,10 +1,13 @@
 package com.vizuzik.app;
 
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
+
 /**
  * In-process singleton shared between AudioCaptureService (which analyzes Deezer's own audio
- * output) and DeezerMediaPlugin (which streams the resulting spectrum to the web layer). Mirrors
- * DeezerMediaBridge's pattern: both run in the app's default process, so a static holder is
- * enough — no IPC needed.
+ * output) and its two consumers, DeezerMediaPlugin (streams the spectrum to the web layer) and
+ * OverlayEdgeGlowService (drives the edge-glow overlay). Mirrors DeezerMediaBridge's pattern:
+ * all run in the app's default process, so a static holder is enough — no IPC needed.
  */
 final class AudioLevelsBridge {
 
@@ -19,7 +22,10 @@ final class AudioLevelsBridge {
         return INSTANCE;
     }
 
-    private Listener listener;
+    // Both consumers need every update as it happens, not whichever registered last — see
+    // DeezerMediaBridge.listeners for the same reasoning. Copy-on-write: publishLevels() runs on
+    // the capture thread at ~20Hz and must never block on a listener being added/removed.
+    private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
     // Written by AudioCaptureService, read by DeezerMediaPlugin from the web layer's thread:
     // volatile rather than synchronized so a state query can never block on a capture callback.
     private volatile boolean capturing;
@@ -39,19 +45,23 @@ final class AudioLevelsBridge {
         capturing = true;
     }
 
-    synchronized void setListener(Listener listener) {
-        this.listener = listener;
+    void addListener(Listener listener) {
+        listeners.add(listener);
     }
 
-    synchronized void publishLevels(float[] levels) {
-        if (listener != null) {
+    void removeListener(Listener listener) {
+        listeners.remove(listener);
+    }
+
+    void publishLevels(float[] levels) {
+        for (Listener listener : listeners) {
             listener.onLevels(levels);
         }
     }
 
-    synchronized void publishStopped() {
+    void publishStopped() {
         capturing = false;
-        if (listener != null) {
+        for (Listener listener : listeners) {
             listener.onCaptureStopped();
         }
     }

@@ -117,7 +117,10 @@
     <div class="scrim" aria-hidden="true"></div>
 
     <header id="topbar" class="topbar" hidden>
-      <button id="capture-status" type="button" class="capture-status" hidden></button>
+      <div class="topbar__status">
+        <button id="capture-status" type="button" class="capture-status" hidden></button>
+        <button id="overlay-status" type="button" class="capture-status" hidden></button>
+      </div>
       <button id="mode-toggle" type="button" class="mode-toggle" aria-label="Changer la visualisation">
         <svg class="icon icon-cover" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zm2 2v10h12V7zm2 8 3-4 2 2.5L15 9l3 6z" /></svg>
         <svg class="icon icon-bars" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10h2v9H5zm4-5h2v14H9zm4 3h2v11h-2zm4-6h2v17h-2z" /></svg>
@@ -194,6 +197,31 @@
         </ul>
         <button id="capture-accept" type="button" class="grant-button">Continuer</button>
         <button id="capture-later" type="button" class="sheet__ghost">Plus tard</button>
+      </div>
+    </div>
+
+    <!-- Shown once, just before the "display over other apps" system screen — that screen's own
+         wording is a generic Android permission name, not something that explains why Vizuzik
+         wants it. -->
+    <div id="overlay-sheet" class="sheet" hidden>
+      <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="overlay-sheet-title">
+        <div class="sheet__wave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <h2 id="overlay-sheet-title" class="sheet__title">Les effets par-dessus l'app de musique</h2>
+        <p class="sheet__lead">
+          Vizuzik peut afficher un contour lumineux au bord de l'écran pendant que Deezer ou
+          Spotify reste ouvert au premier plan — sans jamais revenir sur cet écran.
+        </p>
+        <ul class="sheet__points">
+          <li>Android va demander d'<b>autoriser l'affichage par-dessus d'autres applications</b> :
+            c'est ce qui permet au contour de rester visible par-dessus l'app de musique.</li>
+          <li>Purement décoratif : le contour ne capte jamais un geste, tout reste utilisable
+            normalement en dessous.</li>
+          <li>Une seule fois : ensuite, le contour s'allume et s'éteint tout seul selon la lecture.</li>
+        </ul>
+        <button id="overlay-accept" type="button" class="grant-button">Continuer</button>
+        <button id="overlay-later" type="button" class="sheet__ghost">Plus tard</button>
       </div>
     </div>
 

@@ -14,6 +14,7 @@ import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
+import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
@@ -51,14 +52,14 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     @Override
     protected void handleOnStart() {
-        DeezerMediaBridge.getInstance().setListener(this);
-        AudioLevelsBridge.getInstance().setListener(this);
+        DeezerMediaBridge.getInstance().addListener(this);
+        AudioLevelsBridge.getInstance().addListener(this);
     }
 
     @Override
     protected void handleOnStop() {
-        DeezerMediaBridge.getInstance().setListener(null);
-        AudioLevelsBridge.getInstance().setListener(null);
+        DeezerMediaBridge.getInstance().removeListener(this);
+        AudioLevelsBridge.getInstance().removeListener(this);
         // Deliberately NOT stopping AudioCaptureService here: handleOnStop() fires on every
         // brief backgrounding (switching apps, checking a notification), not just on actually
         // closing Vizuzik. It's a real foreground service and is meant to keep running while
@@ -340,6 +341,64 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("supported", supported);
         result.put("running", supported && AudioLevelsBridge.getInstance().isCapturing());
         call.resolve(result);
+    }
+
+    /**
+     * Whether the edge-glow overlay (drawn over the tracked app itself, MuViz Edge-style) can run
+     * on this device (Android 8+, TYPE_APPLICATION_OVERLAY) and whether the "display over other
+     * apps" special permission is currently granted. The web layer checks this on every resume —
+     * same reasoning as getCaptureState(): the grant is made in a system Settings screen the app
+     * never sees the result of directly, so the only way to know is to ask again on return.
+     */
+    @PluginMethod
+    public void checkOverlayPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        boolean supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        result.put("supported", supported);
+        result.put("granted", supported && Settings.canDrawOverlays(getContext()));
+        call.resolve(result);
+    }
+
+    /**
+     * Opens the system "display over other apps" screen for Vizuzik specifically. Like
+     * requestPermission() for notification access, this only opens the screen — there is no
+     * result to await, so the web layer finds out what happened via checkOverlayPermission() the
+     * next time it resumes.
+     */
+    @PluginMethod
+    public void requestOverlayPermission(PluginCall call) {
+        Intent intent = new Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:" + getContext().getPackageName())
+        );
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(intent)) {
+            call.resolve();
+        } else {
+            call.reject("unavailable");
+        }
+    }
+
+    /**
+     * Starts OverlayEdgeGlowService. Entirely orchestrated from the web layer (see
+     * syncEdgeOverlay() in main.js): called only once Vizuzik itself is backgrounded, a track is
+     * actually playing, and the overlay permission is already known to be granted — so a missing
+     * grant here means the web layer's own state is stale rather than the normal case.
+     */
+    @PluginMethod
+    public void startEdgeOverlay(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !Settings.canDrawOverlays(getContext())) {
+            call.reject("permission");
+            return;
+        }
+        ContextCompat.startForegroundService(getContext(), new Intent(getContext(), OverlayEdgeGlowService.class));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopEdgeOverlay(PluginCall call) {
+        getContext().stopService(new Intent(getContext(), OverlayEdgeGlowService.class));
+        call.resolve();
     }
 
     /**

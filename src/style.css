@@ -367,8 +367,19 @@ body[data-state="playing"] .cassette__reel {
   transition: opacity 0.3s ease;
 }
 
+/* Holds the two topbar badges (audio source, edge overlay) together on the left, so adding the
+   second one doesn't split the topbar's space-between three ways. */
+.topbar__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 /* Always tappable: this badge is the switcher between the three audio sources (mic → real →
-   off), not just a one-shot opt-in — see cycleAudioSource() in main.js. */
+   off), not just a one-shot opt-in — see cycleAudioSource() in main.js. Also used, as-is, for
+   the edge-overlay badge (#overlay-status): same chip, same states, one less style to keep in
+   sync between the two. */
 .capture-status {
   padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -382,7 +393,7 @@ body[data-state="playing"] .cassette__reel {
   letter-spacing: 0.01em;
   color: rgba(247, 248, 252, 0.55);
   cursor: pointer;
-  max-width: 62vw;
+  max-width: 42vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
