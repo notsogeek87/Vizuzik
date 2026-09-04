@@ -1234,7 +1234,16 @@ DeezerMedia.addListener("audioCaptureStopped", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    refresh();
+    // Resume the animation and the current audio source right away, using whatever state is
+    // already known — never wait on the native round-trip below (refresh()) to do it. That
+    // round-trip being slow, or its promise rejecting for any reason, must never leave the
+    // canvas frozen on whatever frame it had when the app was backgrounded: the mic (or real
+    // capture) would keep delivering levels in that case with nothing left to draw them.
+    if (!els.player.hidden) {
+      visualizer.start();
+      applyAudioSource();
+    }
+    refresh().catch(() => {});
     syncCaptureState();
     syncOverlayPermission();
   } else {
