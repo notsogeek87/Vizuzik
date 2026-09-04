@@ -638,29 +638,32 @@ function applyDisplayMode(announce) {
   if (displayMode !== "cassette") document.body.classList.remove("cassette-controls-hidden");
 }
 
-// Cassette mode is drawn cassette-side up (landscape); rather than only relying on the CSS
-// rotation trick for whichever way the phone already happens to be held, this actually turns
-// the screen for the user — the same way a video player forces landscape for fullscreen.
+// No display mode forces the phone into a particular orientation — cassette mode used to lock
+// landscape the way a video player forces landscape for fullscreen, but that fought the phone's
+// own rotation: held upright (its normal, expected orientation, same as every other mode), the
+// app switcher showed cassette mode's card sideways, and getting back to portrait meant leaving
+// the app or physically turning the phone. Cassette mode is drawn cassette-side up (landscape)
+// regardless: the CSS rotation trick (see @media (orientation: portrait) on .cassette__art in
+// style.css) turns the illustration itself upright when the phone is, exactly like a Walkman
+// held in the hand rather than propped up sideways.
 // Guarded against re-firing on every applyDisplayMode(false) call (nowPlayingChanged fires
 // that often) so the native side isn't asked to re-apply the same orientation repeatedly.
 let orientationLockedFor = null;
 function syncOrientationLock() {
   // A TV never rotates, so it never needs "unspecified" — and on at least one box, leaving it
-  // unspecified outside cassette mode let Android pick that device's *reversed* landscape as
-  // the natural one, rendering the whole UI upside down (see the fixed, non-reversed LANDSCAPE
-  // used below, same fix as lockLandscape() itself already applies natively). Checked first and
-  // tracked under its own key so it stays locked across every display mode, not just cassette.
+  // unspecified let Android pick that device's *reversed* landscape as the natural one,
+  // rendering the whole UI upside down (see the fixed, non-reversed LANDSCAPE used below, same
+  // fix as lockLandscape() itself already applies natively).
   if (isTv) {
     if (orientationLockedFor === "tv") return;
     orientationLockedFor = "tv";
     DeezerMedia.lockLandscape().catch(() => {});
     return;
   }
-  if (orientationLockedFor === displayMode) return;
-  orientationLockedFor = displayMode;
-  const request = displayMode === "cassette" ? DeezerMedia.lockLandscape() : DeezerMedia.unlockOrientation();
+  if (orientationLockedFor === "unlocked") return;
+  orientationLockedFor = "unlocked";
   // No native implementation on the web (dev preview): fails silently there.
-  request.catch(() => {});
+  DeezerMedia.unlockOrientation().catch(() => {});
 }
 
 function showToast(label, durationMs = 1400) {

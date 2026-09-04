@@ -28,10 +28,10 @@
     <!-- Cassette mode: a fixed, edge-to-edge illustration instead of a canvas scene — the
          phone's own screen reads as the little window on a Walkman door. Drawn cassette-side
          up (landscape), and rotated back onto a portrait screen by CSS (see .cassette__art)
-         so holding the phone in landscape shows it the "right" way up (the app also asks the
-         OS to actually rotate the screen — see DeezerMedia.lockLandscape() in main.js). The
-         reels turn while a track is playing (see .cassette__reel), with a ring of wound "tape"
-         shrinking toward each hub's teeth. The current album art is set as #cassette-art's
+         so holding the phone upright — its normal orientation, same as every other mode; the
+         OS is never asked to rotate the screen for this — still shows it the "right" way up.
+         The reels turn while a track is playing (see .cassette__reel), with a ring of wound
+         "tape" shrinking toward each hub's teeth. The current album art is set as #cassette-art's
          href in main.js's setArtwork() and sits on the label, cropped to it and muted (see
          .cassette__art-image), as if it had been printed there; a plain panel shows through
          until the first track loads. -->

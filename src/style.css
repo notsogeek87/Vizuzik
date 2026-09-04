@@ -993,13 +993,14 @@ body[data-mode="cassette"] .progress {
   padding: 16px 20px 10px;
 }
 
-/* Landscape leaves much less vertical room than portrait's tall column, so the title/artist
-   card and progress bar are tightened up to keep everything comfortably on screen — this is
-   also the orientation this mode is actually meant to be used in (see DeezerMedia.lockLandscape()
-   in main.js), portrait only being the brief fallback until the OS rotation catches up. The
-   transport buttons themselves are deliberately left alone here: they're the same .control
-   elements every other mode uses at their one fixed size, and cassette mode shouldn't be the
-   only one where they shrink depending on orientation. */
+/* Nothing forces the phone into landscape for this mode (see syncOrientationLock() in main.js —
+   held upright is the normal, expected way to use it, same as every other mode), but someone
+   can still turn the phone sideways themselves, and landscape leaves much less vertical room
+   than portrait's tall column: this tightens the title/artist card and progress bar up to keep
+   everything comfortably on screen whenever that happens. The transport buttons themselves are
+   deliberately left alone here: they're the same .control elements every other mode uses at
+   their one fixed size, and cassette mode shouldn't be the only one where they shrink depending
+   on orientation. */
 @media (orientation: landscape) {
   body[data-mode="cassette"] .player {
     gap: 0.85rem;
