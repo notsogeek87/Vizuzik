@@ -1,6 +1,7 @@
 package com.vizuzik.app;
 
 import android.os.Bundle;
+import android.view.WindowManager;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -14,6 +15,10 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(DeezerMediaPlugin.class);
         super.onCreate(savedInstanceState);
+        // Vizuzik is meant to be looked at, not touched — propped up as a car/desk display for
+        // as long as the music plays. Without this the screen times out and locks like any
+        // other app, which defeats the whole point of it being on screen at all.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         enterFullScreen();
     }
 

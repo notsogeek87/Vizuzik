@@ -964,14 +964,6 @@ body[data-mode="cassette"].cassette-controls-hidden .topbar {
   display: block;
 }
 
-/* Cassette mode's own footer: hugging the bottom edge instead of centring in the column
-   (the old default, built around a stage square that no longer exists here) keeps the title
-   and buttons off the reels and sitting where the scrim gradient is darkest, wherever the
-   illustration currently is — rotated into portrait or shown natively in landscape. */
-body[data-mode="cassette"] .player {
-  justify-content: flex-end;
-}
-
 /* Pulled out of the footer entirely and pinned near the top instead — close to where the
    label/album art already sit — so the title/artist never compete with the reels for space,
    regardless of how the illustration happens to be cropped on a given screen. Still its own
