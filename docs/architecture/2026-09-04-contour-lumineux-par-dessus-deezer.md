@@ -98,6 +98,33 @@ Deezer soit au premier plan. Le type de service de premier plan déclaré est `s
 des types spécifiques d'Android (`mediaPlayback`, `mediaProjection`…) ne correspond à un service
 qui ne joue ni ne capture rien lui-même, seulement un effet visuel posé sur une autre app.
 
+### Un régime ambiant taillé pour un coup d'œil, pas pour être regardé en continu
+
+Les premiers essais (sans capture audio réelle activée) montraient un contour perçu comme figé :
+il respirait sur les mêmes périodes lentes (30-82 s) que l'écran plein écran — pensées pour
+quelqu'un qui regarde l'écran en continu, pas pour un contour qu'on aperçoit en passant sur
+Deezer. Corrigé sur deux plans, toujours sans inventer de rythme :
+
+- Périodes ramenées à 7/11/17 s et amplitude doublée (0,5 ± 0,4 au lieu de 0,4 ± 0,15) : le
+  régime ambiant reste un mélange de trois oscillateurs sans période commune, juste assez rapide
+  pour se voir respirer en quelques secondes.
+- `EdgeGlowView.pulse()` : une vraie impulsion (changement de morceau, lecture/pause) déclenche
+  désormais un à-coup visible sur le contour, comme `visualizer.pulse()` le fait déjà côté plein
+  écran — l'overlay n'avait jusque-là aucune réaction à ces évènements pourtant réels. Le
+  ralentissement de la décroissance (`PULSE_DECAY_MS`, environ 1,5 s au lieu d'une fraction de
+  seconde) le rend visible même sur un simple coup d'œil, puisque contrairement au plein écran
+  le contour est seul à porter cette impulsion.
+
+### Vizuzik n'ouvre plus Deezer/Spotify tout seul
+
+[Choisir puis lancer l'app de musique soi-même](2026-09-03-lancement-automatique-deezer.md)
+faisait ouvrir l'app suivie par Vizuzik lui-même au tout premier écran, quand aucune session
+n'existait encore. Retiré à la demande : Vizuzik reste un compagnon d'affichage, jamais quelque
+chose qui bascule vers une autre app de sa propre initiative. L'écran « Aucune lecture en cours »
+attend simplement qu'un titre démarre côté Deezer ou Spotify. La reprise d'une session déjà
+chargée mais en pause (`DeezerMedia.play()`) reste inchangée : elle ne bascule jamais vers une
+autre app, elle envoie juste une commande de transport à une session qui existe déjà.
+
 ## Conséquences
 
 - Le badge « Effets sur Deezer » (topbar, à côté de celui du son réel) suit le même parcours en

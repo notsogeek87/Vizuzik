@@ -1,8 +1,15 @@
 # Choisir puis lancer l'app de musique soi-même
 
-**Statut :** adopté · **Date :** 2026-09-03 · **Concerne :**
+**Statut :** partiellement révoqué le 2026-09-04 · **Date :** 2026-09-03 · **Concerne :**
 `src/main.js`, `index.html`, `MainActivity.java`, `DeezerMediaPlugin.java`, `MusicApps.java`,
 `MusicAppPreference.java`, `NowPlayingListenerService.java`, `AudioCaptureService.java`
+
+> **Mise à jour 2026-09-04 :** la partie « lancer l'app soi-même » (section « Reprendre plutôt
+> que quitter l'écran » ci-dessous, cas « Aucune session du tout ») a été retirée à la demande —
+> Vizuzik n'ouvre plus Deezer/Spotify de sa propre initiative. Voir [Un contour lumineux par-dessus
+> Deezer](2026-09-04-contour-lumineux-par-dessus-deezer.md#vizuzik-nouvre-plus-deezerspotify-tout-seul).
+> Le reste de cette page (résolution de l'app suivie, reprise d'une session en pause) reste
+> d'actualité.
 
 ## Le problème
 

@@ -21,9 +21,11 @@ import android.view.View;
  * Two regimes, same rule as src/visualizer.js's ambient/live split (see
  * docs/architecture/2026-09-03-rythme-hors-capture.md): with real audio levels flowing in from
  * AudioLevelsBridge, the glow's thickness and a beat pulse follow the actual bass; without it,
- * the glow just breathes on slow independent oscillators and never invents a beat. In both
- * regimes the color itself drifts slowly across the current track's three accent colors — that
- * part isn't rhythm, so it's always on.
+ * the glow breathes on its own — quickly and visibly enough to read as alive on a glance, since
+ * unlike the full-screen player this is meant to be glimpsed rather than watched continuously —
+ * but still never claims to be following an actual beat it never captured. In both regimes the
+ * color itself drifts across the current track's three accent colors, and a real event (a track
+ * change, a play/pause) is still allowed an honest pulse — see pulse() below.
  */
 final class EdgeGlowView extends View implements Choreographer.FrameCallback {
 
@@ -34,8 +36,14 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
         { 56, 189, 248 },
     };
     private static final long PALETTE_BLEND_MS = 700;
-    private static final long COLOR_TRAVEL_MS = 26_000;
+    private static final long COLOR_TRAVEL_MS = 9_000;
     private static final int BEAT_HISTORY = 48;
+    // How long a pulse (a real beat, or pulse() from a track change / play-pause) stays visible.
+    // visualizer.js decays its own beatEnergy at 0.9 per ~16.7ms because it shares the screen
+    // with a whole scene reacting alongside it; this view's border is the *only* thing carrying
+    // that impulse, so it needs to linger for roughly a second and a half to actually register on
+    // a glance instead of flashing for a couple of frames.
+    private static final float PULSE_DECAY_MS = 55f;
 
     private final Paint paint = new Paint();
     private final float density;
@@ -156,9 +164,7 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
                 pendingBeat = false;
                 beatEnergy = 1f;
             }
-            // Same 0.9-per-~16.7ms decay as visualizer.js's beatEnergy *= 0.9, scaled to whatever
-            // this loop's actual frame interval turns out to be.
-            beatEnergy *= (float) Math.pow(0.9, dtMs / 16.7);
+            beatEnergy *= (float) Math.pow(0.9, dtMs / PULSE_DECAY_MS);
 
             ambientPhase += dtMs;
 
@@ -196,17 +202,19 @@ final class EdgeGlowView extends View implements Choreographer.FrameCallback {
         if (live) {
             strength = clamp01(level);
         } else {
-            // Slow, symmetric breathing — no beat, no invented tempo, just three incommensurate
-            // waves summed and rescaled into a gentle 0.25..0.55 band.
-            double a = Math.sin(ambientPhase / 30_000.0 * Math.PI * 2);
-            double b = Math.sin(ambientPhase / 48_000.0 * Math.PI * 2 + 1.7);
-            double c = Math.sin(ambientPhase / 82_000.0 * Math.PI * 2 + 3.1);
-            strength = (float) (0.4 + (a + b + c) / 3.0 * 0.15);
+            // Symmetric breathing on three incommensurate waves — no beat, no invented tempo,
+            // but fast and wide enough (7s/11s/17s, ±0.4 around a 0.5 mid-point) to actually read
+            // as "alive" within a few seconds' glance, unlike the slower wash the full-screen
+            // player uses for something meant to be watched continuously, not glanced at.
+            double a = Math.sin(ambientPhase / 7_000.0 * Math.PI * 2);
+            double b = Math.sin(ambientPhase / 11_000.0 * Math.PI * 2 + 1.7);
+            double c = Math.sin(ambientPhase / 17_000.0 * Math.PI * 2 + 3.1);
+            strength = (float) (0.5 + (a + b + c) / 3.0 * 0.4);
         }
 
-        float thicknessDp = 10f + strength * 30f + pulse * 16f;
+        float thicknessDp = 16f + strength * 46f + pulse * 26f;
         float thickness = thicknessDp * density;
-        int alpha = clamp255((int) (110 + strength * 90 + pulse * 55));
+        int alpha = clamp255((int) (150 + strength * 105 + pulse * 60));
 
         int edgeColor = (color & 0x00FFFFFF) | (alpha << 24);
         int transparent = color & 0x00FFFFFF;

@@ -63,11 +63,6 @@ let currentTrackKey = null;
 // inert without an actual keydown to react to and so never changes anything for a touch-only
 // phone. Resolved once at startup, before the first screen is shown — see detectTvPlatform().
 let isTv = false;
-// Set only right after openMusicApp() sent the user off to pick a track themselves (see the
-// startup IIFE near the bottom of this file). Cleared the moment either a track actually starts
-// (bringToFront() is attempted then) or the user manually returns first — see the
-// nowPlayingChanged and visibilitychange listeners below.
-let awaitingFirstTrackAfterLaunch = false;
 
 const DISPLAY_MODE_KEY = "vizuzik:displayMode";
 const storedMode = localStorage.getItem(DISPLAY_MODE_KEY);
@@ -1211,15 +1206,6 @@ els.previous.addEventListener("click", () => DeezerMedia.previous());
 els.next.addEventListener("click", () => DeezerMedia.next());
 
 DeezerMedia.addListener("nowPlayingChanged", setNowPlaying);
-DeezerMedia.addListener("nowPlayingChanged", (state) => {
-  // Best-effort return trip: the app was opened because there was nothing to resume, and now
-  // something is actually playing — the moment a person picked a track, not just switched to
-  // the app to look around. Not guaranteed (see DeezerMediaPlugin.bringToFront()), but this is
-  // the one moment it's worth trying.
-  if (!awaitingFirstTrackAfterLaunch || !state || !state.active || !state.isPlaying) return;
-  awaitingFirstTrackAfterLaunch = false;
-  DeezerMedia.bringToFront().catch(() => {});
-});
 DeezerMedia.addListener("audioLevels", (data) => {
   if (data && data.levels) {
     if (audioSource === "real") visualizer.setLevels(data.levels);
@@ -1248,9 +1234,6 @@ DeezerMedia.addListener("audioCaptureStopped", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    // Back in Vizuzik on our own steam (manually, or via bringToFront() already firing this
-    // same event): either way there's nothing left to bring back.
-    awaitingFirstTrackAfterLaunch = false;
     refresh();
     syncCaptureState();
     syncOverlayPermission();
@@ -1274,8 +1257,7 @@ applyDisplayMode(false);
   // whether to plant the initial D-pad focus.
   await detectTvPlatform();
   // Which app to follow has to be settled first: the native now-playing listener needs it
-  // before refresh() can report anything meaningful, and it decides which app (if any) gets
-  // auto-launched below.
+  // before refresh() can report anything meaningful.
   const app = await resolveMusicApp();
   if (app) {
     // Awaited: refresh() below reads the now-playing session natively, and that lookup needs
@@ -1286,19 +1268,16 @@ applyDisplayMode(false);
   syncCaptureState();
   syncOverlayPermission();
   // Cold start only: never repeated on a later resume, since by then the app (or a resumed
-  // session) is already exactly where it should be, and redoing any of this mid-session would
-  // just steal focus or restart a track the user is deliberately listening to or pausing.
+  // session) is already exactly where it should be, and redoing this mid-session would restart
+  // a track the user is deliberately listening to or pausing.
+  //
+  // Deliberately does NOT open Deezer/Spotify itself when there is no session at all — Vizuzik
+  // is a companion display, not something that should switch the user to another app on its
+  // own; the "empty" screen simply waits until a track starts there by itself.
   if (app && !els.player.hidden && !isPlaying) {
     // A session for the tracked app is already there (it kept running in the background, still
     // holding the last track) — just paused. Resuming it straight from here means Vizuzik never
-    // has to leave the screen at all, let alone find its way back to it.
+    // has to leave the screen at all.
     DeezerMedia.play().catch(() => {});
-  } else if (app && els.player.hidden) {
-    // No session at all: there is no last track to resume, so nothing short of opening the app
-    // lets the user pick one. Once they start something, the notification listener picks it up
-    // and showScreen("player") arms the mic (see applyAudioSource()), same as any other launch —
-    // and the nowPlayingChanged listener above tries to bring Vizuzik back.
-    awaitingFirstTrackAfterLaunch = true;
-    DeezerMedia.openMusicApp({ app }).catch(() => {});
   }
 })();
