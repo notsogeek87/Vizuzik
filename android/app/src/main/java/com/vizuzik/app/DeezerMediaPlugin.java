@@ -162,6 +162,24 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
+     * Mirrors the web layer's chosen audio source ("mic" / "real" / "off") into
+     * AudioSourcePreference, the same way setMusicAppTarget() mirrors the tracked app. Read by
+     * OverlayEdgeGlowService to decide whether it's allowed to listen to the microphone on its
+     * own while backgrounded — only when "mic" is what the user actually picked in the
+     * full-screen player, never on its own initiative.
+     */
+    @PluginMethod
+    public void setAudioSourcePreference(PluginCall call) {
+        String source = call.getString("source");
+        if (source == null) {
+            call.reject("source manquante");
+            return;
+        }
+        AudioSourcePreference.set(getContext(), source);
+        call.resolve();
+    }
+
+    /**
      * Launches the given app ("deezer" or "spotify") directly instead of leaving the user to
      * find it themselves. Vizuzik is a companion display: called once per cold start, only when
      * no track is already active, so it never yanks focus away from an already-playing session

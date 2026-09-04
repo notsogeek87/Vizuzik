@@ -337,6 +337,10 @@ function rememberAudioSource(value) {
   } catch (err) {
     /* see readAudioSource() */
   }
+  // Mirrored natively so OverlayEdgeGlowService — which has no access to localStorage — knows
+  // whether "mic" is what was actually chosen before it listens to the microphone on its own
+  // while Vizuzik is backgrounded (see docs/architecture/2026-09-04-contour-lumineux-par-dessus-deezer.md).
+  DeezerMedia.setAudioSourcePreference({ source: value }).catch(() => {});
 }
 
 /* --- microphone --- */
@@ -1259,6 +1263,11 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.addEventListener("resize", scheduleFocusRefresh);
+
+// Mirrors the audio source chosen in a previous session (or the "mic" default) natively right
+// away, rather than waiting for the user to cycle the badge once in this session before
+// OverlayEdgeGlowService can find out what was already picked.
+DeezerMedia.setAudioSourcePreference({ source: audioSource }).catch(() => {});
 
 applyDisplayMode(false);
 (async () => {

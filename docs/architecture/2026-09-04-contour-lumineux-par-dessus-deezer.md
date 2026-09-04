@@ -115,6 +115,25 @@ Deezer. Corrigé sur deux plans, toujours sans inventer de rythme :
   seconde) le rend visible même sur un simple coup d'œil, puisque contrairement au plein écran
   le contour est seul à porter cette impulsion.
 
+### Le contour reprend le micro que le plein écran vient de lâcher
+
+`showScreen()` et le `visibilitychange` du plein écran coupent le micro dès que Vizuzik quitte
+l'écran lecteur ou passe en arrière-plan (rien à lui montrer sur un autre écran) — exactement le
+moment où l'overlay existe. Résultat : en mode « Micro », le contour n'avait jamais de son réel
+une fois sur Deezer, alors que l'utilisateur avait déjà donné son accord à l'écoute du micro côté
+plein écran.
+
+`AudioSourcePreference` (même schéma que `MusicAppPreference`) mémorise ce choix ("mic" / "real" /
+"off") côté natif — `DeezerMediaPlugin.setAudioSourcePreference()` l'écrit à chaque changement et
+au lancement. `OverlayEdgeGlowService` le lit à son propre démarrage : si c'est "mic" et que
+`RECORD_AUDIO` est déjà accordé, il fait tourner son propre `MicCaptureThread` (la même classe que
+`DeezerMediaPlugin` utilise, réutilisée telle quelle) pendant toute sa durée de vie, alimentant
+`EdgeGlowView` directement. Jamais l'inverse : si "real" ou "off" est le choix mémorisé, l'overlay
+n'ouvre jamais le micro de sa propre initiative — le consentement du plein écran ne s'étend qu'au
+choix qu'il représente, pas au-delà. Un service en arrière-plan ne pouvant pas afficher de demande
+de permission, l'absence de `RECORD_AUDIO` déjà accordé fait simplement retomber sur le régime
+ambiant plutôt que d'échouer.
+
 ### Vizuzik n'ouvre plus Deezer/Spotify tout seul
 
 [Choisir puis lancer l'app de musique soi-même](2026-09-03-lancement-automatique-deezer.md)

@@ -1,10 +1,12 @@
 package com.vizuzik.app;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.os.Build;
@@ -18,6 +20,7 @@ import android.view.WindowManager;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
+import androidx.core.content.ContextCompat;
 
 import java.text.DateFormat;
 import java.util.Date;
@@ -34,6 +37,13 @@ import java.util.Date;
  * same two bridges DeezerMediaPlugin does — DeezerMediaBridge for the current track's artwork
  * (turned into a glow color via OverlayPalette) and AudioLevelsBridge for real audio levels —
  * which is why both bridges had to grow support for more than one listener at a time.
+ *
+ * If "mic" is what the user picked as their audio source in the full-screen player (mirrored
+ * into AudioSourcePreference — see setAudioSourcePreference() in DeezerMediaPlugin), this
+ * service also runs its own MicCaptureThread for as long as it's alive: the full-screen player
+ * releases the mic the moment Vizuzik is backgrounded (nothing to show it to there), but that's
+ * exactly when this service exists, so it re-acquires it independently rather than the glow
+ * going ambient-only for a choice the user already made.
  */
 public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
@@ -44,6 +54,7 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
     private WindowManager windowManager;
     private NotificationManager notificationManager;
     private EdgeGlowView glowView;
+    private MicCaptureThread micCaptureThread;
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -87,8 +98,30 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             DeezerMediaBridge.getInstance().addListener(this);
             AudioLevelsBridge.getInstance().addListener(this);
             onNowPlayingChanged(DeezerMediaBridge.getInstance().getLastNowPlaying());
+            maybeStartMicCapture();
         }
         return START_STICKY;
+    }
+
+    /**
+     * Only when "mic" is the audio source the user actually picked (see the class doc above) and
+     * RECORD_AUDIO is already granted — a background service has no Activity to show a runtime
+     * permission dialog from, so this silently does nothing rather than prompt for a grant it
+     * can't ask for. Idempotent: harmless if called again while already running.
+     */
+    private void maybeStartMicCapture() {
+        if (micCaptureThread != null) return;
+        if (!AudioSourcePreference.MIC.equals(AudioSourcePreference.get(this))) return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        // Reuses onLevels() below (already guarded against a bad frame crashing the whole app)
+        // rather than a second, near-identical lambda: MicCaptureThread.Listener and
+        // AudioLevelsBridge.Listener both declare the exact same onLevels(float[]) shape.
+        MicCaptureThread thread = new MicCaptureThread(this::onLevels);
+        if (!thread.prepare()) return;
+        micCaptureThread = thread;
+        thread.start();
     }
 
     /** @return whether the view was actually added. */
@@ -234,6 +267,10 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
         }
         DeezerMediaBridge.getInstance().removeListener(this);
         AudioLevelsBridge.getInstance().removeListener(this);
+        if (micCaptureThread != null) {
+            micCaptureThread.stopCapture();
+            micCaptureThread = null;
+        }
         super.onDestroy();
     }
 }
