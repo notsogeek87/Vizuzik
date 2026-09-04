@@ -993,11 +993,13 @@ body[data-mode="cassette"] .progress {
   padding: 16px 20px 10px;
 }
 
-/* Landscape leaves much less vertical room than portrait's tall column, so the same footer
-   is tightened up and the buttons shrink a notch to keep everything comfortably on screen —
-   this is also the orientation this mode is actually meant to be used in (see
-   DeezerMedia.lockLandscape() in main.js), portrait only being the brief fallback until the
-   OS rotation catches up. */
+/* Landscape leaves much less vertical room than portrait's tall column, so the title/artist
+   card and progress bar are tightened up to keep everything comfortably on screen — this is
+   also the orientation this mode is actually meant to be used in (see DeezerMedia.lockLandscape()
+   in main.js), portrait only being the brief fallback until the OS rotation catches up. The
+   transport buttons themselves are deliberately left alone here: they're the same .control
+   elements every other mode uses at their one fixed size, and cassette mode shouldn't be the
+   only one where they shrink depending on orientation. */
 @media (orientation: landscape) {
   body[data-mode="cassette"] .player {
     gap: 0.85rem;
@@ -1023,30 +1025,6 @@ body[data-mode="cassette"] .progress {
   body[data-mode="cassette"] .progress {
     width: min(70vw, 460px);
     padding: 12px 16px 8px;
-  }
-
-  body[data-mode="cassette"] .controls {
-    gap: 1.3rem;
-  }
-
-  body[data-mode="cassette"] .control--secondary {
-    width: 50px;
-    height: 50px;
-  }
-
-  body[data-mode="cassette"] .control--secondary svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  body[data-mode="cassette"] .control--primary {
-    width: 64px;
-    height: 64px;
-  }
-
-  body[data-mode="cassette"] .control--primary svg {
-    width: 28px;
-    height: 28px;
   }
 }
 
@@ -1430,35 +1408,17 @@ body[data-platform="tv"] .sheet__points {
   font-size: 1.02rem;
 }
 
-/* Cassette mode's landscape rules (see @media (orientation: landscape) above) already shrink
-   its footer to fit a wide-but-short screen; a TV is that same shape but much bigger, so its
-   own footer gets a matching bump rather than staying phone-sized. */
+/* Cassette mode's landscape rules (see @media (orientation: landscape) above) tighten its
+   title/artist card to fit a wide-but-short phone screen; a TV is that same shape but much
+   bigger, so its own card gets a matching bump rather than staying phone-sized. The transport
+   buttons are NOT special-cased here — same reasoning as the phone landscape rules above: they
+   stay the ordinary body[data-platform="tv"] .control size every other mode uses on TV. */
 body[data-platform="tv"][data-mode="cassette"] .title {
   font-size: clamp(1.5rem, 2.6vw, 2.1rem);
 }
 
 body[data-platform="tv"][data-mode="cassette"] .artist {
   font-size: clamp(1.05rem, 1.8vw, 1.3rem);
-}
-
-body[data-platform="tv"][data-mode="cassette"] .control--secondary {
-  width: 62px;
-  height: 62px;
-}
-
-body[data-platform="tv"][data-mode="cassette"] .control--secondary svg {
-  width: 26px;
-  height: 26px;
-}
-
-body[data-platform="tv"][data-mode="cassette"] .control--primary {
-  width: 80px;
-  height: 80px;
-}
-
-body[data-platform="tv"][data-mode="cassette"] .control--primary svg {
-  width: 34px;
-  height: 34px;
 }
 
 /* ============================================================ reduced motion */
