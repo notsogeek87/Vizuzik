@@ -8,8 +8,11 @@ import android.media.MediaRecorder;
  * Captures the phone's own microphone with a plain AudioRecord and turns it into the same
  * 32-band loudness spectrum AudioCaptureService produces for app-audio capture (same Goertzel
  * analysis, same 55 Hz-7000 Hz logarithmic band layout — mirrored here rather than shared, since
- * the two run in very different contexts: this one is owned directly by DeezerMediaPlugin, no
- * foreground service, no MediaProjection).
+ * the two run in very different contexts: no MediaProjection here, and no consent dialog).
+ *
+ * Never instantiated directly by its consumers: MicCaptureCoordinator owns the single instance
+ * and fans its levels out, so the plugin and the overlay service can't end up with one
+ * AudioRecord each fighting over the same microphone.
  *
  * Deliberately AudioSource.MIC rather than routing through the WebView's own getUserMedia(): a
  * getUserMedia() audio stream is a WebRTC-shaped capture under the hood, and Chromium switches

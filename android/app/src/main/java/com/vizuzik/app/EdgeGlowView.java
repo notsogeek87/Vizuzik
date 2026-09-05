@@ -53,22 +53,13 @@ final class EdgeGlowView extends View {
     // that impulse, so it needs to linger for roughly a second and a half to actually register on
     // a glance instead of flashing for a couple of frames.
     private static final float PULSE_DECAY_MS = 55f;
+    /** Past this long without a single level, the capture counts as gone and ambient takes over. */
+    private static final long LIVE_LEVELS_TIMEOUT_MS = 1_200;
 
     private final Paint paint = new Paint();
     private final float density;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tick = this::onTick;
-    // Diagnostic only: lets OverlayEdgeGlowService prove the loop is actually still running (by
-    // surfacing a live counter in its own notification) without needing a logcat capture from
-    // the person testing it — see the service for why this was worth adding.
-    private Runnable tickListener;
-    // Diagnostic only, temporary: a plain tick counter drawn directly on the glow itself, in case
-    // the notification counter turns out to be hidden behind "silent notifications" collapsing on
-    // some devices (IMPORTANCE_MIN notifications are collapsed there by default) — this can't be
-    // missed since it's part of the exact thing being watched. Remove alongside the notification
-    // counter once the freeze reports are resolved.
-    private int debugTickCount;
-    private final Paint debugPaint = new Paint();
 
     private int[][] fromPalette = FALLBACK_PALETTE;
     private int[][] toPalette = FALLBACK_PALETTE;
@@ -80,9 +71,14 @@ final class EdgeGlowView extends View {
     // Written from the audio-capture thread, read from the UI thread on every frame: plain
     // volatile fields rather than a lock, same tradeoff as AudioLevelsBridge.capturing — a
     // decorative glow can tolerate a one-frame-old value, but must never block the capture loop.
-    private volatile boolean live;
+    //
+    // "Live" is a timestamp rather than a boolean on purpose, mirroring LIVE_LEVELS_TIMEOUT_MS in
+    // src/visualizer.js: a boolean set on the first level and never cleared is exactly how the
+    // glow used to freeze — one silent death of the capture and the last received level stayed on
+    // screen forever, since nothing was left to ever turn "live" back off. Levels simply going
+    // stale now falls back to the ambient regime on its own.
+    private volatile long lastLevelsAtMs;
     private volatile float level;
-    private volatile float bass;
     private volatile boolean pendingBeat;
 
     private final float[] bassHistory = new float[BEAT_HISTORY];
@@ -99,10 +95,6 @@ final class EdgeGlowView extends View {
         super(context);
         density = context.getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
-        debugPaint.setColor(Color.WHITE);
-        debugPaint.setTextSize(28f * density);
-        debugPaint.setShadowLayer(6f * density, 0, 0, Color.BLACK);
-        debugPaint.setAntiAlias(true);
     }
 
     void setPalette(int[][] palette) {
@@ -111,17 +103,11 @@ final class EdgeGlowView extends View {
         paletteBlendStartMs = SystemClock.elapsedRealtime();
     }
 
-    void setTickListener(Runnable listener) {
-        this.tickListener = listener;
-    }
-
-    void setLive(boolean live) {
-        this.live = live;
-        if (!live) {
-            level = 0f;
-            bass = 0f;
-            beatEnergy = 0f;
-        }
+    /** The capture feeding this view stopped for good — drop straight back to ambient. */
+    void clearLevels() {
+        lastLevelsAtMs = 0;
+        level = 0f;
+        beatEnergy = 0f;
     }
 
     /**
@@ -134,7 +120,8 @@ final class EdgeGlowView extends View {
         beatEnergy = Math.max(beatEnergy, clamp01(strength));
     }
 
-    /** Called from AudioCaptureService's capture thread via AudioLevelsBridge. */
+    /** Called from the capture thread — MicCaptureCoordinator's, or AudioCaptureService's
+     *  via AudioLevelsBridge, whichever source is feeding the glow. */
     void pushLevels(float[] bands) {
         if (bands == null || bands.length == 0) return;
         int bassBands = Math.min(6, bands.length);
@@ -158,9 +145,8 @@ final class EdgeGlowView extends View {
             pendingBeat = true;
         }
 
-        live = true;
         level = newLevel;
-        bass = newBass;
+        lastLevelsAtMs = now;
     }
 
     @Override
@@ -196,10 +182,8 @@ final class EdgeGlowView extends View {
             beatEnergy *= (float) Math.pow(0.9, dtMs / PULSE_DECAY_MS);
 
             ambientPhase += dtMs;
-            debugTickCount++;
 
             invalidate();
-            if (tickListener != null) tickListener.run();
         } catch (Exception e) {
             Log.w(TAG, "onTick", e);
         } finally {
@@ -228,6 +212,8 @@ final class EdgeGlowView extends View {
         // still allowed this much.
         float pulse = clamp01(beatEnergy);
         float strength;
+        boolean live = lastLevelsAtMs != 0
+            && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
         if (live) {
             strength = clamp01(level);
         } else {
@@ -252,9 +238,6 @@ final class EdgeGlowView extends View {
         drawEdge(canvas, 0, height - thickness, width, thickness, edgeColor, transparent, false); // bottom
         drawEdgeVertical(canvas, 0, 0, thickness, height, edgeColor, transparent, true); // left
         drawEdgeVertical(canvas, width - thickness, 0, thickness, height, edgeColor, transparent, false); // right
-
-        // Diagnostic only, temporary — see the field comment above.
-        canvas.drawText("tick " + debugTickCount, 24f * density, 60f * density, debugPaint);
     }
 
     private void drawEdge(Canvas canvas, float left, float top, float w, float h, int from, int to, boolean fromTop) {

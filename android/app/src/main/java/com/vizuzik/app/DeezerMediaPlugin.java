@@ -44,11 +44,12 @@ import java.util.Set;
 )
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
-    // Owned directly (no Service, no singleton bridge): mic capture only ever runs while the
-    // webview is alive and Vizuzik is in the foreground (see applyAudioSource() in main.js,
-    // which stops it the moment the app is backgrounded), so its lifetime can just follow the
-    // plugin's own.
-    private MicCaptureThread micCaptureThread;
+    // The mic itself is owned by MicCaptureCoordinator, not here: OverlayEdgeGlowService wants
+    // the same microphone at exactly the moment this plugin gives it up (a backgrounding), and
+    // two AudioRecords racing over one mic meant whichever lost failed silently. This plugin is
+    // just one listener among them, alive only while the webview is.
+    private final MicCaptureCoordinator.Listener micListener = this::publishMicLevels;
+    private boolean micListening;
 
     @Override
     protected void handleOnStart() {
@@ -68,9 +69,10 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         // stopped for real in AudioCaptureService#onTaskRemoved(), when the user removes
         // Vizuzik from recents.
         //
-        // The mic thread has no such reason to survive: it isn't a Service, and the whole point
-        // of it is that it's cheap to re-acquire, so any teardown of this plugin/webview takes
-        // it down too rather than leaking a live AudioRecord.
+        // The mic has no such reason to keep feeding *this* plugin: there is no webview left to
+        // draw its levels into. Unregistering is all that happens though — whether the capture
+        // itself stops is MicCaptureCoordinator's call, and it keeps running when the overlay
+        // service is still listening, which is precisely the handoff this backgrounding is.
         stopMicCaptureInternal();
     }
 
@@ -498,7 +500,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
      */
     @PluginMethod
     public void startMicCapture(PluginCall call) {
-        if (micCaptureThread != null) {
+        if (micListening) {
             call.resolve();
             return;
         }
@@ -519,22 +521,22 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     private void beginMicCapture(PluginCall call) {
-        MicCaptureThread thread = new MicCaptureThread(levels -> {
-            JSArray array = new JSArray();
-            for (float level : levels) {
-                array.put((Object) level);
-            }
-            JSObject result = new JSObject();
-            result.put("levels", array);
-            notifyListeners("micLevels", result);
-        });
-        if (!thread.prepare()) {
+        if (!MicCaptureCoordinator.getInstance().addListener(micListener)) {
             call.reject("unsupported");
             return;
         }
-        micCaptureThread = thread;
-        thread.start();
+        micListening = true;
         call.resolve();
+    }
+
+    private void publishMicLevels(float[] levels) {
+        JSArray array = new JSArray();
+        for (float level : levels) {
+            array.put((Object) level);
+        }
+        JSObject result = new JSObject();
+        result.put("levels", array);
+        notifyListeners("micLevels", result);
     }
 
     @PluginMethod
@@ -544,10 +546,11 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     private void stopMicCaptureInternal() {
-        if (micCaptureThread != null) {
-            micCaptureThread.stopCapture();
-            micCaptureThread = null;
-        }
+        if (!micListening) return;
+        micListening = false;
+        // Only stops the shared capture if the overlay service isn't listening too — see
+        // MicCaptureCoordinator.
+        MicCaptureCoordinator.getInstance().removeListener(micListener);
     }
 
     @Override

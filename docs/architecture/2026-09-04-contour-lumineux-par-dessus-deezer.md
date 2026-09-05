@@ -134,14 +134,35 @@ choix qu'il représente, pas au-delà. Un service en arrière-plan ne pouvant pa
 de permission, l'absence de `RECORD_AUDIO` déjà accordé fait simplement retomber sur le régime
 ambiant plutôt que d'échouer.
 
-**Piège rencontré :** la capture démarrait bien, mais s'arrêtait silencieusement au bout de
-quelques secondes — Android coupe l'accès au micro en arrière-plan à un service de premier plan
-qui n'a pas déclaré le type `microphone` (obligatoire à partir d'Android 14, mais la restriction
-existe dès Android 10). `OverlayEdgeGlowService` ne déclarait que `specialUse`. Corrigé en
-déclarant les deux types à la fois dans le manifeste (`specialUse|microphone`) et dans l'appel à
-`startForeground()`, dès le tout premier démarrage du service — pas seulement une fois que
-`maybeStartMicCapture()` réussit réellement, pour ne pas avoir à rappeler `startForeground()` une
-seconde fois avec un type élargi.
+**Trois pièges rencontrés, dans l'ordre :**
+
+1. **Le type de service.** Android coupe l'accès au micro en arrière-plan à un service de premier
+   plan qui n'a pas déclaré le type `microphone` (obligatoire depuis Android 14, restriction
+   présente dès Android 10) ; le service ne déclarait que `specialUse`. Manifeste passé à
+   `specialUse|microphone`, avec `FOREGROUND_SERVICE_MICROPHONE`.
+2. **Le plantage que ça a causé.** Déclarer `FOREGROUND_SERVICE_TYPE_MICROPHONE` dans
+   `startForeground()` sans détenir `RECORD_AUDIO` ne dégrade pas : ça lève une `SecurityException`
+   qui, sur le thread principal et sans rien au-dessus pour la rattraper, tue **toute
+   l'application**. Le bit n'est donc ajouté qu'une fois la permission vérifiée, et l'appel entier
+   est rattrapé.
+3. **Deux `AudioRecord` pour un seul micro.** Le vrai fond du problème : le plein écran relâche le
+   micro au moment exact où le service l'ouvre (et l'inverse au retour), les deux appels natifs
+   étant en vol en même temps. Celui qui perdait la course échouait en silence — glow figé sur des
+   niveaux périmés à l'aller, spectre plein écran gelé au retour. `MicCaptureCoordinator` détient
+   désormais l'unique `MicCaptureThread` : plus personne n'ouvre d'`AudioRecord` de son côté, les
+   deux ne font que s'abonner, la capture démarre au premier abonné et s'arrête après le dernier.
+
+### Un état « live » qui ne pouvait jamais redevenir faux
+
+Corollaire du piège 3, et la raison pour laquelle le contour restait figé *alors même que sa
+boucle de rendu tournait* (prouvé sur l'appareil par un compteur temporaire) : `EdgeGlowView`
+basculait en mode live sur le premier niveau reçu via un booléen que **rien ne remettait jamais à
+faux** pour la source micro. Une capture qui meurt silencieusement laissait donc l'épaisseur du
+halo collée sur la dernière valeur reçue, pour toujours.
+
+Remplacé par un horodatage (`lastLevelsAtMs` + `LIVE_LEVELS_TIMEOUT_MS`), exactement le mécanisme
+que `src/visualizer.js` utilise déjà côté plein écran : des niveaux qui cessent d'arriver font
+retomber le régime ambiant tout seuls, sans que personne n'ait à le signaler.
 
 ### Vizuzik n'ouvre plus Deezer/Spotify tout seul
 

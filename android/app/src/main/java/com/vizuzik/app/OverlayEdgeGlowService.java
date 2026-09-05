@@ -11,7 +11,6 @@ import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
-import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
@@ -21,9 +20,6 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
-
-import java.text.DateFormat;
-import java.util.Date;
 
 /**
  * Draws EdgeGlowView as a touch-transparent window on top of whatever app is in front — Deezer,
@@ -54,17 +50,11 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
     private WindowManager windowManager;
     private NotificationManager notificationManager;
     private EdgeGlowView glowView;
-    private MicCaptureThread micCaptureThread;
+    private final MicCaptureCoordinator.Listener micListener = this::onLevels;
+    private boolean micListening;
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
-
-    // Diagnostic only, temporary: proves whether EdgeGlowView's render loop is actually still
-    // ticking on a given device by surfacing a live counter in this service's own ongoing
-    // notification — the one thing observable without a logcat capture from whoever is testing
-    // it. To remove once the "the glow looks frozen" reports are resolved one way or the other.
-    private int tickCount;
-    private long lastNotificationUpdateAtMs;
 
     @Override
     public void onCreate() {
@@ -121,18 +111,14 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
      * can't ask for. Idempotent: harmless if called again while already running.
      */
     private void maybeStartMicCapture() {
-        if (micCaptureThread != null) return;
+        if (micListening) return;
         if (!AudioSourcePreference.MIC.equals(AudioSourcePreference.get(this))) return;
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        // Reuses onLevels() below (already guarded against a bad frame crashing the whole app)
-        // rather than a second, near-identical lambda: MicCaptureThread.Listener and
-        // AudioLevelsBridge.Listener both declare the exact same onLevels(float[]) shape.
-        MicCaptureThread thread = new MicCaptureThread(this::onLevels);
-        if (!thread.prepare()) return;
-        micCaptureThread = thread;
-        thread.start();
+        // Shares the one capture with DeezerMediaPlugin instead of opening a second AudioRecord
+        // on the same mic — see MicCaptureCoordinator for what that race used to break.
+        micListening = MicCaptureCoordinator.getInstance().addListener(micListener);
     }
 
     /** @return whether the view was actually added. */
@@ -160,23 +146,7 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
             return false;
         }
         glowView = view;
-        glowView.setTickListener(this::onGlowTick);
         return true;
-    }
-
-    /**
-     * Diagnostic only (see the field comments above): bumps a counter and, once a second,
-     * rewrites the ongoing notification with it plus a wall-clock time. If this stops advancing
-     * in the notification shade while the glow itself looks frozen, the render loop genuinely
-     * isn't ticking on that device; if it keeps advancing while the glow still looks frozen, the
-     * bug is downstream of the loop (drawing or window compositing), not the loop itself.
-     */
-    private void onGlowTick() {
-        tickCount++;
-        long now = SystemClock.elapsedRealtime();
-        if (now - lastNotificationUpdateAtMs < 1000) return;
-        lastNotificationUpdateAtMs = now;
-        startForegroundNotification("Effets actifs — image #" + tickCount + " (" + DateFormat.getTimeInstance().format(new Date()) + ")");
     }
 
     private void startForegroundNotification() {
@@ -261,7 +231,7 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
 
     @Override
     public void onCaptureStopped() {
-        if (glowView != null) glowView.setLive(false);
+        if (glowView != null) glowView.clearLevels();
     }
 
     @Nullable
@@ -291,9 +261,9 @@ public class OverlayEdgeGlowService extends Service implements DeezerMediaBridge
         }
         DeezerMediaBridge.getInstance().removeListener(this);
         AudioLevelsBridge.getInstance().removeListener(this);
-        if (micCaptureThread != null) {
-            micCaptureThread.stopCapture();
-            micCaptureThread = null;
+        if (micListening) {
+            micListening = false;
+            MicCaptureCoordinator.getInstance().removeListener(micListener);
         }
         super.onDestroy();
     }
