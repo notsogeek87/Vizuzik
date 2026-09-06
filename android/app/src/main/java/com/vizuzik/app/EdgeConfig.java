@@ -14,6 +14,9 @@ import android.graphics.Color;
 final class EdgeConfig {
 
     static final String STYLE_GLOW = "glow";
+    // Diagnostic/alternate style: see EdgeGlowView.drawBars() — each band drawn on its own
+    // instead of averaged into the glow's single scalar.
+    static final String STYLE_BARS = "bars";
 
     static final String BAND_FULL = "full";
     static final String BAND_BASS = "bass";

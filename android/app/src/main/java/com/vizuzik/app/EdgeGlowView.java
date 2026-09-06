@@ -95,7 +95,16 @@ final class EdgeGlowView extends View {
     // per-band ones since this view has no spectrum to speak of, only a border.
     private float ambientPhase;
 
+    // Last full 32-band array received (whichever source fed it) — kept separately from the
+    // single-scalar `level` above so the "bars" diagnostic style can show each band's own value
+    // instead of the one number the border glow reduces the whole spectrum to. A plain volatile
+    // reference swap, not a copy: TrackedSessionAudioSource/AudioLevelsBridge already hand over a
+    // freshly cloned array on every call that's never mutated again afterward, so publishing the
+    // reference itself is safe without an extra copy here.
+    private volatile float[] lastBands;
+
     // EdgeConfig-driven knobs, applied by OverlayEdgeGlowService — see applyConfig().
+    private String style = EdgeConfig.STYLE_GLOW;
     private String band = EdgeConfig.BAND_FULL;
     private float intensity = 1f;
     private float thicknessMul = 1f;
@@ -116,6 +125,7 @@ final class EdgeGlowView extends View {
     /** Applied once at startup and again whenever the settings panel changes something while the
      *  overlay is already running (see OverlayEdgeGlowService's SharedPreferences listener). */
     void applyConfig(EdgeConfig.Snapshot config) {
+        style = config.style;
         band = config.band;
         intensity = config.intensity;
         thicknessMul = config.thickness;
@@ -139,6 +149,7 @@ final class EdgeGlowView extends View {
         lastLevelsAtMs = 0;
         level = 0f;
         beatEnergy = 0f;
+        lastBands = null;
     }
 
     /**
@@ -162,6 +173,7 @@ final class EdgeGlowView extends View {
      */
     synchronized void pushLevels(float[] bands) {
         if (bands == null || bands.length == 0) return;
+        lastBands = bands;
 
         int bassBands = Math.min(BASS_END, bands.length);
         float bassSum = 0f;
@@ -258,9 +270,56 @@ final class EdgeGlowView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         try {
-            drawGlow(canvas);
+            if (EdgeConfig.STYLE_BARS.equals(style)) {
+                drawBars(canvas);
+            } else {
+                drawGlow(canvas);
+            }
         } catch (Exception e) {
             Log.w(TAG, "onDraw", e);
+        }
+    }
+
+    /**
+     * Diagnostic/alternate style: each of the 32 bands drawn as its own bar instead of being
+     * reduced to the one scalar the border glow uses — added specifically to answer "is the data
+     * actually moving, or is the border just not showing it": a single averaged number can stay
+     * fairly stable even while every individual band swings a lot (that's what an average does),
+     * so this is the more honest way to look directly at what TrackedSessionAudioSource/
+     * AudioLevelsBridge are actually delivering, frame to frame.
+     */
+    private void drawBars(Canvas canvas) {
+        // Anchored to the bottom edge — respects that one toggle the same way drawGlow() respects
+        // all four, rather than ignoring the settings panel's edge checkboxes entirely.
+        if (!edgeBottom) return;
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        // Same liveness check drawGlow() uses to fall back to ambient: without it, a capture that
+        // dies silently (no explicit clearLevels() call) would leave the last frame's bars lit on
+        // screen forever, exactly the frozen-glow bug this whole timeout mechanism exists to
+        // prevent — bars have no ambient regime to fall back to, so "not live" just means blank.
+        boolean live = lastLevelsAtMs != 0
+            && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
+        float[] bands = lastBands;
+        if (!live || bands == null || bands.length == 0) {
+            return;
+        }
+
+        int color = displayColor();
+        paint.setShader(null);
+
+        int n = bands.length;
+        float barWidth = (float) width / n;
+        float maxBarHeight = height * 0.6f;
+        for (int i = 0; i < n; i++) {
+            float level = clamp01(bands[i] * intensity);
+            float barHeight = Math.max(2f * density, level * maxBarHeight * thicknessMul);
+            float left = i * barWidth;
+            int alpha = clamp255((int) ((120 + level * 135f) * brightnessMul));
+            paint.setColor((color & 0x00FFFFFF) | (alpha << 24));
+            canvas.drawRect(left + barWidth * 0.15f, height - barHeight, left + barWidth * 0.85f, height, paint);
         }
     }
 
