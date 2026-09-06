@@ -50,6 +50,13 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     // plugin's own.
     private MicCaptureThread micCaptureThread;
 
+    // Diagnostic-only (see VisualizerProbe's class doc). Deliberately NOT stopped in
+    // handleOnStop() below, unlike micCaptureThread: the whole point of a manual test run is
+    // often to background Vizuzik and switch to Deezer while it keeps logging, since that
+    // backgrounded case is exactly what the eventual Edge Visualizer use needs to work. Only
+    // stopVisualizerProbe() (called manually while testing) or the process dying ends it.
+    private VisualizerProbe visualizerProbe;
+
     @Override
     protected void handleOnStart() {
         DeezerMediaBridge.getInstance().addListener(this);
@@ -585,6 +592,51 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             micCaptureThread.stopCapture();
             micCaptureThread = null;
         }
+    }
+
+    /**
+     * Diagnostic-only: starts VisualizerProbe (see its class doc), an isolated prototype testing
+     * whether android.media.audiofx.Visualizer can see the tracked app's own audio using only
+     * RECORD_AUDIO — no MediaProjection dialog. Not wired into AudioLevelsBridge or anything the
+     * app renders; it only writes to Logcat (filter on "VizuzikVisualizerProbe"). Meant to be
+     * triggered manually — e.g. from Chrome's remote inspector console — while a track plays in
+     * the tracked app, not from any production UI path.
+     *
+     * Reuses the exact same "microphone" permission alias as startMicCapture(): this is still
+     * just RECORD_AUDIO, not a new permission, and the same already-shown system dialog.
+     */
+    @PluginMethod
+    public void startVisualizerProbe(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            beginVisualizerProbe(call);
+        } else {
+            requestPermissionForAlias("microphone", call, "handleVisualizerProbePermissionResult");
+        }
+    }
+
+    @PermissionCallback
+    private void handleVisualizerProbePermissionResult(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            beginVisualizerProbe(call);
+        } else {
+            call.reject("denied");
+        }
+    }
+
+    private void beginVisualizerProbe(PluginCall call) {
+        if (visualizerProbe == null) {
+            visualizerProbe = new VisualizerProbe(getContext());
+        }
+        visualizerProbe.start();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopVisualizerProbe(PluginCall call) {
+        if (visualizerProbe != null) {
+            visualizerProbe.stop();
+        }
+        call.resolve();
     }
 
     @Override
