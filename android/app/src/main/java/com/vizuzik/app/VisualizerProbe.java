@@ -150,7 +150,9 @@ final class VisualizerProbe {
         }
 
         Log.i(TAG, label + ": Visualizer initialized");
-        Log.i(TAG, label + ": audio session id = " + visualizer.getAudioSessionId());
+        // Visualizer has no getter to read the session back — it's whatever was just passed to
+        // the constructor above, so log that directly instead.
+        Log.i(TAG, label + ": audio session id = " + sessionId);
 
         int captureSize = Visualizer.getCaptureSizeRange()[1];
         try {
