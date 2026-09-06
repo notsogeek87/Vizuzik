@@ -34,15 +34,18 @@ public class MainActivity extends BridgeActivity {
         enterFullScreen();
     }
 
+    // Capacitor's BridgeActivity declares both public (not the usual protected from Activity
+    // itself), so overriding with the normally-expected protected fails to compile — Java
+    // forbids narrowing an overridden method's access.
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         foreground = true;
         EdgeOverlayController.getInstance().sync();
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         super.onPause();
         foreground = false;
         EdgeOverlayController.getInstance().sync();
