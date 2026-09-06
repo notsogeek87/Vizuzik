@@ -55,9 +55,18 @@ import androidx.core.content.ContextCompat;
  * left it pinned at maximum almost permanently (real magnitudes routinely exceeded it) — which
  * *looks* like "stopped reacting" even though it's technically still fed live data every frame,
  * since a value stuck at its ceiling renders as a constant, unmoving thickness/brightness.
- * updateBands() below tracks the recent loudness envelope instead (an adaptive ceiling that jumps
- * up on a new peak and decays slowly otherwise) and normalizes against that, so the visible range
- * self-calibrates to whatever this device/track actually produces rather than a guessed constant.
+ *
+ * updateBands() below tracks the recent loudness envelope instead — but *per band*, not one
+ * ceiling shared across the whole spectrum: a first version used a single frame-wide ceiling (set
+ * by whichever of the 32 bands happened to be loudest at that instant), which made every other,
+ * quieter band read as a small fraction of it. EdgeGlowView averages across the full spectrum by
+ * default, so with only the one loudest band ever reaching 1.0 and the other 31 sitting near zero
+ * (real music concentrates energy very unevenly across frequency — treble bands in particular
+ * carry far less energy than bass/mid ones), that average came out low and nearly flat, reading
+ * as "not reacting" again from the opposite direction. Each band now tracks its own recent peak
+ * and normalizes against that, so a quiet-but-real high-frequency band still contributes its own
+ * honest 0-to-1 swing to the average instead of being permanently dwarfed by whatever the loudest
+ * bass band was doing.
  */
 final class TrackedSessionAudioSource {
 
@@ -87,9 +96,8 @@ final class TrackedSessionAudioSource {
     private final Context appContext;
     private final Listener listener;
     private final double[] bandFrequencies = new double[BAND_COUNT];
-    private final double[] rawMagnitudes = new double[BAND_COUNT];
     private final float[] smoothedBands = new float[BAND_COUNT];
-    private float ceiling = CEILING_FLOOR;
+    private final float[] bandCeilings = new float[BAND_COUNT];
 
     private final BroadcastReceiver sessionReceiver = new BroadcastReceiver() {
         @Override
@@ -126,6 +134,7 @@ final class TrackedSessionAudioSource {
         for (int i = 0; i < BAND_COUNT; i++) {
             bandFrequencies[i] = MIN_FREQ * Math.pow(ratio, i / (double) (BAND_COUNT - 1));
         }
+        java.util.Arrays.fill(bandCeilings, CEILING_FLOOR);
     }
 
     /** Starts listening for a session to attach to. Attaching itself only happens once a
@@ -222,9 +231,9 @@ final class TrackedSessionAudioSource {
             v.setEnabled(true);
             visualizer = v;
             attachedSessionId = sessionId;
-            // Fresh track, fresh envelope: a loud previous session's ceiling has no reason to
+            // Fresh track, fresh envelope: a loud previous session's ceilings have no reason to
             // suppress this one's first few seconds.
-            ceiling = CEILING_FLOOR;
+            java.util.Arrays.fill(bandCeilings, CEILING_FLOOR);
         } catch (Exception e) {
             Log.w(TAG, "Impossible d'attacher le Visualizer à la session de " + packageName, e);
             listener.onSourceLost();
@@ -241,7 +250,6 @@ final class TrackedSessionAudioSource {
     private void updateBands(byte[] fft, double sampleRateHz) {
         if (fft == null || fft.length < 4 || sampleRateHz <= 0) return;
         int bins = fft.length / 2;
-        double frameMax = 0;
         for (int i = 0; i < BAND_COUNT; i++) {
             int bin = (int) Math.round(bandFrequencies[i] * fft.length / sampleRateHz);
             bin = Math.max(1, Math.min(bins - 1, bin));
@@ -255,21 +263,20 @@ final class TrackedSessionAudioSource {
                 im = fft[2 * bin + 1];
             }
             double magnitude = Math.sqrt(re * re + im * im);
-            rawMagnitudes[i] = magnitude;
-            if (magnitude > frameMax) frameMax = magnitude;
-        }
 
-        // Adaptive ceiling — see the class doc above: jump up instantly on a new peak, otherwise
-        // decay slowly, so the normalization below tracks the recent loudness envelope instead of
-        // a guessed absolute constant.
-        if (frameMax > ceiling) {
-            ceiling = (float) frameMax;
-        } else {
-            ceiling = Math.max(CEILING_FLOOR, ceiling * CEILING_DECAY);
-        }
+            // Adaptive ceiling, tracked independently per band — see the class doc above for why
+            // a single ceiling shared across all 32 bands flattened the average out instead of
+            // fixing it: jump up instantly on a new peak for *this* band, otherwise decay slowly,
+            // so each band's own level reflects its own recent loudness envelope.
+            float bandCeiling = bandCeilings[i];
+            if (magnitude > bandCeiling) {
+                bandCeiling = (float) magnitude;
+            } else {
+                bandCeiling = Math.max(CEILING_FLOOR, bandCeiling * CEILING_DECAY);
+            }
+            bandCeilings[i] = bandCeiling;
 
-        for (int i = 0; i < BAND_COUNT; i++) {
-            float level = clamp01((float) (rawMagnitudes[i] / ceiling));
+            float level = clamp01((float) (magnitude / bandCeiling));
             smoothedBands[i] = smoothedBands[i] * 0.5f + level * 0.5f;
         }
         listener.onLevels(smoothedBands.clone());
