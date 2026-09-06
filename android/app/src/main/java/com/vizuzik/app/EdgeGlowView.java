@@ -27,8 +27,9 @@ import android.view.View;
  * colors (or a fixed custom palette, see EdgeConfig), and a real event (track change, play/pause)
  * is still allowed an honest pulse.
  *
- * This is the one rendering style implemented so far ("glow" in EdgeConfig) — see applyConfig()
- * and drawGlow() for where a second style (particles, waves…) would plug in alongside it.
+ * Two rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
+ * each of the 32 bands on its own, and "glow", the border that averages them into one scalar.
+ * onDraw() is where a third (particles, waves…) would plug in alongside them.
  */
 final class EdgeGlowView extends View {
 
@@ -60,6 +61,11 @@ final class EdgeGlowView extends View {
     // mid ~190-1700 Hz (8-21), treble ~1700-7000 Hz (22-31).
     private static final int BASS_END = 8;
     private static final int MID_END = 22;
+    // How far a bar may reach inward, as a fraction of the screen dimension it grows along.
+    // Deliberately well under half: opposite edges are both enabled by default, so anything more
+    // lets two rows meet on a loud passage and cover the middle of whatever is underneath — this
+    // overlay is meant to frame the tracked app, not hide it.
+    private static final float BAR_MAX_FRACTION = 0.3f;
 
     private final Paint paint = new Paint();
     private final float density;
@@ -203,25 +209,27 @@ final class EdgeGlowView extends View {
      *  "full" (the whole spectrum, same as the full-screen visualizer) or one of bass/mid/treble
      *  for someone who wants the border to track a narrower range than the beat detector does. */
     private float averageForBand(float[] bands) {
-        int from;
-        int to;
-        if (EdgeConfig.BAND_BASS.equals(band)) {
-            from = 0;
-            to = Math.min(BASS_END, bands.length);
-        } else if (EdgeConfig.BAND_MID.equals(band)) {
-            from = Math.min(BASS_END, bands.length);
-            to = Math.min(MID_END, bands.length);
-        } else if (EdgeConfig.BAND_TREBLE.equals(band)) {
-            from = Math.min(MID_END, bands.length);
-            to = bands.length;
-        } else {
-            from = 0;
-            to = bands.length;
-        }
+        int from = bandFrom(bands.length);
+        int to = bandTo(bands.length);
         if (to <= from) return 0f;
         float sum = 0f;
         for (int i = from; i < to; i++) sum += bands[i];
         return sum / (to - from);
+    }
+
+    /** First band of the [from, to) slice EdgeConfig's frequency choice selects — shared with
+     *  drawBars(), so the panel's Fréquences setting narrows the spectrum in both styles rather
+     *  than only in the glow's average. */
+    private int bandFrom(int length) {
+        if (EdgeConfig.BAND_MID.equals(band)) return Math.min(BASS_END, length);
+        if (EdgeConfig.BAND_TREBLE.equals(band)) return Math.min(MID_END, length);
+        return 0;
+    }
+
+    private int bandTo(int length) {
+        if (EdgeConfig.BAND_BASS.equals(band)) return Math.min(BASS_END, length);
+        if (EdgeConfig.BAND_MID.equals(band)) return Math.min(MID_END, length);
+        return length;
     }
 
     @Override
@@ -281,17 +289,12 @@ final class EdgeGlowView extends View {
     }
 
     /**
-     * Diagnostic/alternate style: each of the 32 bands drawn as its own bar instead of being
-     * reduced to the one scalar the border glow uses — added specifically to answer "is the data
-     * actually moving, or is the border just not showing it": a single averaged number can stay
-     * fairly stable even while every individual band swings a lot (that's what an average does),
-     * so this is the more honest way to look directly at what TrackedSessionAudioSource/
-     * AudioLevelsBridge are actually delivering, frame to frame.
+     * The default style: each of the 32 bands drawn on its own rather than reduced to the single
+     * scalar drawGlow() works from. Started as a way to answer "is the data actually moving, or is
+     * the border just not showing it" — an average can sit fairly still while the individual bands
+     * swing a lot — and stayed the default because it shows what the capture delivers directly.
      */
     private void drawBars(Canvas canvas) {
-        // Anchored to the bottom edge — respects that one toggle the same way drawGlow() respects
-        // all four, rather than ignoring the settings panel's edge checkboxes entirely.
-        if (!edgeBottom) return;
         int width = getWidth();
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
@@ -307,19 +310,71 @@ final class EdgeGlowView extends View {
             return;
         }
 
+        int from = bandFrom(bands.length);
+        int to = bandTo(bands.length);
+        if (to <= from) return;
+
         int color = displayColor();
         paint.setShader(null);
 
-        int n = bands.length;
-        float barWidth = (float) width / n;
-        float maxBarHeight = height * 0.6f;
+        // Every edge the panel enables, not the bottom alone: leaving only Gauche/Droite checked
+        // would otherwise render nothing at all, which looks exactly like a capture that died.
+        if (edgeBottom) drawBarRow(canvas, bands, from, to, color, width, height, false);
+        if (edgeTop) drawBarRow(canvas, bands, from, to, color, width, height, true);
+        if (edgeLeft) drawBarColumn(canvas, bands, from, to, color, width, height, false);
+        if (edgeRight) drawBarColumn(canvas, bands, from, to, color, width, height, true);
+    }
+
+    /** Peak length for one bar, honouring the thickness slider but never past the point where two
+     *  opposite rows would collide. */
+    private float barLimit(int extent) {
+        return Math.min(extent * BAR_MAX_FRACTION * thicknessMul, extent * 0.45f);
+    }
+
+    private float barLength(float bandLevel, int extent) {
+        float level = clamp01(bandLevel * intensity * sensitivity);
+        return Math.max(2f * density, level * barLimit(extent));
+    }
+
+    private void applyBarPaint(float bandLevel, int color) {
+        float level = clamp01(bandLevel * intensity * sensitivity);
+        int alpha = clamp255((int) ((120 + level * 135f) * brightnessMul));
+        paint.setColor((color & 0x00FFFFFF) | (alpha << 24));
+    }
+
+    /** One row of bars along a horizontal edge, growing inward from it. */
+    private void drawBarRow(Canvas canvas, float[] bands, int from, int to, int color, int width, int height, boolean fromTop) {
+        int n = to - from;
+        float slot = (float) width / n;
         for (int i = 0; i < n; i++) {
-            float level = clamp01(bands[i] * intensity);
-            float barHeight = Math.max(2f * density, level * maxBarHeight * thicknessMul);
-            float left = i * barWidth;
-            int alpha = clamp255((int) ((120 + level * 135f) * brightnessMul));
-            paint.setColor((color & 0x00FFFFFF) | (alpha << 24));
-            canvas.drawRect(left + barWidth * 0.15f, height - barHeight, left + barWidth * 0.85f, height, paint);
+            float length = barLength(bands[from + i], height);
+            applyBarPaint(bands[from + i], color);
+            float left = i * slot;
+            canvas.drawRect(
+                left + slot * 0.15f,
+                fromTop ? 0 : height - length,
+                left + slot * 0.85f,
+                fromTop ? length : height,
+                paint
+            );
+        }
+    }
+
+    /** One column of bars along a vertical edge, growing inward from it. */
+    private void drawBarColumn(Canvas canvas, float[] bands, int from, int to, int color, int width, int height, boolean fromRight) {
+        int n = to - from;
+        float slot = (float) height / n;
+        for (int i = 0; i < n; i++) {
+            float length = barLength(bands[from + i], width);
+            applyBarPaint(bands[from + i], color);
+            float top = i * slot;
+            canvas.drawRect(
+                fromRight ? width - length : 0,
+                top + slot * 0.15f,
+                fromRight ? width : length,
+                top + slot * 0.85f,
+                paint
+            );
         }
     }
 

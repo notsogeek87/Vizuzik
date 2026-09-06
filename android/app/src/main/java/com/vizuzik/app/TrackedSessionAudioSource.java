@@ -48,25 +48,24 @@ import androidx.core.content.ContextCompat;
  * up to 30 FFT-to-band conversions a second competing with the overlay's own rendering and window
  * management for main-thread time.
  *
- * Visualizer's raw FFT magnitude has no fixed reference level to calibrate a constant against —
- * it depends on device/OS gain staging that's only knowable by looking at real numbers on real
- * hardware. Two fixed guesses were tried and both were wrong in opposite directions: a high
- * ceiling left the glow barely reactive (real magnitudes never got close to it), and a low one
- * left it pinned at maximum almost permanently (real magnitudes routinely exceeded it) — which
- * *looks* like "stopped reacting" even though it's technically still fed live data every frame,
- * since a value stuck at its ceiling renders as a constant, unmoving thickness/brightness.
+ * On how updateBands() scales a raw FFT magnitude into the 0-1 level EdgeGlowView draws: three
+ * earlier attempts got this wrong, and the last one is worth recording because it failed in a way
+ * that looked like success. Two fixed constants were guessed first and were wrong in opposite
+ * directions (one left the glow barely reactive, the other pinned it at maximum). The third tried
+ * an adaptive ceiling per band — each band continuously renormalized against its own recent peak,
+ * with that peak decaying over roughly a second. That is an automatic gain control, and an AGC
+ * whose time constant sits on top of the beat period is precisely a rhythm remover: a loud beat
+ * pulls its band's ceiling up, the ceiling then decays into the gap after it, and the next beat
+ * divides by a ceiling the previous beat just set. Every band ends up hovering near its own recent
+ * average no matter how loud the music actually is, so the border still moved — it just moved
+ * with no relation to the beat, which is exactly what it looked like on the device.
  *
- * updateBands() below tracks the recent loudness envelope instead — but *per band*, not one
- * ceiling shared across the whole spectrum: a first version used a single frame-wide ceiling (set
- * by whichever of the 32 bands happened to be loudest at that instant), which made every other,
- * quieter band read as a small fraction of it. EdgeGlowView averages across the full spectrum by
- * default, so with only the one loudest band ever reaching 1.0 and the other 31 sitting near zero
- * (real music concentrates energy very unevenly across frequency — treble bands in particular
- * carry far less energy than bass/mid ones), that average came out low and nearly flat, reading
- * as "not reacting" again from the opposite direction. Each band now tracks its own recent peak
- * and normalizes against that, so a quiet-but-real high-frequency band still contributes its own
- * honest 0-to-1 swing to the average instead of being permanently dwarfed by whatever the loudest
- * bass band was doing.
+ * There is no need to infer a reference level at all: Visualizer hands the FFT back as *signed
+ * bytes* (see updateBands()'s layout note), so a bin's magnitude is bounded by sqrt(128² + 128²) ≈
+ * 180 by construction. That bound comes from the API's own documented data type rather than from
+ * device gain staging, which is what made the first two constants unguessable. updateBands() maps
+ * against it directly, with no memory of previous frames — so a loud passage reads loud, a quiet
+ * one reads quiet, and the beat survives.
  */
 final class TrackedSessionAudioSource {
 
@@ -80,24 +79,22 @@ final class TrackedSessionAudioSource {
     private static final double MIN_FREQ = 55;
     private static final double MAX_FREQ = 7000;
     private static final int CAPTURE_RATE_HZ = 30;
-    // Adaptive ceiling — see the class doc above. Never below this floor, so a silent passage
-    // can't leave the ceiling near zero and turn the next quiet sound into a false full-strength
-    // spike the instant it arrives.
-    private static final float CEILING_FLOOR = 8f;
-    // Applied once per capture tick (~CAPTURE_RATE_HZ times/sec) when the frame didn't set a new
-    // peak. A single percussive transient (one kick/snare hit) can spike well above the music's
-    // sustained loudness — with too slow a decay that one frame's ceiling would ratio every
-    // following frame down near zero for many seconds, reading as "stopped reacting" again, just
-    // from one frame instead of a bad constant. 0.96^30 ≈ 0.29 per second: a spike's influence is
-    // mostly gone within about a second, fast enough that the next beat still registers as its
-    // own strong pulse instead of a muted echo of the last one.
-    private static final float CEILING_DECAY = 0.96f;
+    // The largest magnitude a bin can hold given the FFT arrives as signed bytes — see the class
+    // doc. Fixed, frame-independent, and derived from the data type rather than guessed.
+    private static final float MAGNITUDE_MAX = 180f;
+    // Below this a bin is barely above the quantisation noise of a byte-resolution FFT. Gating it
+    // to zero keeps a silent passage looking silent instead of having its noise floor stretched
+    // into visible movement by the curve below.
+    private static final float NOISE_GATE = 4f;
+    // Music leaves most bins far below MAGNITUDE_MAX, so mapping linearly would render nearly
+    // everything dark and flat. This lifts quiet-but-real content into view without letting loud
+    // content saturate: 0.05 of the range becomes 0.26, 0.25 becomes 0.54, 1.0 stays 1.0.
+    private static final double LEVEL_GAMMA = 0.45;
 
     private final Context appContext;
     private final Listener listener;
     private final double[] bandFrequencies = new double[BAND_COUNT];
     private final float[] smoothedBands = new float[BAND_COUNT];
-    private final float[] bandCeilings = new float[BAND_COUNT];
 
     private final BroadcastReceiver sessionReceiver = new BroadcastReceiver() {
         @Override
@@ -134,7 +131,6 @@ final class TrackedSessionAudioSource {
         for (int i = 0; i < BAND_COUNT; i++) {
             bandFrequencies[i] = MIN_FREQ * Math.pow(ratio, i / (double) (BAND_COUNT - 1));
         }
-        java.util.Arrays.fill(bandCeilings, CEILING_FLOOR);
     }
 
     /** Starts listening for a session to attach to. Attaching itself only happens once a
@@ -231,9 +227,6 @@ final class TrackedSessionAudioSource {
             v.setEnabled(true);
             visualizer = v;
             attachedSessionId = sessionId;
-            // Fresh track, fresh envelope: a loud previous session's ceilings have no reason to
-            // suppress this one's first few seconds.
-            java.util.Arrays.fill(bandCeilings, CEILING_FLOOR);
         } catch (Exception e) {
             Log.w(TAG, "Impossible d'attacher le Visualizer à la session de " + packageName, e);
             listener.onSourceLost();
@@ -264,19 +257,12 @@ final class TrackedSessionAudioSource {
             }
             double magnitude = Math.sqrt(re * re + im * im);
 
-            // Adaptive ceiling, tracked independently per band — see the class doc above for why
-            // a single ceiling shared across all 32 bands flattened the average out instead of
-            // fixing it: jump up instantly on a new peak for *this* band, otherwise decay slowly,
-            // so each band's own level reflects its own recent loudness envelope.
-            float bandCeiling = bandCeilings[i];
-            if (magnitude > bandCeiling) {
-                bandCeiling = (float) magnitude;
-            } else {
-                bandCeiling = Math.max(CEILING_FLOOR, bandCeiling * CEILING_DECAY);
-            }
-            bandCeilings[i] = bandCeiling;
-
-            float level = clamp01((float) (magnitude / bandCeiling));
+            float level = magnitude <= NOISE_GATE
+                ? 0f
+                : (float) Math.pow(
+                    clamp01((float) ((magnitude - NOISE_GATE) / (MAGNITUDE_MAX - NOISE_GATE))),
+                    LEVEL_GAMMA
+                );
             smoothedBands[i] = smoothedBands[i] * 0.5f + level * 0.5f;
         }
         listener.onLevels(smoothedBands.clone());

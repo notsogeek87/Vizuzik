@@ -805,7 +805,7 @@ setInterval(updateOverlayStatusBadge, 500);
    access to this page's localStorage — picks up an edit live, without a restart. --- */
 
 const EDGE_SETTINGS_DEFAULTS = {
-  style: "glow",
+  style: "bars",
   band: "full",
   colorMode: "auto",
   intensity: 1,

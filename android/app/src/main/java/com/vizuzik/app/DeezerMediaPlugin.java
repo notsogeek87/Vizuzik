@@ -529,7 +529,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         org.json.JSONObject data = call.getData();
         EdgeConfig.write(
             getContext(),
-            call.getString("style", EdgeConfig.STYLE_GLOW),
+            call.getString("style", EdgeConfig.STYLE_BARS),
             (float) data.optDouble("intensity", 1.0),
             (float) data.optDouble("thickness", 1.0),
             (float) data.optDouble("brightness", 1.0),

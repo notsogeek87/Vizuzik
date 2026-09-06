@@ -14,8 +14,8 @@ import android.graphics.Color;
 final class EdgeConfig {
 
     static final String STYLE_GLOW = "glow";
-    // Diagnostic/alternate style: see EdgeGlowView.drawBars() — each band drawn on its own
-    // instead of averaged into the glow's single scalar.
+    // See EdgeGlowView.drawBars() — each band drawn on its own instead of averaged into the
+    // glow's single scalar. The default since STYLE_VERSION 2.
     static final String STYLE_BARS = "bars";
 
     static final String BAND_FULL = "full";
@@ -28,6 +28,11 @@ final class EdgeConfig {
 
     private static final String PREFS_NAME = "vizuzik";
     private static final String KEY_STYLE = "edgeStyle";
+    // Bumped when a stored KEY_STYLE should be dropped rather than honoured. Version 2 made bars
+    // the default; an install predating it carries "glow" only because that was the single value
+    // the panel could ever write, which is not the same as having chosen it.
+    private static final String KEY_STYLE_VERSION = "edgeStyleVersion";
+    private static final int STYLE_VERSION = 2;
     private static final String KEY_INTENSITY = "edgeIntensity";
     private static final String KEY_THICKNESS = "edgeThickness";
     private static final String KEY_BRIGHTNESS = "edgeBrightness";
@@ -84,12 +89,13 @@ final class EdgeConfig {
 
     static Snapshot read(Context context) {
         SharedPreferences prefs = prefs(context);
+        migrateStyle(prefs);
         String colorMode = prefs.getString(KEY_COLOR_MODE, COLOR_AUTO);
         int[][] customPalette = COLOR_CUSTOM.equals(colorMode)
             ? parseColors(prefs.getString(KEY_CUSTOM_COLORS, null))
             : null;
         return new Snapshot(
-            prefs.getString(KEY_STYLE, STYLE_GLOW),
+            prefs.getString(KEY_STYLE, STYLE_BARS),
             prefs.getFloat(KEY_INTENSITY, 1f),
             prefs.getFloat(KEY_THICKNESS, 1f),
             prefs.getFloat(KEY_BRIGHTNESS, 1f),
@@ -126,6 +132,9 @@ final class EdgeConfig {
         prefs(context)
             .edit()
             .putString(KEY_STYLE, style)
+            // Stamped alongside the value so a style picked here is a real choice, left alone by
+            // migrateStyle() from now on.
+            .putInt(KEY_STYLE_VERSION, STYLE_VERSION)
             .putFloat(KEY_INTENSITY, intensity)
             .putFloat(KEY_THICKNESS, thickness)
             .putFloat(KEY_BRIGHTNESS, brightness)
@@ -173,6 +182,14 @@ final class EdgeConfig {
             colors = new int[][] { colors[0], colors[1], colors[0] };
         }
         return colors;
+    }
+
+    /** Drops a KEY_STYLE stored before the current STYLE_VERSION, once, so the new default takes
+     *  effect on an existing install. write() stamps the current version, so a style the user
+     *  actually picks in the settings panel is never touched by this. */
+    private static void migrateStyle(SharedPreferences prefs) {
+        if (prefs.getInt(KEY_STYLE_VERSION, 1) >= STYLE_VERSION) return;
+        prefs.edit().remove(KEY_STYLE).putInt(KEY_STYLE_VERSION, STYLE_VERSION).apply();
     }
 
     private static SharedPreferences prefs(Context context) {
