@@ -101,6 +101,46 @@ frame — ce recalcul explicite évite simplement un instant visible aux ancienn
 temps que le système redéclenche un layout de son côté. Non vérifié sur un appareil pliable réel
 (voir la section Tests).
 
+### Mise à jour : plus besoin de MediaProjection pour le contour (`TrackedSessionAudioSource`)
+
+Après publication de cette ADR, une question est restée ouverte : le mode « Micro » du plein
+écran ne capte que le microphone physique du téléphone (`MicCaptureThread`, `AudioSource.MIC`) —
+aucun lien avec le flux numérique de l'app suivie, contrairement à ce qu'on pourrait croire. Testé
+et confirmé sur appareil (Samsung Galaxy Z Fold8, via un prototype de diagnostic isolé,
+`VisualizerProbe.java`, conservé dans l'historique git) :
+
+- `android.media.audiofx.Visualizer` attaché à la session 0 (« output mix ») échoue net sur cet
+  appareil (`RuntimeException: Cannot initialize Visualizer engine, error: -3`) — capture globale
+  refusée à une app tierce, comme attendu sur un Android récent.
+- `AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION` — la diffusion que les piles de lecture
+  standard (`MediaPlayer`, `ExoPlayer`) envoient à l'ouverture d'une session audio non nulle, avec
+  le package et le `audioSessionId` — est bien envoyée par Deezer. Un `Visualizer` attaché à cette
+  session précise capte du signal réel et variable (FFT magnitude observée entre 0 et ~2990 sur
+  une lecture réelle), avec seulement `RECORD_AUDIO`, sans jamais afficher la fenêtre
+  MediaProjection.
+
+`TrackedSessionAudioSource.java` porte ce mécanisme en production : il écoute cette diffusion,
+attache un `Visualizer` à la session de l'app suivie, et transforme la capture FFT en le même
+spectre 32 bandes log (55 Hz-7000 Hz) que `AudioCaptureService`/`MicCaptureThread` produisent —
+`EdgeGlowView.pushLevels()` ne voit aucune différence entre les sources. Tout le travail
+(construction du `Visualizer`, callbacks de capture, libération) tourne sur un `HandlerThread`
+dédié : un objet `AudioEffect` livre ses callbacks sur le thread qui l'a construit s'il a un
+Looper, donc le construire depuis le thread principal (celui du `BroadcastReceiver` par défaut)
+aurait fait tourner jusqu'à 30 conversions FFT→bandes par seconde sur le même thread que le rendu
+de la fenêtre.
+
+`OverlayEdgeGlowService` garde `AudioLevelsBridge` (MediaProjection) branché en parallèle, comme
+repli : si la diffusion n'arrive jamais (autre app, autre version d'Android) ou si `RECORD_AUDIO`
+n'est pas encore accordé, le contour continue de fonctionner exactement comme avant. Les deux
+sources peuvent en théorie pousser des niveaux en même temps ; `EdgeGlowView.pushLevels()` est
+donc devenu `synchronized` (il touche un buffer circulaire non protégé, jusque-là jamais appelé
+que par un seul producteur à la fois).
+
+L'échelle qui transforme une magnitude FFT brute en niveau 0-1 (`MAGNITUDE_SCALE`/
+`MAGNITUDE_CEILING` dans `TrackedSessionAudioSource`) est une première approximation : Visualizer
+ne fournit aucune référence absolue à laquelle se calibrer sans regarder le contour réagir
+réellement sur un appareil — à ajuster selon le retour visuel.
+
 ### Ce qui ne change pas
 
 Permissions déjà en place (`RECORD_AUDIO`, `FOREGROUND_SERVICE`,
@@ -117,9 +157,12 @@ le service dès que l'utilisateur retire Vizuzik des applications récentes — 
 - Le consentement `MediaProjection` (audio réel) doit être redonné après un swipe complet de
   Vizuzik hors des applications récentes, comme aujourd'hui pour le visualiseur plein écran — ce
   n'est pas spécifique à l'overlay.
-- **Non testé sur appareil réel dans cette session** : l'environnement de développement utilisé
-  ici n'a ni SDK Android ni émulateur, donc ni compilation Gradle ni test manuel n'ont pu être
-  faits ici. Le code reprend fidèlement ce qui avait déjà tourné sur un appareil (fenêtre, rendu,
-  palette), moins exactement la partie jamais mise en cause dans le revert précédent (le micro),
-  mais une validation sur un appareil réel — Z Fold inclus pour le pli/dépli — reste à faire avant
-  de considérer la fonctionnalité prête.
+- **Compilation vérifiée par CI, pas testée manuellement dans cette session** : l'environnement de
+  développement utilisé ici n'a ni SDK Android ni émulateur — impossible de compiler ou de lancer
+  l'app localement. Chaque changement a donc été vérifié via le workflow GitHub Actions
+  (`android.yml`, `assembleDebug`) avant d'être propagé.
+- Le mécanisme `TrackedSessionAudioSource` (Visualizer + diffusion système) a été validé
+  expérimentalement sur le Z Fold8 via `VisualizerProbe` (voir la section « Mise à jour »
+  ci-dessus) — capture réelle et variable confirmée. **Le rendu du contour lui-même une fois
+  branché dessus (constante d'échelle, latence perçue, comportement en arrière-plan prolongé,
+  pli/dépli) reste à confirmer visuellement sur l'appareil.**

@@ -42,9 +42,19 @@ import androidx.core.app.ServiceCompat;
  * drawing an overlay — so this version simply never opens a second mic stream. When "mic" is the
  * chosen source (or capture isn't running at all), the glow falls back to its ambient regime
  * below, exactly like the full-screen player does before real audio is granted.
+ *
+ * Live reactivity primarily comes from TrackedSessionAudioSource (android.media.audiofx.
+ * Visualizer attached to the tracked app's own audio session, found via a system broadcast —
+ * validated on-device before being wired in here, see its class doc) rather than AudioLevelsBridge:
+ * it needs only RECORD_AUDIO, never the MediaProjection consent dialog AudioCaptureService
+ * requires. AudioLevelsBridge stays wired in alongside it as a fallback, per the same reasoning
+ * that already justifies keeping the ambient regime below — a device/Android build where the
+ * broadcast never arrives (or RECORD_AUDIO isn't granted) should still light up if "son réel" is
+ * already running, rather than silently doing less than the previous version could.
  */
 public class OverlayEdgeGlowService extends Service
-    implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener, SharedPreferences.OnSharedPreferenceChangeListener {
+    implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener, SharedPreferences.OnSharedPreferenceChangeListener,
+        TrackedSessionAudioSource.Listener {
 
     private static final String TAG = "OverlayEdgeGlow";
     private static final String CHANNEL_ID = "vizuzik_overlay";
@@ -53,6 +63,7 @@ public class OverlayEdgeGlowService extends Service
     private WindowManager windowManager;
     private NotificationManager notificationManager;
     private EdgeGlowView glowView;
+    private TrackedSessionAudioSource trackedSessionAudioSource;
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -101,6 +112,10 @@ public class OverlayEdgeGlowService extends Service
             // (see DeezerMediaBridge), so there's no need to also ask for it here.
             DeezerMediaBridge.getInstance().addListener(this);
             AudioLevelsBridge.getInstance().addListener(this);
+            if (trackedSessionAudioSource == null) {
+                trackedSessionAudioSource = new TrackedSessionAudioSource(this, this);
+            }
+            trackedSessionAudioSource.start();
         }
         return START_STICKY;
     }
@@ -204,11 +219,16 @@ public class OverlayEdgeGlowService extends Service
         hasLastIsPlaying = true;
     }
 
+    /**
+     * Serves both AudioLevelsBridge.Listener and TrackedSessionAudioSource.Listener — they
+     * declare the identical onLevels(float[]) signature, and both feed the glow the exact same
+     * way, so one implementation satisfies both interfaces. Called on whichever capture engine's
+     * own thread produced the levels, never the main thread — an uncaught exception there still
+     * takes down the whole app by default, so this gets the same guard as the main-thread
+     * callbacks elsewhere in this class.
+     */
     @Override
     public void onLevels(float[] levels) {
-        // Called on AudioCaptureService's own capture thread, not the main thread — but an
-        // uncaught exception on any thread still takes down the whole app by default, so this
-        // gets the same guard as the main-thread callbacks above.
         try {
             if (glowView != null) glowView.pushLevels(levels);
         } catch (Exception e) {
@@ -219,6 +239,16 @@ public class OverlayEdgeGlowService extends Service
     @Override
     public void onCaptureStopped() {
         if (glowView != null) glowView.clearLevels();
+    }
+
+    /** The tracked app's session closed, or attaching to it failed outright — falls back to
+     *  whatever AudioLevelsBridge is still providing (possibly nothing, in which case
+     *  EdgeGlowView's own liveness timeout drops it to ambient on its own). */
+    @Override
+    public void onSourceLost() {
+        // No explicit glowView.clearLevels() here: unlike AudioLevelsBridge.onCaptureStopped()
+        // above (a clean, deliberate stop), this can fire while AudioLevelsBridge is still live —
+        // clearing levels here would incorrectly blank out a still-working fallback.
     }
 
     /** A settings-panel edit while the overlay is already running — applied live, no restart. */
@@ -257,6 +287,9 @@ public class OverlayEdgeGlowService extends Service
         EdgeConfig.unregisterListener(this, this);
         DeezerMediaBridge.getInstance().removeListener(this);
         AudioLevelsBridge.getInstance().removeListener(this);
+        if (trackedSessionAudioSource != null) {
+            trackedSessionAudioSource.stop();
+        }
         super.onDestroy();
     }
 }

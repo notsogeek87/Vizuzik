@@ -150,8 +150,17 @@ final class EdgeGlowView extends View {
         beatEnergy = Math.max(beatEnergy, clamp01(strength));
     }
 
-    /** Called from AudioCaptureService's capture thread via AudioLevelsBridge. */
-    void pushLevels(float[] bands) {
+    /**
+     * Called from a capture thread — AudioCaptureService's (via AudioLevelsBridge) or
+     * TrackedSessionAudioSource's own — and since Edge Visualizer can have both wired in at once
+     * (one as a fallback for the other), two different threads can legitimately call this at
+     * close to the same time. Synchronized because bassHistory/bassCursor below are a plain
+     * ring buffer with no other protection: two unsynchronized writers could tear a value or
+     * lose an increment, corrupting the beat detector. The critical section is a fixed handful of
+     * float operations on a 48-element array, called at most a few dozen times a second — never
+     * enough contention for a lock to be worth avoiding.
+     */
+    synchronized void pushLevels(float[] bands) {
         if (bands == null || bands.length == 0) return;
 
         int bassBands = Math.min(BASS_END, bands.length);
