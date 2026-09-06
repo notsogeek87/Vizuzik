@@ -14,6 +14,7 @@ import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
+import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
@@ -51,14 +52,14 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     @Override
     protected void handleOnStart() {
-        DeezerMediaBridge.getInstance().setListener(this);
-        AudioLevelsBridge.getInstance().setListener(this);
+        DeezerMediaBridge.getInstance().addListener(this);
+        AudioLevelsBridge.getInstance().addListener(this);
     }
 
     @Override
     protected void handleOnStop() {
-        DeezerMediaBridge.getInstance().setListener(null);
-        AudioLevelsBridge.getInstance().setListener(null);
+        DeezerMediaBridge.getInstance().removeListener(this);
+        AudioLevelsBridge.getInstance().removeListener(this);
         // Deliberately NOT stopping AudioCaptureService here: handleOnStop() fires on every
         // brief backgrounding (switching apps, checking a notification), not just on actually
         // closing Vizuzik. It's a real foreground service and is meant to keep running while
@@ -410,6 +411,119 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     private void stopAudioCaptureService() {
         getContext().stopService(new Intent(getContext(), AudioCaptureService.class));
+    }
+
+    /**
+     * Whether the edge-glow overlay (drawn over the tracked app itself, MuViz Edge-style) can run
+     * on this device (Android 8+, TYPE_APPLICATION_OVERLAY) and whether the "display over other
+     * apps" special permission is currently granted. The web layer checks this on every resume —
+     * same reasoning as getCaptureState(): the grant is made in a system Settings screen the app
+     * never sees the result of directly, so the only way to know is to ask again on return.
+     */
+    @PluginMethod
+    public void checkOverlayPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        boolean supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        result.put("supported", supported);
+        result.put("granted", supported && Settings.canDrawOverlays(getContext()));
+        call.resolve(result);
+    }
+
+    /**
+     * Opens the system "display over other apps" screen for Vizuzik specifically. Like
+     * requestPermission() for notification access, this only opens the screen — there is no
+     * result to await, so the web layer finds out what happened via checkOverlayPermission() the
+     * next time it resumes.
+     */
+    @PluginMethod
+    public void requestOverlayPermission(PluginCall call) {
+        Intent intent = new Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:" + getContext().getPackageName())
+        );
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(intent)) {
+            call.resolve();
+        } else {
+            call.reject("unavailable");
+        }
+    }
+
+    /**
+     * Starts OverlayEdgeGlowService. Entirely orchestrated from the web layer (see
+     * syncEdgeOverlay() in main.js): called only once Vizuzik itself is backgrounded, a track is
+     * actually playing, and the overlay permission is already known to be granted — so a missing
+     * grant here means the web layer's own state is stale rather than the normal case.
+     */
+    @PluginMethod
+    public void startEdgeOverlay(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !Settings.canDrawOverlays(getContext())) {
+            call.reject("permission");
+            return;
+        }
+        ContextCompat.startForegroundService(getContext(), new Intent(getContext(), OverlayEdgeGlowService.class));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopEdgeOverlay(PluginCall call) {
+        getContext().stopService(new Intent(getContext(), OverlayEdgeGlowService.class));
+        call.resolve();
+    }
+
+    /**
+     * Reads the Edge Visualizer settings panel's current values back out of EdgeConfig — used to
+     * restore the native-held state (there is no localStorage on this side) if the web layer's own
+     * copy is ever missing, e.g. a fresh install of a newer version that added a field.
+     */
+    @PluginMethod
+    public void getEdgeConfig(PluginCall call) {
+        EdgeConfig.Snapshot config = EdgeConfig.read(getContext());
+        JSObject result = new JSObject();
+        result.put("style", config.style);
+        result.put("intensity", config.intensity);
+        result.put("thickness", config.thickness);
+        result.put("brightness", config.brightness);
+        result.put("sensitivity", config.sensitivity);
+        result.put("band", config.band);
+        result.put("colorMode", config.customPalette != null ? EdgeConfig.COLOR_CUSTOM : EdgeConfig.COLOR_AUTO);
+        result.put("top", config.top);
+        result.put("bottom", config.bottom);
+        result.put("left", config.left);
+        result.put("right", config.right);
+        call.resolve(result);
+    }
+
+    /**
+     * Mirrors the whole settings panel state into EdgeConfig (SharedPreferences), the only way
+     * OverlayEdgeGlowService — a background Service with no access to the webview's localStorage
+     * — can read what the user picked. Applied live via EdgeConfig's SharedPreferences listener
+     * if the overlay is already running, no restart needed.
+     */
+    @PluginMethod
+    public void setEdgeConfig(PluginCall call) {
+        // optDouble()/optBoolean() on the raw JSONObject rather than call.getDouble()/
+        // getBoolean(): the same issue seek() works around for getLong() above applies here —
+        // Capacitor's typed getters only return a value when the bridged JSON number is exactly
+        // the type they expect, and a whole-number slider value (e.g. intensity at its default
+        // of 1) can arrive as a plain JSON integer rather than a double.
+        org.json.JSONObject data = call.getData();
+        EdgeConfig.write(
+            getContext(),
+            call.getString("style", EdgeConfig.STYLE_GLOW),
+            (float) data.optDouble("intensity", 1.0),
+            (float) data.optDouble("thickness", 1.0),
+            (float) data.optDouble("brightness", 1.0),
+            (float) data.optDouble("sensitivity", 1.0),
+            call.getString("band", EdgeConfig.BAND_FULL),
+            call.getString("colorMode", EdgeConfig.COLOR_AUTO),
+            call.getString("customColors", null),
+            data.optBoolean("top", true),
+            data.optBoolean("bottom", true),
+            data.optBoolean("left", true),
+            data.optBoolean("right", true)
+        );
+        call.resolve();
     }
 
     /**

@@ -18,6 +18,10 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
   — comment Vizuzik décide s'il suit Deezer ou Spotify, pourquoi il ne demande qu'en cas
   d'ambiguïté réelle, et pourquoi il ouvre l'app choisie au lancement plutôt que d'attendre
   qu'on le fasse.
+- [Edge Visualizer : le contour lumineux, sans micro cette fois](architecture/2026-09-06-edge-visualizer.md)
+  — l'overlay décoratif dessiné sur les bords de l'écran par-dessus l'app de musique, ce qui a
+  été retenu (et pourquoi) d'une première tentative retirée, et le panneau de réglages qui
+  l'accompagne.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des scènes.
@@ -32,3 +36,5 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
 - [Activer le son réel](guides/capture-audio.md) — capture de la sortie audio de l'app suivie
   (Deezer ou Spotify) : parcours d'activation, lecture du badge, et ce qui ne redéclenche plus
   la fenêtre système.
+- [Edge Visualizer](guides/edge-visualizer.md) — le contour lumineux par-dessus l'app de musique :
+  parcours d'activation, ce qui le fait réagir, le panneau de réglages, et ses limites.

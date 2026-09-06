@@ -21,6 +21,17 @@ l'écran ne s'illumine que sur un évènement réel (changement de morceau, lect
 glissement). Pour que les visualisations suivent réellement le son, appuyer sur le badge en
 haut à gauche — voir [Activer le son réel](docs/guides/capture-audio.md).
 
+## Edge Visualizer
+
+Un second badge, à côté de celui du son réel, allume un contour lumineux dessiné **par-dessus
+l'app de musique elle-même** (Deezer, Spotify, YouTube Music, un lecteur local...) — façon MuViz
+Edge — dès qu'un morceau joue et que Vizuzik n'est pas à l'écran. Purement décoratif (aucun geste
+n'est jamais capté), il s'éteint tout seul dès qu'on revient sur Vizuzik ou que la lecture
+s'arrête. L'icône réglages à côté du badge ouvre le panneau : style, fréquences utilisées,
+intensité, épaisseur, luminosité, sensibilité, couleurs (auto depuis la pochette ou fixes), et
+l'activation de chacun des quatre bords. Voir [Edge Visualizer, sans micro
+cette fois](docs/architecture/2026-09-06-edge-visualizer.md).
+
 ## Contrôles
 
 Barre de progression avec temps écoulé, durée et déplacement dans le morceau. Sur la pochette :

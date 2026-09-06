@@ -4,14 +4,23 @@ import android.graphics.Bitmap;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.os.SystemClock;
+import android.util.Log;
+
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * In-process singleton shared between NowPlayingListenerService (which tracks the currently
- * targeted app's MediaSession — Deezer or Spotify, see MusicAppPreference) and DeezerMediaPlugin
- * (which exposes it to the web layer). Both run in the app's default process, so a static holder
- * is enough — no IPC needed.
+ * targeted app's MediaSession — Deezer or Spotify, see MusicAppPreference) and its listeners.
+ * Both run in the app's default process, so a static holder is enough — no IPC needed.
+ *
+ * More than one listener at a time: DeezerMediaPlugin (exposing it to the web layer) and
+ * OverlayEdgeGlowService (the Edge Visualizer background overlay, which needs the track's artwork
+ * for its glow color) both need the same now-playing state, in parallel.
  */
 final class DeezerMediaBridge {
+
+    private static final String TAG = "DeezerMediaBridge";
 
     interface Listener {
         void onNowPlayingChanged(NowPlaying nowPlaying);
@@ -81,17 +90,22 @@ final class DeezerMediaBridge {
         return INSTANCE;
     }
 
+    private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
     private MediaController controller;
-    private NowPlaying lastNowPlaying;
-    private Listener listener;
+    private volatile NowPlaying lastNowPlaying;
 
     private DeezerMediaBridge() {}
 
-    synchronized void setListener(Listener listener) {
-        this.listener = listener;
-        if (listener != null) {
-            listener.onNowPlayingChanged(lastNowPlaying);
-        }
+    /** Immediately replays the last known state to a freshly-added listener — same behavior the
+     *  old single-listener setListener() had — so a service that starts after a track is already
+     *  playing doesn't have to wait for the next change to find out about it. */
+    void addListener(Listener listener) {
+        listeners.add(listener);
+        notifyListener(listener, lastNowPlaying);
+    }
+
+    void removeListener(Listener listener) {
+        listeners.remove(listener);
     }
 
     synchronized void setController(MediaController controller) {
@@ -102,22 +116,37 @@ final class DeezerMediaBridge {
         return controller;
     }
 
-    synchronized NowPlaying getLastNowPlaying() {
+    NowPlaying getLastNowPlaying() {
         return lastNowPlaying;
     }
 
-    synchronized void updateNowPlaying(NowPlaying nowPlaying) {
+    void updateNowPlaying(NowPlaying nowPlaying) {
         this.lastNowPlaying = nowPlaying;
-        if (listener != null) {
-            listener.onNowPlayingChanged(nowPlaying);
+        for (Listener listener : listeners) {
+            notifyListener(listener, nowPlaying);
         }
     }
 
     synchronized void clear() {
         this.controller = null;
         this.lastNowPlaying = null;
-        if (listener != null) {
-            listener.onNowPlayingChanged(null);
+        for (Listener listener : listeners) {
+            notifyListener(listener, null);
+        }
+    }
+
+    /**
+     * More than one listener means one listener's bug must never stop another from hearing
+     * about a track change — DeezerMediaPlugin (the web bridge) and OverlayEdgeGlowService (the
+     * Edge Visualizer) are both registered here and neither owns the other's reliability. This
+     * runs on the main thread (MediaController.Callback dispatch), so an uncaught exception here
+     * would otherwise crash the whole app over one bad listener.
+     */
+    private void notifyListener(Listener listener, NowPlaying nowPlaying) {
+        try {
+            listener.onNowPlayingChanged(nowPlaying);
+        } catch (Exception e) {
+            Log.w(TAG, "onNowPlayingChanged", e);
         }
     }
 }

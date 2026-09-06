@@ -367,8 +367,19 @@ body[data-state="playing"] .cassette__reel {
   transition: opacity 0.3s ease;
 }
 
+/* Holds the two topbar badges (audio source, edge overlay) plus the settings gear together on
+   the left, so adding them doesn't split the topbar's space-between three ways. */
+.topbar__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 /* Always tappable: this badge is the switcher between the three audio sources (mic → real →
-   off), not just a one-shot opt-in — see cycleAudioSource() in main.js. */
+   off), not just a one-shot opt-in — see cycleAudioSource() in main.js. Also used, as-is, for
+   the edge-overlay badge (#overlay-status): same chip, same states, one less style to keep in
+   sync between the two. */
 .capture-status {
   padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -382,7 +393,7 @@ body[data-state="playing"] .cassette__reel {
   letter-spacing: 0.01em;
   color: rgba(247, 248, 252, 0.55);
   cursor: pointer;
-  max-width: 62vw;
+  max-width: 42vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -452,6 +463,103 @@ body[data-mode="cassette"] .mode-toggle .icon-cassette {
 @keyframes icon-pop {
   from { transform: scale(0.4) rotate(-90deg); opacity: 0; }
   to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+/* Opens the Edge Visualizer settings panel — only shown once #overlay-status itself is (see
+   updateOverlayStatusBadge() in main.js), so there's never a gear icon for a feature the device
+   can't even offer (Android <8, no TYPE_APPLICATION_OVERLAY). */
+.edge-settings-open {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background: rgba(10, 10, 20, 0.4);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: rgba(247, 248, 252, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.edge-settings-open svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.edge-settings-open:active {
+  transform: scale(0.9);
+}
+
+/* The settings panel itself reuses .sheet/.sheet__panel (see below) for the backdrop and card
+   chrome, but needs left-aligned rows rather than the centered permission-explainer text. */
+.edge-settings__panel {
+  text-align: left;
+  max-height: min(600px, 82vh);
+  overflow-y: auto;
+}
+
+.edge-settings__panel .sheet__title {
+  text-align: center;
+}
+
+.edge-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  font-size: 0.9rem;
+  color: rgba(247, 248, 252, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.edge-settings__row select {
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.edge-settings__row--slider input[type="range"] {
+  flex: 1;
+  accent-color: rgb(var(--c2));
+}
+
+.edge-settings__colors {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0 14px;
+}
+
+.edge-settings__colors input[type="color"] {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  padding: 0;
+}
+
+.edge-settings__edges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  padding: 14px 0 4px;
+  font-size: 0.88rem;
+  color: rgba(247, 248, 252, 0.8);
+}
+
+.edge-settings__edges label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .mode-toast {

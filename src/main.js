@@ -19,6 +19,28 @@ const els = {
   captureSheet: document.getElementById("capture-sheet"),
   captureAccept: document.getElementById("capture-accept"),
   captureLater: document.getElementById("capture-later"),
+  overlayStatus: document.getElementById("overlay-status"),
+  overlaySheet: document.getElementById("overlay-sheet"),
+  overlayAccept: document.getElementById("overlay-accept"),
+  overlayLater: document.getElementById("overlay-later"),
+  edgeSettingsOpen: document.getElementById("edge-settings-open"),
+  edgeSettingsSheet: document.getElementById("edge-settings-sheet"),
+  edgeSettingsClose: document.getElementById("edge-settings-close"),
+  edgeStyle: document.getElementById("edge-style"),
+  edgeBand: document.getElementById("edge-band"),
+  edgeColorMode: document.getElementById("edge-color-mode"),
+  edgeCustomColors: document.getElementById("edge-custom-colors"),
+  edgeColor1: document.getElementById("edge-color-1"),
+  edgeColor2: document.getElementById("edge-color-2"),
+  edgeColor3: document.getElementById("edge-color-3"),
+  edgeIntensity: document.getElementById("edge-intensity"),
+  edgeThickness: document.getElementById("edge-thickness"),
+  edgeBrightness: document.getElementById("edge-brightness"),
+  edgeSensitivity: document.getElementById("edge-sensitivity"),
+  edgeTop: document.getElementById("edge-top"),
+  edgeBottom: document.getElementById("edge-bottom"),
+  edgeLeft: document.getElementById("edge-left"),
+  edgeRight: document.getElementById("edge-right"),
   modeToggle: document.getElementById("mode-toggle"),
   modeToast: document.getElementById("mode-toast"),
   title: document.getElementById("title"),
@@ -614,6 +636,279 @@ function setBadge(status, label) {
 
 setInterval(updateCaptureStatusBadge, 500);
 
+/* --- edge overlay: a glow drawn over the music app itself (Deezer/Spotify/YouTube Music/a
+   local player), MuViz Edge-style, visible even while Vizuzik itself is backgrounded --- */
+
+// Whether the user has turned this on. Separate from whether it's actually running right now
+// (syncEdgeOverlay() below decides that from several conditions at once), same split as
+// audioSource vs. captureRunning above.
+const EDGE_OVERLAY_ENABLED_KEY = "vizuzik:edgeOverlay";
+// Whether the one-time explainer sheet has already been shown, same purpose as
+// CAPTURE_SHEET_SEEN_KEY: the system "display over other apps" screen is opened only after
+// someone already knows what it's for and that it's optional.
+const EDGE_OVERLAY_SHEET_SEEN_KEY = "vizuzik:edgeOverlaySheetSeen";
+// Purely cosmetic: what the color pickers should show next time the settings panel opens.
+// EdgeConfig (native) is the actual source of truth for what the overlay renders — this is
+// just so the sheet doesn't reset to the default swatches after a cold start.
+const EDGE_CUSTOM_COLORS_KEY = "vizuzik:edgeCustomColors";
+const EDGE_DEFAULT_COLORS = "#7c5cff,#ec4899,#38bdf8";
+
+function isEdgeOverlayEnabled() {
+  try {
+    return localStorage.getItem(EDGE_OVERLAY_ENABLED_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function rememberEdgeOverlayEnabled(enabled) {
+  try {
+    localStorage.setItem(EDGE_OVERLAY_ENABLED_KEY, enabled ? "on" : "off");
+  } catch (err) {
+    /* see isEdgeOverlayEnabled() */
+  }
+}
+
+function hasOverlaySheetBeenSeen() {
+  try {
+    return localStorage.getItem(EDGE_OVERLAY_SHEET_SEEN_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function rememberOverlaySheetSeen() {
+  try {
+    localStorage.setItem(EDGE_OVERLAY_SHEET_SEEN_KEY, "on");
+  } catch (err) {
+    /* see hasOverlaySheetBeenSeen() */
+  }
+}
+
+// Assumed until the native side says otherwise, mirroring captureSupported above.
+let overlaySupported = true;
+let overlayPermissionGranted = false;
+let edgeOverlayEnabled = isEdgeOverlayEnabled();
+// The native truth: whether OverlayEdgeGlowService is actually running right now. Only
+// syncEdgeOverlay() ever changes this, and always right after telling the native side to match.
+let edgeOverlayRunning = false;
+
+/** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */
+async function syncOverlayPermission() {
+  try {
+    const state = await DeezerMedia.checkOverlayPermission();
+    overlaySupported = !!state.supported;
+    overlayPermissionGranted = !!state.granted;
+  } catch (err) {
+    overlaySupported = false;
+  }
+  syncEdgeOverlay();
+}
+
+/**
+ * The single place that decides whether OverlayEdgeGlowService should be running, and the only
+ * function allowed to start or stop it — called after every event that could change the answer
+ * (a play/pause, a track disappearing, showing/hiding the player screen, granting the
+ * permission, toggling the setting, or Vizuzik itself leaving or regaining the foreground).
+ *
+ * The last condition is the point of the whole feature: the overlay exists precisely for the
+ * moments Vizuzik *isn't* what's on screen, since its own full-screen player already shows
+ * everything the overlay would.
+ */
+function syncEdgeOverlay() {
+  const shouldRun =
+    edgeOverlayEnabled &&
+    overlaySupported &&
+    overlayPermissionGranted &&
+    isPlaying &&
+    !els.player.hidden &&
+    document.visibilityState !== "visible";
+  if (shouldRun === edgeOverlayRunning) return;
+  edgeOverlayRunning = shouldRun;
+  if (shouldRun) {
+    DeezerMedia.startEdgeOverlay().catch(() => {});
+  } else {
+    DeezerMedia.stopEdgeOverlay().catch(() => {});
+  }
+  updateOverlayStatusBadge();
+}
+
+/** Tapping the badge: off/never-granted → on (asking for the permission first if needed); on → off. */
+function toggleEdgeOverlay() {
+  if (!overlaySupported) return;
+  edgeOverlayEnabled = !edgeOverlayEnabled;
+  rememberEdgeOverlayEnabled(edgeOverlayEnabled);
+  if (edgeOverlayEnabled && !overlayPermissionGranted) {
+    if (!hasOverlaySheetBeenSeen()) {
+      openOverlaySheet();
+    } else {
+      DeezerMedia.requestOverlayPermission().catch(() => {});
+    }
+  }
+  updateOverlayStatusBadge();
+  syncEdgeOverlay();
+}
+
+/* --- the explainer sheet (edge overlay only) --- */
+
+let overlaySheetCloseTimer = null;
+
+function openOverlaySheet() {
+  clearTimeout(overlaySheetCloseTimer);
+  els.overlaySheet.hidden = false;
+  requestAnimationFrame(() => {
+    els.overlaySheet.classList.add("is-open");
+    focusForRemote(els.overlayAccept);
+  });
+}
+
+function closeOverlaySheet() {
+  els.overlaySheet.classList.remove("is-open");
+  overlaySheetCloseTimer = setTimeout(() => {
+    els.overlaySheet.hidden = true;
+  }, 260);
+}
+
+/* --- the badge --- */
+
+function setOverlayBadge(status, label) {
+  els.overlayStatus.dataset.status = status;
+  els.overlayStatus.textContent = label;
+}
+
+function updateOverlayStatusBadge() {
+  if (els.player.hidden || !overlaySupported) {
+    els.overlayStatus.hidden = true;
+    els.edgeSettingsOpen.hidden = true;
+    return;
+  }
+  els.overlayStatus.hidden = false;
+  els.edgeSettingsOpen.hidden = false;
+
+  // Whether it's the system permission or just the setting that's missing, the action is the
+  // same tap either way — no reason to tell the two apart in the label itself.
+  if (!overlayPermissionGranted || !edgeOverlayEnabled) {
+    setOverlayBadge("simulated", "▶ Activer Edge Visualizer");
+    return;
+  }
+  setOverlayBadge(edgeOverlayRunning ? "live" : "silent", edgeOverlayRunning ? "● Edge actif" : "● Edge prêt");
+}
+
+setInterval(updateOverlayStatusBadge, 500);
+
+/* --- edge visualizer settings panel: every control here mirrors into EdgeConfig (native
+   SharedPreferences) via DeezerMedia.setEdgeConfig(), so OverlayEdgeGlowService — which has no
+   access to this page's localStorage — picks up an edit live, without a restart. --- */
+
+const EDGE_SETTINGS_DEFAULTS = {
+  style: "glow",
+  band: "full",
+  colorMode: "auto",
+  intensity: 1,
+  thickness: 1,
+  brightness: 1,
+  sensitivity: 1,
+  top: true,
+  bottom: true,
+  left: true,
+  right: true,
+};
+
+function readEdgeCustomColors() {
+  try {
+    return localStorage.getItem(EDGE_CUSTOM_COLORS_KEY) || EDGE_DEFAULT_COLORS;
+  } catch (err) {
+    return EDGE_DEFAULT_COLORS;
+  }
+}
+
+function rememberEdgeCustomColors(csv) {
+  try {
+    localStorage.setItem(EDGE_CUSTOM_COLORS_KEY, csv);
+  } catch (err) {
+    /* see readEdgeCustomColors() */
+  }
+}
+
+function readEdgeSettingsFromForm() {
+  return {
+    style: els.edgeStyle.value,
+    band: els.edgeBand.value,
+    colorMode: els.edgeColorMode.value,
+    customColors: [els.edgeColor1.value, els.edgeColor2.value, els.edgeColor3.value].join(","),
+    intensity: parseFloat(els.edgeIntensity.value),
+    thickness: parseFloat(els.edgeThickness.value),
+    brightness: parseFloat(els.edgeBrightness.value),
+    sensitivity: parseFloat(els.edgeSensitivity.value),
+    top: els.edgeTop.checked,
+    bottom: els.edgeBottom.checked,
+    left: els.edgeLeft.checked,
+    right: els.edgeRight.checked,
+  };
+}
+
+function applyEdgeSettingsToForm(config) {
+  els.edgeStyle.value = config.style;
+  els.edgeBand.value = config.band;
+  els.edgeColorMode.value = config.colorMode;
+  const colors = (config.customColors || EDGE_DEFAULT_COLORS).split(",");
+  if (colors[0]) els.edgeColor1.value = colors[0];
+  if (colors[1]) els.edgeColor2.value = colors[1];
+  if (colors[2]) els.edgeColor3.value = colors[2];
+  els.edgeIntensity.value = config.intensity;
+  els.edgeThickness.value = config.thickness;
+  els.edgeBrightness.value = config.brightness;
+  els.edgeSensitivity.value = config.sensitivity;
+  els.edgeTop.checked = config.top;
+  els.edgeBottom.checked = config.bottom;
+  els.edgeLeft.checked = config.left;
+  els.edgeRight.checked = config.right;
+  els.edgeCustomColors.hidden = config.colorMode !== "custom";
+}
+
+/** Reads the form and pushes it to native — called on every settings-panel edit. */
+function pushEdgeConfig() {
+  const values = readEdgeSettingsFromForm();
+  els.edgeCustomColors.hidden = values.colorMode !== "custom";
+  rememberEdgeCustomColors(values.customColors);
+  DeezerMedia.setEdgeConfig(values).catch(() => {});
+}
+
+/** Loads the panel's initial values: the numeric/boolean/style fields from native EdgeConfig
+ *  (the actual source of truth for what the overlay renders), the color swatches from
+ *  localStorage (native only stores them as parsed RGB, not the original hex strings). */
+async function loadEdgeConfig() {
+  let native = {};
+  try {
+    native = await DeezerMedia.getEdgeConfig();
+  } catch (err) {
+    // Older native build, or the plugin call failed: fall back to defaults below.
+  }
+  applyEdgeSettingsToForm({
+    ...EDGE_SETTINGS_DEFAULTS,
+    ...native,
+    customColors: readEdgeCustomColors(),
+  });
+}
+
+let edgeSettingsCloseTimer = null;
+
+function openEdgeSettingsSheet() {
+  clearTimeout(edgeSettingsCloseTimer);
+  els.edgeSettingsSheet.hidden = false;
+  requestAnimationFrame(() => {
+    els.edgeSettingsSheet.classList.add("is-open");
+    focusForRemote(els.edgeSettingsClose);
+  });
+}
+
+function closeEdgeSettingsSheet() {
+  els.edgeSettingsSheet.classList.remove("is-open");
+  edgeSettingsCloseTimer = setTimeout(() => {
+    els.edgeSettingsSheet.hidden = true;
+  }, 260);
+}
+
 /* ------------------------------------------------------------------ display modes */
 
 let toastTimer = null;
@@ -693,6 +988,47 @@ els.captureLater.addEventListener("click", closeCaptureSheet);
 // comes back the next time they ask for it rather than the choice being made for them.
 els.captureSheet.addEventListener("click", (event) => {
   if (event.target === els.captureSheet) closeCaptureSheet();
+});
+
+els.overlayStatus.addEventListener("click", toggleEdgeOverlay);
+els.overlayAccept.addEventListener("click", () => {
+  closeOverlaySheet();
+  rememberOverlaySheetSeen();
+  DeezerMedia.requestOverlayPermission().catch(() => {});
+});
+els.overlayLater.addEventListener("click", closeOverlaySheet);
+els.overlaySheet.addEventListener("click", (event) => {
+  if (event.target === els.overlaySheet) closeOverlaySheet();
+});
+
+els.edgeSettingsOpen.addEventListener("click", () => {
+  loadEdgeConfig().then(openEdgeSettingsSheet);
+});
+els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
+els.edgeSettingsSheet.addEventListener("click", (event) => {
+  if (event.target === els.edgeSettingsSheet) closeEdgeSettingsSheet();
+});
+els.edgeColorMode.addEventListener("change", () => {
+  els.edgeCustomColors.hidden = els.edgeColorMode.value !== "custom";
+  pushEdgeConfig();
+});
+[
+  els.edgeStyle,
+  els.edgeBand,
+  els.edgeColor1,
+  els.edgeColor2,
+  els.edgeColor3,
+  els.edgeIntensity,
+  els.edgeThickness,
+  els.edgeBrightness,
+  els.edgeSensitivity,
+  els.edgeTop,
+  els.edgeBottom,
+  els.edgeLeft,
+  els.edgeRight,
+].forEach((el) => {
+  el.addEventListener("input", pushEdgeConfig);
+  el.addEventListener("change", pushEdgeConfig);
 });
 
 /* ------------------------------------------------------------------ swipe & tap */
@@ -913,6 +1249,7 @@ function setNowPlaying(state) {
   if (!state || !state.active) {
     showScreen("empty");
     currentTrackKey = null;
+    syncEdgeOverlay();
     return;
   }
 
@@ -938,6 +1275,7 @@ function setNowPlaying(state) {
   els.playPause.dataset.state = isPlaying ? "playing" : "paused";
   document.body.dataset.state = isPlaying ? "playing" : "paused";
   visualizer.setPlaying(isPlaying);
+  syncEdgeOverlay();
 
   progress.setTrack({
     position: state.position || 0,
@@ -1076,6 +1414,7 @@ document.addEventListener("visibilitychange", () => {
     }
     refresh().catch(() => {});
     syncCaptureState();
+    syncOverlayPermission();
   } else {
     // Nothing to animate against a hidden screen; rAF would be throttled anyway, but this
     // also drops the offscreen buffers' work entirely.
@@ -1083,6 +1422,8 @@ document.addEventListener("visibilitychange", () => {
     // Same reasoning as leaving the player screen (see showScreen()): the mic costs nothing to
     // re-acquire, so it's released the moment Vizuzik isn't the thing on screen.
     if (micRunning || micPending) stopMic();
+    // The exact opposite of the mic: this is the one moment the overlay is allowed to exist.
+    syncEdgeOverlay();
   }
 });
 
@@ -1103,6 +1444,8 @@ applyDisplayMode(false);
   }
   await refresh().catch(() => {});
   syncCaptureState();
+  syncOverlayPermission();
+  loadEdgeConfig();
   // Cold start only: never repeated on a later resume, since by then a resumed session is
   // already exactly where it should be, and redoing this mid-session would restart a track the
   // user is deliberately listening to or pausing.

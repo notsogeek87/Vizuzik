@@ -1,12 +1,23 @@
 package com.vizuzik.app;
 
+import android.util.Log;
+
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
+
 /**
- * In-process singleton shared between AudioCaptureService (which analyzes Deezer's own audio
- * output) and DeezerMediaPlugin (which streams the resulting spectrum to the web layer). Mirrors
- * DeezerMediaBridge's pattern: both run in the app's default process, so a static holder is
- * enough — no IPC needed.
+ * In-process singleton shared between AudioCaptureService (which analyzes the tracked app's own
+ * audio output) and its listeners. Mirrors DeezerMediaBridge's pattern: both run in the app's
+ * default process, so a static holder is enough — no IPC needed.
+ *
+ * More than one listener at a time: DeezerMediaPlugin (streaming to the web layer) and
+ * OverlayEdgeGlowService (the Edge Visualizer background overlay) both need the same levels, in
+ * parallel — the overlay exists precisely for the moments the web layer isn't in the foreground,
+ * so neither can simply replace the other the way a single-listener field would.
  */
 final class AudioLevelsBridge {
+
+    private static final String TAG = "AudioLevelsBridge";
 
     interface Listener {
         void onLevels(float[] levels);
@@ -19,7 +30,7 @@ final class AudioLevelsBridge {
         return INSTANCE;
     }
 
-    private Listener listener;
+    private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
     // Written by AudioCaptureService, read by DeezerMediaPlugin from the web layer's thread:
     // volatile rather than synchronized so a state query can never block on a capture callback.
     private volatile boolean capturing;
@@ -39,20 +50,35 @@ final class AudioLevelsBridge {
         capturing = true;
     }
 
-    synchronized void setListener(Listener listener) {
-        this.listener = listener;
+    void addListener(Listener listener) {
+        listeners.add(listener);
     }
 
-    synchronized void publishLevels(float[] levels) {
-        if (listener != null) {
-            listener.onLevels(levels);
+    void removeListener(Listener listener) {
+        listeners.remove(listener);
+    }
+
+    void publishLevels(float[] levels) {
+        for (Listener listener : listeners) {
+            // More than one listener means one listener's bug must never stop the capture
+            // thread from reaching the other, or take the whole app down with it — see
+            // DeezerMediaBridge.notifyListener() for the same reasoning.
+            try {
+                listener.onLevels(levels);
+            } catch (Exception e) {
+                Log.w(TAG, "onLevels", e);
+            }
         }
     }
 
-    synchronized void publishStopped() {
+    void publishStopped() {
         capturing = false;
-        if (listener != null) {
-            listener.onCaptureStopped();
+        for (Listener listener : listeners) {
+            try {
+                listener.onCaptureStopped();
+            } catch (Exception e) {
+                Log.w(TAG, "onCaptureStopped", e);
+            }
         }
     }
 }
