@@ -63,26 +63,6 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
-
-        <!-- Draws the edge-glow overlay (see OverlayEdgeGlowService) on top of whichever app is
-             in front. "specialUse" is the closest of Android's declared foreground-service
-             types to what this actually is — a decorative visual layered over another app while
-             media plays — none of the more specific types (mediaPlayback, mediaProjection…) fit
-             a service that neither plays nor captures anything itself. "microphone" is declared
-             alongside it because this service also runs its own MicCaptureThread when "Micro" is
-             the chosen audio source (see AudioSourcePreference): without declaring that type,
-             Android silently cuts background microphone access after a few seconds regardless of
-             the RECORD_AUDIO grant, which is exactly why the glow used to go static shortly after
-             leaving Vizuzik in "Micro" mode. -->
-        <service
-            android:name=".OverlayEdgeGlowService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="specialUse|microphone">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="overlay_visual_effects" />
-        </service>
     </application>
 
     <!-- Declared android:required="false" purely so the Play Store / package installer never
@@ -101,14 +81,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-
-    <!-- The "display over other apps" special permission (granted per-app in system Settings,
-         not at install time): required for OverlayEdgeGlowService's TYPE_APPLICATION_OVERLAY
-         window to draw on top of Deezer/Spotify. See requestOverlayPermission() in
-         DeezerMediaPlugin.java for the settings screen this opens. -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Micro mode: a plain AudioRecord on the phone's own mic (see MicCaptureThread.java),
          deliberately not the WebView's getUserMedia() — that path is WebRTC-shaped under the

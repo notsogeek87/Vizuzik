@@ -14,7 +14,6 @@ import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
-import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
@@ -44,23 +43,22 @@ import java.util.Set;
 )
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
-    // The mic itself is owned by MicCaptureCoordinator, not here: OverlayEdgeGlowService wants
-    // the same microphone at exactly the moment this plugin gives it up (a backgrounding), and
-    // two AudioRecords racing over one mic meant whichever lost failed silently. This plugin is
-    // just one listener among them, alive only while the webview is.
-    private final MicCaptureCoordinator.Listener micListener = this::publishMicLevels;
-    private boolean micListening;
+    // Owned directly (no Service, no singleton bridge): mic capture only ever runs while the
+    // webview is alive and Vizuzik is in the foreground (see applyAudioSource() in main.js,
+    // which stops it the moment the app is backgrounded), so its lifetime can just follow the
+    // plugin's own.
+    private MicCaptureThread micCaptureThread;
 
     @Override
     protected void handleOnStart() {
-        DeezerMediaBridge.getInstance().addListener(this);
-        AudioLevelsBridge.getInstance().addListener(this);
+        DeezerMediaBridge.getInstance().setListener(this);
+        AudioLevelsBridge.getInstance().setListener(this);
     }
 
     @Override
     protected void handleOnStop() {
-        DeezerMediaBridge.getInstance().removeListener(this);
-        AudioLevelsBridge.getInstance().removeListener(this);
+        DeezerMediaBridge.getInstance().setListener(null);
+        AudioLevelsBridge.getInstance().setListener(null);
         // Deliberately NOT stopping AudioCaptureService here: handleOnStop() fires on every
         // brief backgrounding (switching apps, checking a notification), not just on actually
         // closing Vizuzik. It's a real foreground service and is meant to keep running while
@@ -69,10 +67,9 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         // stopped for real in AudioCaptureService#onTaskRemoved(), when the user removes
         // Vizuzik from recents.
         //
-        // The mic has no such reason to keep feeding *this* plugin: there is no webview left to
-        // draw its levels into. Unregistering is all that happens though — whether the capture
-        // itself stops is MicCaptureCoordinator's call, and it keeps running when the overlay
-        // service is still listening, which is precisely the handoff this backgrounding is.
+        // The mic thread has no such reason to survive: it isn't a Service, and the whole point
+        // of it is that it's cheap to re-acquire, so any teardown of this plugin/webview takes
+        // it down too rather than leaking a live AudioRecord.
         stopMicCaptureInternal();
     }
 
@@ -160,24 +157,6 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             return;
         }
         MusicAppPreference.setPackage(getContext(), packageName);
-        call.resolve();
-    }
-
-    /**
-     * Mirrors the web layer's chosen audio source ("mic" / "real" / "off") into
-     * AudioSourcePreference, the same way setMusicAppTarget() mirrors the tracked app. Read by
-     * OverlayEdgeGlowService to decide whether it's allowed to listen to the microphone on its
-     * own while backgrounded — only when "mic" is what the user actually picked in the
-     * full-screen player, never on its own initiative.
-     */
-    @PluginMethod
-    public void setAudioSourcePreference(PluginCall call) {
-        String source = call.getString("source");
-        if (source == null) {
-            call.reject("source manquante");
-            return;
-        }
-        AudioSourcePreference.set(getContext(), source);
         call.resolve();
     }
 
@@ -364,64 +343,6 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Whether the edge-glow overlay (drawn over the tracked app itself, MuViz Edge-style) can run
-     * on this device (Android 8+, TYPE_APPLICATION_OVERLAY) and whether the "display over other
-     * apps" special permission is currently granted. The web layer checks this on every resume —
-     * same reasoning as getCaptureState(): the grant is made in a system Settings screen the app
-     * never sees the result of directly, so the only way to know is to ask again on return.
-     */
-    @PluginMethod
-    public void checkOverlayPermission(PluginCall call) {
-        JSObject result = new JSObject();
-        boolean supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
-        result.put("supported", supported);
-        result.put("granted", supported && Settings.canDrawOverlays(getContext()));
-        call.resolve(result);
-    }
-
-    /**
-     * Opens the system "display over other apps" screen for Vizuzik specifically. Like
-     * requestPermission() for notification access, this only opens the screen — there is no
-     * result to await, so the web layer finds out what happened via checkOverlayPermission() the
-     * next time it resumes.
-     */
-    @PluginMethod
-    public void requestOverlayPermission(PluginCall call) {
-        Intent intent = new Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:" + getContext().getPackageName())
-        );
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (tryStartActivity(intent)) {
-            call.resolve();
-        } else {
-            call.reject("unavailable");
-        }
-    }
-
-    /**
-     * Starts OverlayEdgeGlowService. Entirely orchestrated from the web layer (see
-     * syncEdgeOverlay() in main.js): called only once Vizuzik itself is backgrounded, a track is
-     * actually playing, and the overlay permission is already known to be granted — so a missing
-     * grant here means the web layer's own state is stale rather than the normal case.
-     */
-    @PluginMethod
-    public void startEdgeOverlay(PluginCall call) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !Settings.canDrawOverlays(getContext())) {
-            call.reject("permission");
-            return;
-        }
-        ContextCompat.startForegroundService(getContext(), new Intent(getContext(), OverlayEdgeGlowService.class));
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void stopEdgeOverlay(PluginCall call) {
-        getContext().stopService(new Intent(getContext(), OverlayEdgeGlowService.class));
-        call.resolve();
-    }
-
-    /**
      * Requests the system MediaProjection consent needed to capture the tracked app's own audio
      * output (Android 10+ only). Once granted, starts AudioCaptureService, which streams a
      * real-time loudness spectrum back via "audioLevels" events for as long as the service runs.
@@ -500,7 +421,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
      */
     @PluginMethod
     public void startMicCapture(PluginCall call) {
-        if (micListening) {
+        if (micCaptureThread != null) {
             call.resolve();
             return;
         }
@@ -521,22 +442,22 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     private void beginMicCapture(PluginCall call) {
-        if (!MicCaptureCoordinator.getInstance().addListener(micListener)) {
+        MicCaptureThread thread = new MicCaptureThread(levels -> {
+            JSArray array = new JSArray();
+            for (float level : levels) {
+                array.put((Object) level);
+            }
+            JSObject result = new JSObject();
+            result.put("levels", array);
+            notifyListeners("micLevels", result);
+        });
+        if (!thread.prepare()) {
             call.reject("unsupported");
             return;
         }
-        micListening = true;
+        micCaptureThread = thread;
+        thread.start();
         call.resolve();
-    }
-
-    private void publishMicLevels(float[] levels) {
-        JSArray array = new JSArray();
-        for (float level : levels) {
-            array.put((Object) level);
-        }
-        JSObject result = new JSObject();
-        result.put("levels", array);
-        notifyListeners("micLevels", result);
     }
 
     @PluginMethod
@@ -546,11 +467,10 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     private void stopMicCaptureInternal() {
-        if (!micListening) return;
-        micListening = false;
-        // Only stops the shared capture if the overlay service isn't listening too — see
-        // MicCaptureCoordinator.
-        MicCaptureCoordinator.getInstance().removeListener(micListener);
+        if (micCaptureThread != null) {
+            micCaptureThread.stopCapture();
+            micCaptureThread = null;
+        }
     }
 
     @Override
