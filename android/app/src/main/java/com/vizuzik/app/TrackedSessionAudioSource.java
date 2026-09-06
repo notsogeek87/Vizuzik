@@ -48,9 +48,16 @@ import androidx.core.content.ContextCompat;
  * up to 30 FFT-to-band conversions a second competing with the overlay's own rendering and window
  * management for main-thread time.
  *
- * The magnitude-to-level scaling below is a first approximation (Visualizer's raw FFT magnitudes
- * have no fixed reference level to calibrate against without more on-device tuning) — expect to
- * adjust the compression constant once someone's actually looked at the glow reacting to music.
+ * Visualizer's raw FFT magnitude has no fixed reference level to calibrate a constant against —
+ * it depends on device/OS gain staging that's only knowable by looking at real numbers on real
+ * hardware. Two fixed guesses were tried and both were wrong in opposite directions: a high
+ * ceiling left the glow barely reactive (real magnitudes never got close to it), and a low one
+ * left it pinned at maximum almost permanently (real magnitudes routinely exceeded it) — which
+ * *looks* like "stopped reacting" even though it's technically still fed live data every frame,
+ * since a value stuck at its ceiling renders as a constant, unmoving thickness/brightness.
+ * updateBands() below tracks the recent loudness envelope instead (an adaptive ceiling that jumps
+ * up on a new peak and decays slowly otherwise) and normalizes against that, so the visible range
+ * self-calibrates to whatever this device/track actually produces rather than a guessed constant.
  */
 final class TrackedSessionAudioSource {
 
@@ -64,18 +71,25 @@ final class TrackedSessionAudioSource {
     private static final double MIN_FREQ = 55;
     private static final double MAX_FREQ = 7000;
     private static final int CAPTURE_RATE_HZ = 30;
-    // First-approximation log compression — see the class doc above. On-device testing showed
-    // the previous, much higher ceiling (600) left the glow reading as barely reactive: real
-    // per-bin FFT magnitudes for a single frequency rarely got anywhere near that, so most of
-    // this curve's range was never actually used. Cut hard so typical music readily reaches the
-    // top of the range instead of only the loudest peaks nudging it.
-    private static final double MAGNITUDE_SCALE = 10.0;
-    private static final double MAGNITUDE_CEILING = 90.0;
+    // Adaptive ceiling — see the class doc above. Never below this floor, so a silent passage
+    // can't leave the ceiling near zero and turn the next quiet sound into a false full-strength
+    // spike the instant it arrives.
+    private static final float CEILING_FLOOR = 8f;
+    // Applied once per capture tick (~CAPTURE_RATE_HZ times/sec) when the frame didn't set a new
+    // peak. A single percussive transient (one kick/snare hit) can spike well above the music's
+    // sustained loudness — with too slow a decay that one frame's ceiling would ratio every
+    // following frame down near zero for many seconds, reading as "stopped reacting" again, just
+    // from one frame instead of a bad constant. 0.96^30 ≈ 0.29 per second: a spike's influence is
+    // mostly gone within about a second, fast enough that the next beat still registers as its
+    // own strong pulse instead of a muted echo of the last one.
+    private static final float CEILING_DECAY = 0.96f;
 
     private final Context appContext;
     private final Listener listener;
     private final double[] bandFrequencies = new double[BAND_COUNT];
+    private final double[] rawMagnitudes = new double[BAND_COUNT];
     private final float[] smoothedBands = new float[BAND_COUNT];
+    private float ceiling = CEILING_FLOOR;
 
     private final BroadcastReceiver sessionReceiver = new BroadcastReceiver() {
         @Override
@@ -208,6 +222,9 @@ final class TrackedSessionAudioSource {
             v.setEnabled(true);
             visualizer = v;
             attachedSessionId = sessionId;
+            // Fresh track, fresh envelope: a loud previous session's ceiling has no reason to
+            // suppress this one's first few seconds.
+            ceiling = CEILING_FLOOR;
         } catch (Exception e) {
             Log.w(TAG, "Impossible d'attacher le Visualizer à la session de " + packageName, e);
             listener.onSourceLost();
@@ -224,6 +241,7 @@ final class TrackedSessionAudioSource {
     private void updateBands(byte[] fft, double sampleRateHz) {
         if (fft == null || fft.length < 4 || sampleRateHz <= 0) return;
         int bins = fft.length / 2;
+        double frameMax = 0;
         for (int i = 0; i < BAND_COUNT; i++) {
             int bin = (int) Math.round(bandFrequencies[i] * fft.length / sampleRateHz);
             bin = Math.max(1, Math.min(bins - 1, bin));
@@ -237,9 +255,21 @@ final class TrackedSessionAudioSource {
                 im = fft[2 * bin + 1];
             }
             double magnitude = Math.sqrt(re * re + im * im);
-            float level = clamp01((float) (
-                Math.log10(1 + magnitude * MAGNITUDE_SCALE) / Math.log10(1 + MAGNITUDE_CEILING * MAGNITUDE_SCALE)
-            ));
+            rawMagnitudes[i] = magnitude;
+            if (magnitude > frameMax) frameMax = magnitude;
+        }
+
+        // Adaptive ceiling — see the class doc above: jump up instantly on a new peak, otherwise
+        // decay slowly, so the normalization below tracks the recent loudness envelope instead of
+        // a guessed absolute constant.
+        if (frameMax > ceiling) {
+            ceiling = (float) frameMax;
+        } else {
+            ceiling = Math.max(CEILING_FLOOR, ceiling * CEILING_DECAY);
+        }
+
+        for (int i = 0; i < BAND_COUNT; i++) {
+            float level = clamp01((float) (rawMagnitudes[i] / ceiling));
             smoothedBands[i] = smoothedBands[i] * 0.5f + level * 0.5f;
         }
         listener.onLevels(smoothedBands.clone());
