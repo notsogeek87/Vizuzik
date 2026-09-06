@@ -56,6 +56,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     // backgrounded case is exactly what the eventual Edge Visualizer use needs to work. Only
     // stopVisualizerProbe() (called manually while testing) or the process dying ends it.
     private VisualizerProbe visualizerProbe;
+    private boolean visualizerProbeRunning;
 
     @Override
     protected void handleOnStart() {
@@ -628,6 +629,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             visualizerProbe = new VisualizerProbe(getContext());
         }
         visualizerProbe.start();
+        visualizerProbeRunning = true;
         call.resolve();
     }
 
@@ -636,7 +638,40 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         if (visualizerProbe != null) {
             visualizerProbe.stop();
         }
+        visualizerProbeRunning = false;
         call.resolve();
+    }
+
+    /**
+     * Polled by the temporary "Test Visualizer" debug panel (see main.js) — a phone-only way to
+     * read VisualizerProbe's live status without adb or a remote inspector console. Returns the
+     * same numbers Logcat gets, just as JSON.
+     */
+    @PluginMethod
+    public void getVisualizerProbeStatus(PluginCall call) {
+        JSObject result = new JSObject();
+        // Checked separately from visualizerProbe == null: the instance is kept around (not
+        // nulled out) across a stop(), so its own presence can't tell "stopped" apart from
+        // "running with everything reset" — this flag is the only thing that can.
+        if (!visualizerProbeRunning || visualizerProbe == null) {
+            result.put("running", false);
+            call.resolve(result);
+            return;
+        }
+        VisualizerProbe.Status status = visualizerProbe.getStatus();
+        result.put("running", true);
+        result.put("globalMixInitialized", status.globalMixInitialized);
+        result.put("globalMixError", status.globalMixError);
+        result.put("globalMixAmplitude", status.globalMixAmplitude);
+        result.put("globalMixFft", status.globalMixFft);
+        result.put("trackedSessionInitialized", status.trackedSessionInitialized);
+        result.put("trackedSessionLabel", status.trackedSessionLabel);
+        result.put("trackedSessionError", status.trackedSessionError);
+        result.put("trackedSessionAmplitude", status.trackedSessionAmplitude);
+        result.put("trackedSessionFft", status.trackedSessionFft);
+        result.put("lastBroadcastPackage", status.lastBroadcastPackage);
+        result.put("lastBroadcastSessionId", status.lastBroadcastSessionId);
+        call.resolve(result);
     }
 
     @Override

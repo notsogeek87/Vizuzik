@@ -1460,3 +1460,88 @@ applyDisplayMode(false);
     DeezerMedia.play().catch(() => {});
   }
 })();
+
+/* ------------------------------------------------------------------ VisualizerProbe (temporary) */
+
+// Debug-only panel for VisualizerProbe.java (android.media.audiofx.Visualizer prototype), not
+// part of Edge Visualizer. Answers on-device, on the phone's own screen, whether Visualizer can
+// see Deezer's audio without MediaProjection — no adb/remote-inspector needed. Delete this whole
+// section (and the matching HTML/CSS) once that question is answered.
+const vprobeToggle = document.getElementById("vprobe-toggle");
+const vprobePanel = document.getElementById("vprobe-panel");
+const vprobeOutput = document.getElementById("vprobe-output");
+const vprobeClose = document.getElementById("vprobe-close");
+let vprobePollTimer = null;
+
+function formatVprobeStatus(status) {
+  if (!status || !status.running) {
+    return "Non démarré.";
+  }
+  const lines = [];
+  lines.push("— global-mix (session=0) —");
+  lines.push(`initialized: ${status.globalMixInitialized}`);
+  if (status.globalMixError) lines.push(`error: ${status.globalMixError}`);
+  lines.push(`waveform amplitude: ${Number(status.globalMixAmplitude).toFixed(2)}`);
+  lines.push(`FFT magnitude: ${Number(status.globalMixFft).toFixed(2)}`);
+  lines.push("");
+  lines.push(`— tracked-session (${status.trackedSessionLabel || "aucune pour l’instant"}) —`);
+  lines.push(`initialized: ${status.trackedSessionInitialized}`);
+  if (status.trackedSessionError) lines.push(`error: ${status.trackedSessionError}`);
+  lines.push(`waveform amplitude: ${Number(status.trackedSessionAmplitude).toFixed(2)}`);
+  lines.push(`FFT magnitude: ${Number(status.trackedSessionFft).toFixed(2)}`);
+  lines.push("");
+  lines.push("— dernière diffusion ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION vue —");
+  lines.push(
+    status.lastBroadcastSessionId >= 0
+      ? `package=${status.lastBroadcastPackage} sessionId=${status.lastBroadcastSessionId}`
+      : "aucune reçue pour l’instant"
+  );
+  return lines.join("\n");
+}
+
+function pollVprobeStatus() {
+  DeezerMedia.getVisualizerProbeStatus()
+    .then((status) => {
+      vprobeOutput.textContent = formatVprobeStatus(status);
+    })
+    .catch((err) => {
+      vprobeOutput.textContent = "Erreur de lecture du statut : " + ((err && err.message) || String(err));
+    });
+}
+
+function openVprobePanel() {
+  vprobePanel.hidden = false;
+  DeezerMedia.startVisualizerProbe()
+    .then(() => {
+      // The panel may already have been closed (and stopVisualizerProbe() already sent) while
+      // this call was in flight — installing the poll loop anyway would leave it running
+      // forever against a probe the user already asked to stop.
+      if (vprobePanel.hidden) {
+        DeezerMedia.stopVisualizerProbe().catch(() => {});
+        return;
+      }
+      pollVprobeStatus();
+      vprobePollTimer = setInterval(pollVprobeStatus, 400);
+    })
+    .catch((err) => {
+      vprobeOutput.textContent = "Impossible de démarrer (permission refusée ?) : " + ((err && err.message) || String(err));
+    });
+}
+
+function closeVprobePanel() {
+  if (vprobePollTimer != null) {
+    clearInterval(vprobePollTimer);
+    vprobePollTimer = null;
+  }
+  vprobePanel.hidden = true;
+  DeezerMedia.stopVisualizerProbe().catch(() => {});
+}
+
+vprobeToggle.addEventListener("click", () => {
+  if (vprobePanel.hidden) {
+    openVprobePanel();
+  } else {
+    closeVprobePanel();
+  }
+});
+vprobeClose.addEventListener("click", closeVprobePanel);

@@ -11,8 +11,9 @@ import android.util.Log;
 
 /**
  * Isolated diagnostic prototype. NOT wired into the production audio pipeline
- * (AudioLevelsBridge, MicCaptureThread, EdgeGlowView) — this only logs to Logcat, so it can be
- * started and stopped freely while iterating without touching anything the app actually renders.
+ * (AudioLevelsBridge, MicCaptureThread, EdgeGlowView) — it only exposes a status snapshot (see
+ * getStatus()) and logs to Logcat, so it can be started and stopped freely while iterating
+ * without touching anything the app actually renders.
  *
  * The question it exists to answer experimentally: can android.media.audiofx.Visualizer see the
  * tracked app's (Deezer's) own audio output using only RECORD_AUDIO — no MediaProjection consent
@@ -22,7 +23,7 @@ import android.util.Log;
  * setAllowedCapturePolicy()); the open question is only whether the OS/OEM build still allows a
  * non-privileged app to attach a Visualizer effect to *another app's* audio at all.
  *
- * Two independent, simultaneously-run attempts to get "the right audioSessionId" — logged
+ * Two independent, simultaneously-run attempts to get "the right audioSessionId" — tracked
  * separately so a single test run on a real device shows which (if either) actually works:
  *
  * 1. Visualizer(0) — session 0 is Android's historical "output mix": attaching there used to let
@@ -39,17 +40,17 @@ import android.util.Log;
  *    It needs no permission beyond RECORD_AUDIO to receive; whether Deezer's player actually
  *    sends it is, again, only knowable on-device.
  *
- * How to run this: it is deliberately not wired into any UI (see the class doc on
- * DeezerMediaPlugin's startVisualizerProbe()/stopVisualizerProbe() for how to trigger it — e.g.
- * from Chrome's remote inspector console while the app runs: DeezerMedia.startVisualizerProbe()).
- * Watch `adb logcat -s VizuzikVisualizerProbe` while a track plays in Deezer.
+ * How to run this: no device/adb/remote-inspector required — see the temporary "Test Visualizer"
+ * debug panel wired into index.html/main.js (getVisualizerProbeStatus() in DeezerMediaPlugin
+ * polls getStatus() below). Logcat (filter "VizuzikVisualizerProbe") still gets the same
+ * information for anyone who does have adb handy.
  */
 final class VisualizerProbe {
 
     private static final String TAG = "VizuzikVisualizerProbe";
     // Visualizer capture callbacks can fire dozens of times per second; logging every one would
-    // flood Logcat without helping anyone read it. One line roughly every 400ms per attachment is
-    // still plenty to see whether the numbers move with the music.
+    // flood Logcat without helping anyone read it (the status snapshot itself is always kept
+    // fresh regardless — this only throttles the Logcat lines).
     private static final int LOG_EVERY_N_CAPTURES = 8;
     private static final int CAPTURE_RATE_HZ = 20;
 
@@ -60,6 +61,15 @@ final class VisualizerProbe {
             onAudioEffectSessionOpened(intent);
         }
     };
+
+    private final Attempt globalMix = new Attempt("global-mix(session=0)");
+    // null label (rather than a placeholder string) until a broadcast actually names a tracked
+    // package: the web panel treats a falsy label as "nothing tracked yet" (see main.js).
+    private final Attempt trackedSession = new Attempt(null);
+    // Most recent ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION seen at all, matched or not — proves
+    // whether the broadcast fires in the first place, independently of whether it was Deezer.
+    private volatile String lastBroadcastPackage;
+    private volatile int lastBroadcastSessionId = -1;
 
     private Visualizer globalMixVisualizer;
     private Visualizer trackedSessionVisualizer;
@@ -74,9 +84,10 @@ final class VisualizerProbe {
      *  a native effect instance. */
     void start() {
         registerSessionReceiver();
-        releaseVisualizer(globalMixVisualizer, "global-mix(session=0)");
+        releaseVisualizer(globalMixVisualizer);
         globalMixVisualizer = null;
-        attachVisualizer(0, "global-mix(session=0)", visualizer -> globalMixVisualizer = visualizer);
+        globalMix.reset();
+        globalMixVisualizer = attachVisualizer(0, globalMix);
     }
 
     void stop() {
@@ -88,10 +99,57 @@ final class VisualizerProbe {
             }
             receiverRegistered = false;
         }
-        releaseVisualizer(globalMixVisualizer, "global-mix(session=0)");
+        releaseVisualizer(globalMixVisualizer);
         globalMixVisualizer = null;
-        releaseVisualizer(trackedSessionVisualizer, "tracked-session");
+        releaseVisualizer(trackedSessionVisualizer);
         trackedSessionVisualizer = null;
+        globalMix.reset();
+        trackedSession.reset();
+        // reset() deliberately leaves label alone (globalMix's label is fixed, never reset) —
+        // trackedSession's is the one that actually changes, so clear it back to "nothing
+        // tracked yet" explicitly here.
+        trackedSession.label = null;
+        lastBroadcastPackage = null;
+        lastBroadcastSessionId = -1;
+    }
+
+    /** A plain snapshot the plugin hands back to the web layer as JSON — see
+     *  DeezerMediaPlugin.getVisualizerProbeStatus(). Every field is a primitive/String so the
+     *  caller doesn't need to know about Attempt at all. */
+    static final class Status {
+        final boolean globalMixInitialized;
+        final String globalMixError;
+        final double globalMixAmplitude;
+        final double globalMixFft;
+
+        final boolean trackedSessionInitialized;
+        final String trackedSessionLabel;
+        final String trackedSessionError;
+        final double trackedSessionAmplitude;
+        final double trackedSessionFft;
+
+        final String lastBroadcastPackage;
+        final int lastBroadcastSessionId;
+
+        Status(Attempt globalMix, Attempt trackedSession, String lastBroadcastPackage, int lastBroadcastSessionId) {
+            this.globalMixInitialized = globalMix.initialized;
+            this.globalMixError = globalMix.error;
+            this.globalMixAmplitude = globalMix.amplitude;
+            this.globalMixFft = globalMix.fftMagnitude;
+
+            this.trackedSessionInitialized = trackedSession.initialized;
+            this.trackedSessionLabel = trackedSession.label;
+            this.trackedSessionError = trackedSession.error;
+            this.trackedSessionAmplitude = trackedSession.amplitude;
+            this.trackedSessionFft = trackedSession.fftMagnitude;
+
+            this.lastBroadcastPackage = lastBroadcastPackage;
+            this.lastBroadcastSessionId = lastBroadcastSessionId;
+        }
+    }
+
+    Status getStatus() {
+        return new Status(globalMix, trackedSession, lastBroadcastPackage, lastBroadcastSessionId);
     }
 
     private void registerSessionReceiver() {
@@ -120,92 +178,122 @@ final class VisualizerProbe {
         int sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, -1);
         String packageName = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME);
         Log.i(TAG, "ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION: package=" + packageName + " audioSessionId=" + sessionId);
+        // Recorded even when not the tracked app: seeing *any* broadcast at all, from *any*
+        // package, is itself useful — its total absence is what tells us Deezer's player (or
+        // this Android build) never sends this broadcast in the first place.
+        lastBroadcastPackage = packageName;
+        lastBroadcastSessionId = sessionId;
         if (sessionId <= 0 || packageName == null || !MusicApps.isKnownPackage(packageName)) {
-            // Still logged above even when not the tracked app: seeing *any* broadcast at all,
-            // from *any* package, is itself useful — its total absence is what tells us Deezer's
-            // player (or this Android build) never sends this broadcast in the first place.
             return;
         }
-        if (trackedSessionVisualizer != null) {
-            releaseVisualizer(trackedSessionVisualizer, "tracked-session (replaced)");
-            trackedSessionVisualizer = null;
-        }
-        attachVisualizer(sessionId, "tracked-session[" + packageName + "]", visualizer -> trackedSessionVisualizer = visualizer);
+        releaseVisualizer(trackedSessionVisualizer);
+        trackedSessionVisualizer = null;
+        trackedSession.reset();
+        trackedSession.label = "tracked-session[" + packageName + "]";
+        trackedSessionVisualizer = attachVisualizer(sessionId, trackedSession);
     }
 
-    private interface OnAttached {
-        void onAttached(Visualizer visualizer);
-    }
-
-    private void attachVisualizer(int sessionId, String label, OnAttached onAttached) {
+    private Visualizer attachVisualizer(int sessionId, Attempt attempt) {
         Visualizer visualizer;
         try {
             visualizer = new Visualizer(sessionId);
         } catch (Exception e) {
             // RuntimeException/UnsupportedOperationException here (permission missing, no audio
             // effect library, or the session refusing attachment) is exactly the negative result
-            // this probe is trying to observe — logged, not swallowed silently.
-            Log.w(TAG, label + ": Visualizer construction failed", e);
-            return;
+            // this probe is trying to observe — recorded, not swallowed silently.
+            String message = "construction failed: " + e;
+            Log.w(TAG, attempt.label + ": Visualizer construction failed", e);
+            attempt.error = message;
+            return null;
         }
 
-        Log.i(TAG, label + ": Visualizer initialized");
+        Log.i(TAG, attempt.label + ": Visualizer initialized");
         // Visualizer has no getter to read the session back — it's whatever was just passed to
         // the constructor above, so log that directly instead.
-        Log.i(TAG, label + ": audio session id = " + sessionId);
+        Log.i(TAG, attempt.label + ": audio session id = " + sessionId);
+        attempt.initialized = true;
 
         int captureSize = Visualizer.getCaptureSizeRange()[1];
         try {
             visualizer.setCaptureSize(captureSize);
         } catch (Exception e) {
-            Log.w(TAG, label + ": setCaptureSize failed, using default", e);
+            Log.w(TAG, attempt.label + ": setCaptureSize failed, using default", e);
         }
 
-        CaptureLogger logger = new CaptureLogger(label);
         int rate = Math.min(CAPTURE_RATE_HZ * 1000, Visualizer.getMaxCaptureRate());
         try {
-            visualizer.setDataCaptureListener(logger, rate, true, true);
+            visualizer.setDataCaptureListener(new CaptureLogger(attempt), rate, true, true);
             visualizer.setEnabled(true);
         } catch (Exception e) {
-            Log.w(TAG, label + ": enabling capture failed", e);
+            String message = "enabling capture failed: " + e;
+            Log.w(TAG, attempt.label + ": enabling capture failed", e);
+            attempt.error = message;
             visualizer.release();
-            return;
+            return null;
         }
-        onAttached.onAttached(visualizer);
+        return visualizer;
     }
 
-    private void releaseVisualizer(Visualizer visualizer, String label) {
+    private void releaseVisualizer(Visualizer visualizer) {
         if (visualizer == null) return;
         try {
             visualizer.setEnabled(false);
             visualizer.release();
-            Log.i(TAG, label + ": released");
         } catch (Exception e) {
-            Log.w(TAG, label + ": release failed", e);
+            Log.w(TAG, "release failed", e);
+        }
+    }
+
+    /** Mutable per-attempt state, updated from capture callbacks (main thread for the tracked
+     *  session's broadcast-triggered attach, the capture engine's own thread for callbacks) and
+     *  read from the plugin's getVisualizerProbeStatus() (a different thread again) — plain
+     *  volatile fields rather than a lock, same tradeoff as AudioLevelsBridge.capturing: a
+     *  diagnostic snapshot can tolerate a one-frame-old value. */
+    private static final class Attempt {
+        volatile String label;
+        volatile boolean initialized;
+        volatile String error;
+        volatile double amplitude;
+        volatile double fftMagnitude;
+
+        Attempt(String label) {
+            this.label = label;
+        }
+
+        void reset() {
+            initialized = false;
+            error = null;
+            amplitude = 0;
+            fftMagnitude = 0;
         }
     }
 
     /** One instance per Visualizer attachment (global-mix and tracked-session run at the same
-     *  time), so each logs its own throttled cadence independently. */
+     *  time), so each throttles its own Logcat cadence independently while always keeping its
+     *  Attempt's status fields current for polling. */
     private static final class CaptureLogger implements Visualizer.OnDataCaptureListener {
-        private final String label;
+        private final Attempt attempt;
         private int captureCount;
 
-        CaptureLogger(String label) {
-            this.label = label;
+        CaptureLogger(Attempt attempt) {
+            this.attempt = attempt;
         }
 
         @Override
         public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
+            double amplitude = waveformAmplitude(waveform);
+            attempt.amplitude = amplitude;
             if (captureCount % LOG_EVERY_N_CAPTURES == 0) {
-                Log.i(TAG, label + ": waveform amplitude = " + waveformAmplitude(waveform));
+                Log.i(TAG, attempt.label + ": waveform amplitude = " + amplitude);
             }
         }
 
         @Override
         public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) {
+            double magnitude = fftMagnitude(fft);
+            attempt.fftMagnitude = magnitude;
             if (captureCount % LOG_EVERY_N_CAPTURES == 0) {
-                Log.i(TAG, label + ": FFT magnitude = " + fftMagnitude(fft));
+                Log.i(TAG, attempt.label + ": FFT magnitude = " + magnitude);
             }
             captureCount++;
         }
