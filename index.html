@@ -336,17 +336,6 @@
       <p id="permission-hint" class="hint" hidden></p>
     </section>
 
-    <!-- Temporary diagnostic panel for VisualizerProbe.java (android.media.audiofx.Visualizer
-         prototype) — not part of Edge Visualizer, doesn't touch anything else on screen. Meant
-         to be removed once the on-device test has answered whether Visualizer can see the
-         tracked app's audio without MediaProjection. Always available regardless of which screen
-         is showing, since the test only needs the webview alive, not a track visible here. -->
-    <button id="vprobe-toggle" type="button" class="vprobe-toggle">🔬 Test Visualizer</button>
-    <div id="vprobe-panel" class="vprobe-panel" hidden>
-      <pre id="vprobe-output" class="vprobe-output">En attente…</pre>
-      <button id="vprobe-close" type="button" class="grant-button">Arrêter et fermer</button>
-    </div>
-
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

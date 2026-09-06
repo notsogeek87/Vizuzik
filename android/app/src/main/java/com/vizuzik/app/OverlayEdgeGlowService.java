@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
@@ -19,15 +20,19 @@ import android.view.WindowManager;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
+import androidx.core.content.ContextCompat;
 
 /**
  * Draws EdgeGlowView as a touch-transparent window on top of whatever app is in front — Deezer,
  * Spotify, YouTube Music, a local player — so the Edge Visualizer is visible without ever having
  * to switch back to Vizuzik's own full-screen player.
  *
- * Started and stopped only by the web layer (startEdgeOverlay()/stopEdgeOverlay() in
- * DeezerMediaPlugin, driven by syncEdgeOverlay() in main.js): the service itself has no opinion
- * on when it should be running, it just renders for as long as it's alive. It listens to the same
+ * Started and stopped through requestStart()/requestStop() below, never by any opinion of its
+ * own — it just renders for as long as it's alive. Two independent callers decide when: the web
+ * layer (startEdgeOverlay()/stopEdgeOverlay() in DeezerMediaPlugin, driven by syncEdgeOverlay()
+ * in main.js) while the webview is running, and EdgeOverlayController natively (via
+ * NowPlayingListenerService) so the same thing happens even if Vizuzik's own Activity/webview has
+ * never launched this session. It listens to the same
  * two bridges DeezerMediaPlugin does — DeezerMediaBridge for the current track's artwork (turned
  * into a glow color via OverlayPalette) and AudioLevelsBridge for real audio levels, the same
  * AudioPlaybackCapture pipeline the full-screen visualizer already uses.
@@ -67,6 +72,25 @@ public class OverlayEdgeGlowService extends Service
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
+
+    /**
+     * Starts/stops this service — the one place both DeezerMediaPlugin (driven by the web
+     * layer's syncEdgeOverlay(), while the webview is alive) and EdgeOverlayController (driven
+     * natively by NowPlayingListenerService, so it works even if Vizuzik's own Activity/webview
+     * has never run this session) go through, so the two orchestrators can never disagree on
+     * how starting/stopping actually happens — only on when to do it, and they compute that from
+     * the same real-world conditions (enabled setting, overlay permission, isPlaying, whether
+     * Vizuzik itself is in the foreground), so in practice they always agree anyway. Both calls
+     * are idempotent on the receiving end (onStartCommand() no-ops if the view already exists;
+     * Android no-ops stopService() on an already-stopped service).
+     */
+    static void requestStart(Context context) {
+        ContextCompat.startForegroundService(context, new Intent(context, OverlayEdgeGlowService.class));
+    }
+
+    static void requestStop(Context context) {
+        context.stopService(new Intent(context, OverlayEdgeGlowService.class));
+    }
 
     @Override
     public void onCreate() {

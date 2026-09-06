@@ -50,14 +50,6 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     // plugin's own.
     private MicCaptureThread micCaptureThread;
 
-    // Diagnostic-only (see VisualizerProbe's class doc). Deliberately NOT stopped in
-    // handleOnStop() below, unlike micCaptureThread: the whole point of a manual test run is
-    // often to background Vizuzik and switch to Deezer while it keeps logging, since that
-    // backgrounded case is exactly what the eventual Edge Visualizer use needs to work. Only
-    // stopVisualizerProbe() (called manually while testing) or the process dying ends it.
-    private VisualizerProbe visualizerProbe;
-    private boolean visualizerProbeRunning;
-
     @Override
     protected void handleOnStart() {
         DeezerMediaBridge.getInstance().addListener(this);
@@ -458,10 +450,14 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Starts OverlayEdgeGlowService. Entirely orchestrated from the web layer (see
-     * syncEdgeOverlay() in main.js): called only once Vizuzik itself is backgrounded, a track is
-     * actually playing, and the overlay permission is already known to be granted — so a missing
-     * grant here means the web layer's own state is stale rather than the normal case.
+     * Starts OverlayEdgeGlowService. Orchestrated from the web layer (see syncEdgeOverlay() in
+     * main.js) whenever the webview is alive — called only once Vizuzik itself is backgrounded, a
+     * track is actually playing, and the overlay permission is already known to be granted, so a
+     * missing grant here means the web layer's own state is stale rather than the normal case.
+     * EdgeOverlayController reaches the same conclusion independently from native state, for the
+     * case where the webview isn't running at all yet — both go through
+     * OverlayEdgeGlowService.requestStart()/requestStop(), so the two can never disagree on how
+     * starting/stopping actually happens.
      */
     @PluginMethod
     public void startEdgeOverlay(PluginCall call) {
@@ -469,13 +465,28 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             call.reject("permission");
             return;
         }
-        ContextCompat.startForegroundService(getContext(), new Intent(getContext(), OverlayEdgeGlowService.class));
+        OverlayEdgeGlowService.requestStart(getContext());
         call.resolve();
     }
 
     @PluginMethod
     public void stopEdgeOverlay(PluginCall call) {
-        getContext().stopService(new Intent(getContext(), OverlayEdgeGlowService.class));
+        OverlayEdgeGlowService.requestStop(getContext());
+        call.resolve();
+    }
+
+    /**
+     * Mirrors the web layer's Edge Visualizer on/off toggle into EdgeOverlayPreference — the only
+     * way EdgeOverlayController (running natively, independent of this plugin/the webview) can
+     * find out the user turned it on, so Edge Visualizer can start the first time a track plays
+     * even if Vizuzik itself is never opened this session. Re-syncs immediately in case a track
+     * is already playing when the setting changes.
+     */
+    @PluginMethod
+    public void setEdgeOverlayEnabled(PluginCall call) {
+        EdgeOverlayPreference.setEnabled(getContext(), call.getBoolean("enabled", false));
+        EdgeOverlayController.getInstance().init(getContext().getApplicationContext());
+        EdgeOverlayController.getInstance().sync();
         call.resolve();
     }
 
@@ -593,89 +604,6 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             micCaptureThread.stopCapture();
             micCaptureThread = null;
         }
-    }
-
-    /**
-     * Diagnostic-only: starts VisualizerProbe (see its class doc), an isolated prototype testing
-     * whether android.media.audiofx.Visualizer can see the tracked app's own audio using only
-     * RECORD_AUDIO — no MediaProjection dialog. Not wired into AudioLevelsBridge or anything the
-     * app renders; it only writes to Logcat (filter on "VizuzikVisualizerProbe"). Meant to be
-     * triggered manually — e.g. from Chrome's remote inspector console — while a track plays in
-     * the tracked app, not from any production UI path.
-     *
-     * Reuses the exact same "microphone" permission alias as startMicCapture(): this is still
-     * just RECORD_AUDIO, not a new permission, and the same already-shown system dialog.
-     */
-    @PluginMethod
-    public void startVisualizerProbe(PluginCall call) {
-        if (getPermissionState("microphone") == PermissionState.GRANTED) {
-            beginVisualizerProbe(call);
-        } else {
-            requestPermissionForAlias("microphone", call, "handleVisualizerProbePermissionResult");
-        }
-    }
-
-    @PermissionCallback
-    private void handleVisualizerProbePermissionResult(PluginCall call) {
-        if (getPermissionState("microphone") == PermissionState.GRANTED) {
-            beginVisualizerProbe(call);
-        } else {
-            call.reject("denied");
-        }
-    }
-
-    private void beginVisualizerProbe(PluginCall call) {
-        if (visualizerProbe == null) {
-            visualizerProbe = new VisualizerProbe(getContext());
-        }
-        visualizerProbe.start();
-        visualizerProbeRunning = true;
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void stopVisualizerProbe(PluginCall call) {
-        if (visualizerProbe != null) {
-            visualizerProbe.stop();
-        }
-        visualizerProbeRunning = false;
-        call.resolve();
-    }
-
-    /**
-     * Polled by the temporary "Test Visualizer" debug panel (see main.js) — a phone-only way to
-     * read VisualizerProbe's live status without adb or a remote inspector console. Returns the
-     * same numbers Logcat gets, just as JSON.
-     */
-    @PluginMethod
-    public void getVisualizerProbeStatus(PluginCall call) {
-        JSObject result = new JSObject();
-        // Checked separately from visualizerProbe == null: the instance is kept around (not
-        // nulled out) across a stop(), so its own presence can't tell "stopped" apart from
-        // "running with everything reset" — this flag is the only thing that can.
-        if (!visualizerProbeRunning || visualizerProbe == null) {
-            result.put("running", false);
-            call.resolve(result);
-            return;
-        }
-        VisualizerProbe.Status status = visualizerProbe.getStatus();
-        result.put("running", true);
-        result.put("globalMixInitialized", status.globalMixInitialized);
-        result.put("globalMixError", status.globalMixError);
-        result.put("globalMixAmplitude", status.globalMixAmplitude);
-        result.put("globalMixFft", status.globalMixFft);
-        result.put("trackedSessionInitialized", status.trackedSessionInitialized);
-        result.put("trackedSessionLabel", status.trackedSessionLabel);
-        result.put("trackedSessionError", status.trackedSessionError);
-        result.put("trackedSessionAmplitude", status.trackedSessionAmplitude);
-        result.put("trackedSessionFft", status.trackedSessionFft);
-        result.put("trackedSessionFftMin", status.trackedSessionFftMin);
-        result.put("trackedSessionFftMax", status.trackedSessionFftMax);
-        result.put("trackedSessionSampleCount", status.trackedSessionSampleCount);
-        result.put("trackedSessionMsSinceLastSample", status.trackedSessionMsSinceLastSample);
-        result.put("lastBroadcastPackage", status.lastBroadcastPackage);
-        result.put("lastBroadcastSessionId", status.lastBroadcastSessionId);
-        call.resolve(result);
     }
 
     @Override

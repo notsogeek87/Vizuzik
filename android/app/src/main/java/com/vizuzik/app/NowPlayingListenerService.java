@@ -34,6 +34,13 @@ public class NowPlayingListenerService extends NotificationListenerService {
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
+        // This is the one component guaranteed to be alive whenever notification access is
+        // granted, regardless of whether MainActivity has ever run this session (the system
+        // binds it directly, e.g. right after a reboot) — the natural place to wire up
+        // EdgeOverlayController so Edge Visualizer can start on its own the first time a track
+        // plays, without the user ever having to open Vizuzik first.
+        EdgeOverlayController.getInstance().init(getApplicationContext());
+        DeezerMediaBridge.getInstance().addListener(EdgeOverlayController.getInstance());
         mediaSessionManager = (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
         ComponentName component = new ComponentName(this, NowPlayingListenerService.class);
         try {
@@ -51,7 +58,12 @@ public class NowPlayingListenerService extends NotificationListenerService {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionsChangedListener);
         }
         detachController();
+        // clear() before removeListener(): EdgeOverlayController needs this "nothing playing"
+        // notification to stop OverlayEdgeGlowService — if it were unregistered first, it would
+        // never learn playback stopped and could leave the overlay running indefinitely, with
+        // nothing else around (MainActivity may never have run this session) to correct it.
         DeezerMediaBridge.getInstance().clear();
+        DeezerMediaBridge.getInstance().removeListener(EdgeOverlayController.getInstance());
     }
 
     @Override

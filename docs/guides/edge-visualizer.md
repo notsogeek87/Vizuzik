@@ -8,7 +8,9 @@ repassés sur l'app de musique elle-même (Deezer, Spotify, YouTube Music, un le
 Le visualiseur plein écran de Vizuzik n'existe que tant qu'on le regarde. Edge Visualizer ajoute
 un second mode : un contour lumineux dessiné sur les quatre bords de l'écran, **par-dessus l'app
 de musique elle-même**, façon MuViz Edge. Il s'allume tout seul dès qu'un morceau joue et que
-Vizuzik n'est pas à l'écran, et s'éteint tout seul dans le cas contraire.
+Vizuzik n'est pas à l'écran, et s'éteint tout seul dans le cas contraire — **y compris si Vizuzik
+n'a jamais été ouvert** depuis le dernier redémarrage du téléphone : une fois activé une première
+fois, ouvrir directement Deezer et lancer un titre suffit.
 
 Purement décoratif : aucun geste n'est jamais capté par le contour, tout atteint l'app en dessous
 exactement comme s'il n'était pas là.
@@ -28,11 +30,13 @@ exactement comme s'il n'était pas là.
 
 ## Ce qui fait réagir le contour
 
-Comme le visualiseur plein écran, le contour ne réagit à un vrai rythme que si le son réel est
-capté (voir [Activer le son réel](capture-audio.md)) — la même capture, réutilisée telle quelle
-pour l'overlay. **Le mode Micro ne fait pas réagir le contour** : il retombe en régime ambiant
-(respiration douce + un à-coup honnête sur chaque changement de morceau ou lecture/pause), le
-temps que le son réel soit activé.
+Le contour réagit en direct à la musique dès que `RECORD_AUDIO` est accordé (le même accord que le
+mode Micro du plein écran) — via `android.media.audiofx.Visualizer`, attaché à la session audio de
+l'app suivie, **sans jamais ouvrir la fenêtre système MediaProjection**. Si ce mécanisme n'est pas
+disponible (autre app, autre version d'Android), le contour retombe sur la capture MediaProjection
+existante (voir [Activer le son réel](capture-audio.md)) si elle est active, puis, en dernier
+recours, sur un régime ambiant (respiration douce + un à-coup honnête sur chaque changement de
+morceau ou lecture/pause) qui n'invente jamais de rythme.
 
 ## Réglages
 
@@ -53,18 +57,20 @@ le redémarrer.
 
 - Android 8 (API 26) ou supérieur — en dessous, `TYPE_APPLICATION_OVERLAY` n'existe pas et le
   badge reste masqué.
-- Le contour ne réagit à un vrai rythme que si le son réel est actif (voir ci-dessus) ; sans ça,
-  il respire en ambiant, jamais en inventant un tempo.
-- S'arrête pour de bon quand Vizuzik est retiré des applications récentes — même règle que la
-  capture audio elle-même.
+- La réaction en direct demande `RECORD_AUDIO` déjà accordé ; sans ça (et sans capture
+  MediaProjection active non plus), le contour respire en ambiant, jamais en inventant un tempo.
+- Une fois activé une première fois (réglage + permission d'overlay accordée), fonctionne même si
+  Vizuzik n'est plus jamais ouvert ensuite — voir
+  [l'ADR correspondant](../architecture/2026-09-06-edge-visualizer.md) pour comment.
 - Ne capture jamais le microphone en arrière-plan : une première version le faisait pour que le
-  contour réagisse même en mode Micro, mais ça s'est révélé peu fiable (voir
-  [l'ADR correspondant](../architecture/2026-09-06-edge-visualizer.md)) et a été abandonné.
+  contour réagisse même en mode Micro, mais ça s'est révélé peu fiable et a été abandonné (voir la
+  même ADR).
 
 ## Repartir de zéro
 
 L'activation est stockée dans `localStorage` sous la clé `vizuzik:edgeOverlay` (`"on"` /
-`"off"`), et l'écran d'explication déjà vu sous `vizuzik:edgeOverlaySheetSeen`. Les réglages du
-panneau vivent côté natif (`EdgeConfig`, lu et écrit par `OverlayEdgeGlowService` et
-`DeezerMediaPlugin`), puisque le service qui dessine le contour n'a pas accès au `localStorage`
-de la page.
+`"off"`), et l'écran d'explication déjà vu sous `vizuzik:edgeOverlaySheetSeen` — mais aussi, en
+miroir, côté natif (`EdgeOverlayPreference`), puisque c'est ce que lit `EdgeOverlayController`
+pour démarrer le contour tout seul sans que la page n'ait jamais tourné. Les réglages du panneau
+vivent côté natif (`EdgeConfig`, lu et écrit par `OverlayEdgeGlowService` et `DeezerMediaPlugin`),
+puisque le service qui dessine le contour n'a pas accès au `localStorage` de la page.

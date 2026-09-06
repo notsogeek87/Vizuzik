@@ -64,9 +64,13 @@ final class TrackedSessionAudioSource {
     private static final double MIN_FREQ = 55;
     private static final double MAX_FREQ = 7000;
     private static final int CAPTURE_RATE_HZ = 30;
-    // First-approximation log compression — see the class doc above.
-    private static final double MAGNITUDE_SCALE = 6.0;
-    private static final double MAGNITUDE_CEILING = 600.0;
+    // First-approximation log compression — see the class doc above. On-device testing showed
+    // the previous, much higher ceiling (600) left the glow reading as barely reactive: real
+    // per-bin FFT magnitudes for a single frequency rarely got anywhere near that, so most of
+    // this curve's range was never actually used. Cut hard so typical music readily reaches the
+    // top of the range instead of only the loudest peaks nudging it.
+    private static final double MAGNITUDE_SCALE = 10.0;
+    private static final double MAGNITUDE_CEILING = 90.0;
 
     private final Context appContext;
     private final Listener listener;

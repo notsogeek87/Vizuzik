@@ -738,6 +738,10 @@ function toggleEdgeOverlay() {
   if (!overlaySupported) return;
   edgeOverlayEnabled = !edgeOverlayEnabled;
   rememberEdgeOverlayEnabled(edgeOverlayEnabled);
+  // Mirrored natively (EdgeOverlayPreference) so EdgeOverlayController — which has no access to
+  // this page's localStorage — can start Edge Visualizer itself the first time a track plays,
+  // even if Vizuzik's own webview never runs again this session.
+  DeezerMedia.setEdgeOverlayEnabled({ enabled: edgeOverlayEnabled }).catch(() => {});
   if (edgeOverlayEnabled && !overlayPermissionGranted) {
     if (!hasOverlaySheetBeenSeen()) {
       openOverlaySheet();
@@ -1446,6 +1450,13 @@ applyDisplayMode(false);
   syncCaptureState();
   syncOverlayPermission();
   loadEdgeConfig();
+  // Cold-start mirror: EdgeOverlayPreference only remembers what setEdgeOverlayEnabled() last
+  // wrote, and until now that only ever happened inside toggleEdgeOverlay() — someone who turned
+  // Edge Visualizer on in an earlier session, then reinstalled the app or rebooted the phone
+  // without touching the badge again, would have a native flag still stuck at its default
+  // (false), so EdgeOverlayController could never start the overlay on its own from a track
+  // starting in Deezer — exactly the "Vizuzik never opened this session" case it exists for.
+  DeezerMedia.setEdgeOverlayEnabled({ enabled: edgeOverlayEnabled }).catch(() => {});
   // Cold start only: never repeated on a later resume, since by then a resumed session is
   // already exactly where it should be, and redoing this mid-session would restart a track the
   // user is deliberately listening to or pausing.
@@ -1460,105 +1471,3 @@ applyDisplayMode(false);
     DeezerMedia.play().catch(() => {});
   }
 })();
-
-/* ------------------------------------------------------------------ VisualizerProbe (temporary) */
-
-// Debug-only panel for VisualizerProbe.java (android.media.audiofx.Visualizer prototype), not
-// part of Edge Visualizer. Answers on-device, on the phone's own screen, whether Visualizer can
-// see Deezer's audio without MediaProjection — no adb/remote-inspector needed. Delete this whole
-// section (and the matching HTML/CSS) once that question is answered.
-const vprobeToggle = document.getElementById("vprobe-toggle");
-const vprobePanel = document.getElementById("vprobe-panel");
-const vprobeOutput = document.getElementById("vprobe-output");
-const vprobeClose = document.getElementById("vprobe-close");
-let vprobePollTimer = null;
-
-function formatVprobeStatus(status) {
-  if (!status || !status.running) {
-    return "Non démarré.";
-  }
-  const lines = [];
-  lines.push("— global-mix (session=0) —");
-  lines.push(`initialized: ${status.globalMixInitialized}`);
-  if (status.globalMixError) lines.push(`error: ${status.globalMixError}`);
-  lines.push(`waveform amplitude: ${Number(status.globalMixAmplitude).toFixed(2)}`);
-  lines.push(`FFT magnitude: ${Number(status.globalMixFft).toFixed(2)}`);
-  lines.push("");
-  lines.push(`— tracked-session (${status.trackedSessionLabel || "aucune pour l’instant"}) —`);
-  lines.push(`initialized: ${status.trackedSessionInitialized}`);
-  if (status.trackedSessionError) lines.push(`error: ${status.trackedSessionError}`);
-  lines.push(`waveform amplitude: ${Number(status.trackedSessionAmplitude).toFixed(2)}`);
-  lines.push(`FFT magnitude (instant): ${Number(status.trackedSessionFft).toFixed(2)}`);
-  // The instant value above can't be watched while Deezer is what's on screen — only one app is
-  // ever visible at a time. This range covers everything since "Test Visualizer" was tapped,
-  // background time included, so coming back from Deezer and reading it once is enough to tell
-  // whether it moved (min ≠ max) and whether it's still fresh (age below).
-  lines.push(
-    `FFT magnitude (min/max depuis le démarrage): ${Number(status.trackedSessionFftMin).toFixed(2)} / ` +
-      `${Number(status.trackedSessionFftMax).toFixed(2)} (${status.trackedSessionSampleCount} échantillons)`
-  );
-  lines.push(
-    status.trackedSessionMsSinceLastSample < 0
-      ? "dernier échantillon : aucun encore"
-      : `dernier échantillon il y a ${(status.trackedSessionMsSinceLastSample / 1000).toFixed(1)} s`
-  );
-  lines.push("");
-  lines.push("— dernière diffusion ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION vue —");
-  lines.push(
-    status.lastBroadcastSessionId >= 0
-      ? `package=${status.lastBroadcastPackage} sessionId=${status.lastBroadcastSessionId}`
-      : "aucune reçue pour l’instant"
-  );
-  return lines.join("\n");
-}
-
-function pollVprobeStatus() {
-  DeezerMedia.getVisualizerProbeStatus()
-    .then((status) => {
-      vprobeOutput.textContent = formatVprobeStatus(status);
-    })
-    .catch((err) => {
-      vprobeOutput.textContent = "Erreur de lecture du statut : " + ((err && err.message) || String(err));
-    });
-}
-
-function openVprobePanel() {
-  vprobePanel.hidden = false;
-  DeezerMedia.startVisualizerProbe()
-    .then(() => {
-      // The panel may already have been closed (and stopVisualizerProbe() already sent) while
-      // this call was in flight — installing the poll loop anyway would leave it running
-      // forever against a probe the user already asked to stop.
-      if (vprobePanel.hidden) {
-        DeezerMedia.stopVisualizerProbe().catch(() => {});
-        return;
-      }
-      // A rapid close/reopen can have a previous startVisualizerProbe() call resolve after this
-      // one — clearing whatever's already running (rather than assuming there's nothing to
-      // clear) is what keeps a second interval from ever running alongside a first one.
-      if (vprobePollTimer != null) clearInterval(vprobePollTimer);
-      pollVprobeStatus();
-      vprobePollTimer = setInterval(pollVprobeStatus, 400);
-    })
-    .catch((err) => {
-      vprobeOutput.textContent = "Impossible de démarrer (permission refusée ?) : " + ((err && err.message) || String(err));
-    });
-}
-
-function closeVprobePanel() {
-  if (vprobePollTimer != null) {
-    clearInterval(vprobePollTimer);
-    vprobePollTimer = null;
-  }
-  vprobePanel.hidden = true;
-  DeezerMedia.stopVisualizerProbe().catch(() => {});
-}
-
-vprobeToggle.addEventListener("click", () => {
-  if (vprobePanel.hidden) {
-    openVprobePanel();
-  } else {
-    closeVprobePanel();
-  }
-});
-vprobeClose.addEventListener("click", closeVprobePanel);

@@ -139,7 +139,39 @@ que par un seul producteur à la fois).
 L'échelle qui transforme une magnitude FFT brute en niveau 0-1 (`MAGNITUDE_SCALE`/
 `MAGNITUDE_CEILING` dans `TrackedSessionAudioSource`) est une première approximation : Visualizer
 ne fournit aucune référence absolue à laquelle se calibrer sans regarder le contour réagir
-réellement sur un appareil — à ajuster selon le retour visuel.
+réellement sur un appareil — à ajuster selon le retour visuel. Premier essai vu comme « pas assez
+flagrant » sur l'appareil de test : `MAGNITUDE_CEILING` abaissé de 600 à 90 (sensibilité) et
+l'épaisseur/luminosité de base d'`EdgeGlowView` sensiblement relevées (voir le commit qui suit
+cette ADR) — le contour est désormais pensé pour se voir d'un coup d'œil à travers la pièce,
+par-dessus n'importe quelle app, pas comme un simple liseré discret.
+
+`VisualizerProbe.java`, le prototype de diagnostic qui a servi à valider tout ça (panneau « 🔬 Test
+Visualizer », `getVisualizerProbeStatus()`), a été retiré une fois la question tranchée —
+récupérable dans l'historique git si une nouvelle question du même genre se pose plus tard.
+
+### Démarrage sans jamais ouvrir Vizuzik (`EdgeOverlayController`)
+
+Jusqu'ici, toute la décision « faut-il faire tourner `OverlayEdgeGlowService` ? » vivait côté web
+(`syncEdgeOverlay()` dans `main.js`) — ce qui suppose que la webview tourne. Si Vizuzik n'a jamais
+été ouvert depuis le dernier redémarrage du téléphone (l'app suivie jouant déjà, ou l'utilisateur
+lançant directement Deezer), rien n'existait côté natif pour prendre cette décision à sa place.
+
+`EdgeOverlayController` (singleton) porte la même décision en natif : activé (`EdgeOverlayPreference`,
+miroir du réglage web), permission d'overlay accordée (`Settings.canDrawOverlays()`), un titre
+joue réellement (`DeezerMediaBridge`), et Vizuzik lui-même pas au premier plan
+(`MainActivity.isForeground()`, un simple drapeau statique posé dans `onResume()`/`onPause()` —
+faux par défaut, ce qui est exactement juste quand le processus de l'app n'a été relancé que pour
+héberger `NowPlayingListenerService`, sans que `MainActivity` n'ait jamais tourné). Enregistré
+comme écouteur de `DeezerMediaBridge` depuis `NowPlayingListenerService.onListenerConnected()` —
+le seul composant garanti vivant dès que l'accès aux notifications est accordé, indépendamment de
+`MainActivity`.
+
+Les deux orchestrateurs (web et natif) passent tous les deux par
+`OverlayEdgeGlowService.requestStart()`/`requestStop()`, jamais directement par
+`startService()`/`stopService()` : ils ne peuvent donc jamais se contredire sur *comment* démarrer
+ou arrêter, seulement décider *quand* — et comme ils calculent la même réponse à partir des mêmes
+signaux, un appel redondant de l'un des deux est simplement un no-op (déjà idempotent des deux
+côtés).
 
 ### Ce qui ne change pas
 

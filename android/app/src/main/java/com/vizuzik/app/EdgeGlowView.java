@@ -290,9 +290,12 @@ final class EdgeGlowView extends View {
         }
         strength = clamp01(strength * intensity);
 
-        float thicknessDp = (16f + strength * 46f + pulse * 26f) * thicknessMul;
+        // Bolder than a typical "glow" on purpose: this is meant to be noticeable at a glance
+        // across a room, over whatever app is in front, not a subtle edge highlight — a first
+        // pass at these constants read as too discreet on-device.
+        float thicknessDp = (22f + strength * 70f + pulse * 40f) * thicknessMul;
         float thickness = Math.max(0f, thicknessDp) * density;
-        int alpha = clamp255((int) ((150 + strength * 105 + pulse * 60) * brightnessMul));
+        int alpha = clamp255((int) ((190 + strength * 120f + pulse * 70f) * brightnessMul));
 
         int edgeColor = (color & 0x00FFFFFF) | (alpha << 24);
         int transparent = color & 0x00FFFFFF;
