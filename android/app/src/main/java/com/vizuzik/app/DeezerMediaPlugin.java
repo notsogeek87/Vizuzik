@@ -669,6 +669,10 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("trackedSessionError", status.trackedSessionError);
         result.put("trackedSessionAmplitude", status.trackedSessionAmplitude);
         result.put("trackedSessionFft", status.trackedSessionFft);
+        result.put("trackedSessionFftMin", status.trackedSessionFftMin);
+        result.put("trackedSessionFftMax", status.trackedSessionFftMax);
+        result.put("trackedSessionSampleCount", status.trackedSessionSampleCount);
+        result.put("trackedSessionMsSinceLastSample", status.trackedSessionMsSinceLastSample);
         result.put("lastBroadcastPackage", status.lastBroadcastPackage);
         result.put("lastBroadcastSessionId", status.lastBroadcastSessionId);
         call.resolve(result);

@@ -127,6 +127,15 @@ final class VisualizerProbe {
         final String trackedSessionError;
         final double trackedSessionAmplitude;
         final double trackedSessionFft;
+        // Range since start()/reset(), not just the current instant — see the field doc on
+        // Attempt for why: it's what lets a single look at this panel, after switching back from
+        // Deezer, tell whether the numbers moved (and kept moving while backgrounded) the whole
+        // time Vizuzik wasn't the one on screen.
+        final double trackedSessionFftMin;
+        final double trackedSessionFftMax;
+        final long trackedSessionSampleCount;
+        /** Milliseconds since the last capture callback landed, or -1 if none ever has. */
+        final long trackedSessionMsSinceLastSample;
 
         final String lastBroadcastPackage;
         final int lastBroadcastSessionId;
@@ -142,6 +151,15 @@ final class VisualizerProbe {
             this.trackedSessionError = trackedSession.error;
             this.trackedSessionAmplitude = trackedSession.amplitude;
             this.trackedSessionFft = trackedSession.fftMagnitude;
+            this.trackedSessionSampleCount = trackedSession.sampleCount;
+            long lastSampleAtMs = trackedSession.lastSampleAtMs;
+            this.trackedSessionMsSinceLastSample = lastSampleAtMs == 0
+                ? -1
+                : android.os.SystemClock.elapsedRealtime() - lastSampleAtMs;
+            // fftMin sits at its Double.MAX_VALUE sentinel until the first sample ever lowers
+            // it — report 0 instead of that sentinel so the web layer never has to know about it.
+            this.trackedSessionFftMin = trackedSession.sampleCount == 0 ? 0 : trackedSession.fftMin;
+            this.trackedSessionFftMax = trackedSession.fftMax;
 
             this.lastBroadcastPackage = lastBroadcastPackage;
             this.lastBroadcastSessionId = lastBroadcastSessionId;
@@ -255,6 +273,15 @@ final class VisualizerProbe {
         volatile String error;
         volatile double amplitude;
         volatile double fftMagnitude;
+        // Running min/max since the last reset(), plus a sample count: a single instantaneous
+        // reading can't be watched at the same time as switching to Deezer to play something —
+        // only one app is ever on screen at once — so the range covers the whole time since
+        // start(), including however long the probe spent running with Vizuzik backgrounded.
+        // fftMin starts above any real reading so the first sample always lowers it.
+        volatile double fftMin = Double.MAX_VALUE;
+        volatile double fftMax;
+        volatile long sampleCount;
+        volatile long lastSampleAtMs;
 
         Attempt(String label) {
             this.label = label;
@@ -265,6 +292,10 @@ final class VisualizerProbe {
             error = null;
             amplitude = 0;
             fftMagnitude = 0;
+            fftMin = Double.MAX_VALUE;
+            fftMax = 0;
+            sampleCount = 0;
+            lastSampleAtMs = 0;
         }
     }
 
@@ -292,6 +323,10 @@ final class VisualizerProbe {
         public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) {
             double magnitude = fftMagnitude(fft);
             attempt.fftMagnitude = magnitude;
+            if (magnitude < attempt.fftMin) attempt.fftMin = magnitude;
+            if (magnitude > attempt.fftMax) attempt.fftMax = magnitude;
+            attempt.sampleCount++;
+            attempt.lastSampleAtMs = android.os.SystemClock.elapsedRealtime();
             if (captureCount % LOG_EVERY_N_CAPTURES == 0) {
                 Log.i(TAG, attempt.label + ": FFT magnitude = " + magnitude);
             }

@@ -1488,7 +1488,20 @@ function formatVprobeStatus(status) {
   lines.push(`initialized: ${status.trackedSessionInitialized}`);
   if (status.trackedSessionError) lines.push(`error: ${status.trackedSessionError}`);
   lines.push(`waveform amplitude: ${Number(status.trackedSessionAmplitude).toFixed(2)}`);
-  lines.push(`FFT magnitude: ${Number(status.trackedSessionFft).toFixed(2)}`);
+  lines.push(`FFT magnitude (instant): ${Number(status.trackedSessionFft).toFixed(2)}`);
+  // The instant value above can't be watched while Deezer is what's on screen — only one app is
+  // ever visible at a time. This range covers everything since "Test Visualizer" was tapped,
+  // background time included, so coming back from Deezer and reading it once is enough to tell
+  // whether it moved (min ≠ max) and whether it's still fresh (age below).
+  lines.push(
+    `FFT magnitude (min/max depuis le démarrage): ${Number(status.trackedSessionFftMin).toFixed(2)} / ` +
+      `${Number(status.trackedSessionFftMax).toFixed(2)} (${status.trackedSessionSampleCount} échantillons)`
+  );
+  lines.push(
+    status.trackedSessionMsSinceLastSample < 0
+      ? "dernier échantillon : aucun encore"
+      : `dernier échantillon il y a ${(status.trackedSessionMsSinceLastSample / 1000).toFixed(1)} s`
+  );
   lines.push("");
   lines.push("— dernière diffusion ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION vue —");
   lines.push(
@@ -1520,6 +1533,10 @@ function openVprobePanel() {
         DeezerMedia.stopVisualizerProbe().catch(() => {});
         return;
       }
+      // A rapid close/reopen can have a previous startVisualizerProbe() call resolve after this
+      // one — clearing whatever's already running (rather than assuming there's nothing to
+      // clear) is what keeps a second interval from ever running alongside a first one.
+      if (vprobePollTimer != null) clearInterval(vprobePollTimer);
       pollVprobeStatus();
       vprobePollTimer = setInterval(pollVprobeStatus, 400);
     })
