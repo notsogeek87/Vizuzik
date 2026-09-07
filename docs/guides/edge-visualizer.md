@@ -17,6 +17,16 @@ exactement comme s'il n'était pas là.
 
 ## Le parcours
 
+Edge Visualizer est **actif par défaut à l'installation** : c'est ce que fait l'app quand elle
+n'est pas celle à l'écran, l'avoir éteint au départ revenait à la cacher. Ses deux autorisations
+sont donc demandées au premier lancement qui atteint l'écran lecteur, **une à la fois** : les deux
+ouvrent un écran système, et les déclencher ensemble empilerait l'un sur l'autre. L'affichage
+par-dessus passe en premier — sans lui la fonctionnalité n'existe pas — et le retour dans Vizuzik
+enchaîne sur l'accès aux données d'utilisation s'il manque encore. Chaque étape est mémorisée :
+rien n'est redemandé tout seul.
+
+Le badge reste le chemin manuel :
+
 1. **Badge « ▶ Activer Edge Visualizer »**, à côté du badge d'état audio, dans la barre du haut.
 2. **Au premier appui :** un écran d'explication apparaît — ce que le contour affiche, la
    permission système qui suit (**Afficher par-dessus les autres applications**), et le fait que
@@ -231,7 +241,7 @@ l'écran d'accueil.
 ## Repartir de zéro
 
 L'activation est stockée dans `localStorage` sous la clé `vizuzik:edgeOverlay` (`"on"` /
-`"off"`), et l'écran d'explication déjà vu sous `vizuzik:edgeOverlaySheetSeen` — mais aussi, en
+`"off"` ; **absente = actif**, seul un `"off"` explicite l'éteint), et l'écran d'explication déjà vu sous `vizuzik:edgeOverlaySheetSeen` — mais aussi, en
 miroir, côté natif (`EdgeOverlayPreference`), puisque c'est ce que lit `EdgeOverlayController`
 pour démarrer le contour tout seul sans que la page n'ait jamais tourné. Les réglages du panneau
 vivent côté natif (`EdgeConfig`, lu et écrit par `OverlayEdgeGlowService` et `DeezerMediaPlugin`),

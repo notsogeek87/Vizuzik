@@ -424,9 +424,12 @@ const EDGE_DEFAULT_COLORS = "#7c5cff,#ec4899,#38bdf8";
 
 function isEdgeOverlayEnabled() {
   try {
-    return localStorage.getItem(EDGE_OVERLAY_ENABLED_KEY) === "on";
+    const stored = localStorage.getItem(EDGE_OVERLAY_ENABLED_KEY);
+    // Nothing stored means a fresh install, and Edge Visualizer is what the app is for when it
+    // isn't the app on screen — so it starts on. Only an explicit "off" turns it off.
+    return stored === null ? true : stored === "on";
   } catch (err) {
-    return false;
+    return true;
   }
 }
 
@@ -488,6 +491,33 @@ function rememberUsageAccessAsked() {
   } catch (err) {
     /* see hasAskedUsageAccess() */
   }
+}
+
+/**
+ * The permissions Edge Visualizer needs, asked on the first launch that reaches the player —
+ * the same moment the microphone and notification-access grants are handled, rather than left
+ * to be discovered in a settings panel.
+ *
+ * Strictly one screen at a time. Both of these open a system Settings activity, and firing them
+ * together would stack one on the other; the overlay grant goes first because without it the
+ * feature cannot exist at all, and coming back to Vizuzik runs this again and picks up where it
+ * left off. Every step is remembered, so nothing is ever asked twice on its own.
+ */
+async function runFirstLaunchSetup() {
+  if (els.player.hidden) return;
+  if (
+    edgeOverlayEnabled &&
+    overlaySupported &&
+    !overlayPermissionGranted &&
+    !hasOverlaySheetBeenSeen()
+  ) {
+    // The explainer, not the system screen: "display over other apps" is a generic and slightly
+    // alarming permission name, and this sheet is what tells someone why a music display wants
+    // it. Its "Continuer" opens the system screen; "Plus tard" leaves it alone.
+    openOverlaySheet();
+    return;
+  }
+  await askUsageAccessOnce();
 }
 
 async function askUsageAccessOnce() {
@@ -1256,8 +1286,12 @@ document.addEventListener("visibilitychange", () => {
     if (!els.player.hidden) visualizer.start();
     refresh().catch(() => {});
     syncAudioPermission();
-    syncOverlayPermission();
-    syncUsageAccess();
+    // Chained rather than parallel: coming back from one system screen is exactly when the next
+    // step of the first-launch flow should happen, if there is one left.
+    syncOverlayPermission()
+      .then(syncUsageAccess)
+      .then(runFirstLaunchSetup)
+      .catch(() => {});
   } else {
     // Nothing to animate against a hidden screen; rAF would be throttled anyway, but this
     // also drops the offscreen buffers' work entirely.
@@ -1287,12 +1321,11 @@ applyDisplayMode(false);
   // Awaited so the two never collide: this one shows a system dialog, and the usage-access ask
   // below opens a system screen.
   await requestAudioPermission();
-  syncOverlayPermission();
+  // Awaited: runFirstLaunchSetup() decides from the overlay grant, and would read its
+  // pre-check default and offer the explainer to someone who granted it long ago.
+  await syncOverlayPermission();
   await syncUsageAccess();
-  // Only once the player is actually on screen: with notification access still missing there is
-  // nothing to explain this by, and it would land on top of that flow. It then happens on the
-  // launch after that access is granted instead.
-  if (!els.player.hidden) askUsageAccessOnce();
+  runFirstLaunchSetup();
   loadEdgeConfig();
   // Cold-start mirror: EdgeOverlayPreference only remembers what setEdgeOverlayEnabled() last
   // wrote, and until now that only ever happened inside toggleEdgeOverlay() — someone who turned
