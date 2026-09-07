@@ -629,9 +629,9 @@ const EDGE_SETTINGS_DEFAULTS = {
   brightness: 1,
   sensitivity: 1,
   top: true,
-  bottom: true,
-  left: true,
-  right: true,
+  bottom: false,
+  left: false,
+  right: false,
   onlyOverMusicApp: false,
 };
 

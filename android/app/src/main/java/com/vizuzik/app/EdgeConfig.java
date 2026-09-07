@@ -123,10 +123,14 @@ final class EdgeConfig {
             prefs.getString(KEY_BAND, BAND_FULL),
             prefs.getFloat(KEY_BAR_SIZE, 1f),
             customPalette,
+            // A fresh install gets one row of bars along the top edge: the whole spectrum on all
+            // four sides at once is a lot to meet an app with, and the top is the edge that reads
+            // as belonging to the phone rather than to whatever is on screen. Anyone who had the
+            // overlay before keeps the edges they had — these are only the absent-value defaults.
             prefs.getBoolean(KEY_TOP, true),
-            prefs.getBoolean(KEY_BOTTOM, true),
-            prefs.getBoolean(KEY_LEFT, true),
-            prefs.getBoolean(KEY_RIGHT, true),
+            prefs.getBoolean(KEY_BOTTOM, false),
+            prefs.getBoolean(KEY_LEFT, false),
+            prefs.getBoolean(KEY_RIGHT, false),
             prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, false),
             prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS)
         );

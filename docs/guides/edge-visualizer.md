@@ -53,7 +53,7 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 | Fréquences utilisées | Quelle partie du spectre fait varier le contour : tout le spectre, seulement les basses, les médiums, ou les aigus. |
 | Couleurs | Auto (les trois accents extraits de la pochette du morceau) ou trois couleurs fixes. |
 | Intensité / Épaisseur / Luminosité / Sensibilité | Des multiplicateurs sur la réaction visuelle — 1 = comportement par défaut. |
-| Haut / Bas / Gauche / Droite | Active ou désactive chaque bord indépendamment. |
+| Haut / Bas / Gauche / Droite | Active ou désactive chaque bord indépendamment. **Seul le bord haut est actif à l'installation** : le spectre sur les quatre bords à la fois est beaucoup pour un premier contact, et le haut est celui qui se lit comme appartenant au téléphone plutôt qu'à l'app affichée. Une installation existante garde ses bords. |
 
 Les changements s'appliquent immédiatement, même si le contour est déjà affiché — pas besoin de
 le redémarrer.
@@ -145,6 +145,19 @@ Ce que Vizuzik ne sait pas, en revanche, c'est *quel écran* de Deezer est affic
 distingue sa page de lecture de sa liste de titres depuis une fenêtre de superposition.
 
 ### Ce qui le rend fluide
+
+Le halo (chaque brin repassé en traits larges et très transparents) a été supprimé : à lui seul il
+représentait l'essentiel du coût d'une image, environ **25 millions de pixels antialiasés avec
+shader par seconde**. Un effet de bord qui saccade est pire qu'un effet de bord qui ne rayonne
+pas. Les brins sont passés de 22 à 12 et sont tracés en trois paliers de luminosité groupés — six
+tracés par image au lieu de soixante-six, un `Path` pouvant contenir autant de sous-chemins qu'on
+veut. Au total le remplissage est divisé par quatre.
+
+Le ruban est par ailleurs positionné contre l'**écran** et non contre sa propre fenêtre :
+celle-ci est déclarée en `NO_LIMITS` et déborde dans l'encoche, donc sa taille et son origine ne
+correspondent pas à celles de l'écran — s'y fier décalait le ruban de 170 px sous la pochette. Les
+dimensions réelles viennent de `WindowManager`, et `getLocationOnScreen()` ramène le tout dans le
+repère de la vue.
 
 Tout ce qui ne dépend que de l'angle — le rayon de la superellipse (trois `Math.pow` à chaque
 point), le vecteur unitaire, les sinus et cosinus des trois fréquences de lobe — est calculé

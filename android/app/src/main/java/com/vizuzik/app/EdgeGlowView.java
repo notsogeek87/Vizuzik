@@ -1,6 +1,7 @@
 package com.vizuzik.app;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -8,11 +9,13 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 
 /**
  * Draws a thin, colored glow along the screen edges, breathing with the music underneath — the
@@ -101,8 +104,11 @@ final class EdgeGlowView extends View {
     //
     // The path is a superellipse, not a circle: the thing it frames is a square cover, and a
     // circle around a square leaves gaps at the edge midpoints and crowds the corners.
-    private static final int COCOON_STRANDS = 22;
-    private static final int COCOON_SPOKES = 128;
+    private static final int COCOON_STRANDS = 12;
+    private static final int COCOON_SPOKES = 96;
+    // Strands are stroked in three brightness tiers rather than one draw each, so a frame issues
+    // six stroked paths instead of sixty-six. A Path holds as many subpaths as it likes.
+    private static final int COCOON_TIERS = 3;
     private static final float COCOON_INNER = 1.045f;
     private static final float COCOON_BAND = 0.20f;
     private static final float COCOON_SWING = 0.085f;
@@ -161,10 +167,9 @@ final class EdgeGlowView extends View {
     }
 
     private final Paint paint = new Paint();
-    // One Path per strand, allocated once and rebuilt in place: drawCocoon() walks the whole
-    // bundle three times per frame (outline, bloom, strand), and rebuilding the geometry for
-    // each pass — or allocating Paths per frame — would be pure waste.
-    private final Path[] cocoonPaths = new Path[COCOON_STRANDS];
+    // One Path per brightness tier, each holding several strands as subpaths. Allocated once and
+    // rebuilt in place: allocating Paths per frame would be pure waste.
+    private final Path[] cocoonTiers = new Path[COCOON_TIERS];
     // The spectrum sampled once per frame around the ribbon: it depends on the angle, not on the
     // strand, so sampling it inside the strand loop did the same work 22 times over.
     private final float[] cocoonLevels = new float[COCOON_SPOKES + 1];
@@ -253,6 +258,16 @@ final class EdgeGlowView extends View {
     // costs a query to UsageStatsManager (see ForegroundApp), and a second of lag when leaving
     // the music app is not worth paying for it 24 times a second.
     private static final long FOREGROUND_CHECK_MS = 1_000;
+    // The real display, and where this window sits on it. The cocoon is placed against the
+    // *screen*, not against this view: the window is laid out with NO_LIMITS and into the display
+    // cutout, so its own width/height and origin do not reliably correspond to the screen the
+    // ART_* fractions were measured against — after the cutout change the ribbon drifted 170px
+    // off the cover. Refreshed on the same slow timer as the foreground check.
+    private float displayWidth;
+    private float displayHeight;
+    private final int[] viewLocation = new int[2];
+    private final Rect displayBounds = new Rect();
+
     private boolean suppressed;
     // Whether the tracked app was found to be the one on screen, and whether that could be
     // established at all — the two are different answers and are acted on differently.
@@ -264,7 +279,7 @@ final class EdgeGlowView extends View {
         super(context);
         density = context.getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
-        for (int i = 0; i < cocoonPaths.length; i++) cocoonPaths[i] = new Path();
+        for (int i = 0; i < cocoonTiers.length; i++) cocoonTiers[i] = new Path();
     }
 
     /** Applied once at startup and again whenever the settings panel changes something while the
@@ -378,6 +393,7 @@ final class EdgeGlowView extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        refreshDisplaySize();
         lastFrameMs = SystemClock.elapsedRealtime();
         handler.post(tick);
     }
@@ -485,10 +501,31 @@ final class EdgeGlowView extends View {
     private void updateSuppression(long now) {
         if (lastForegroundCheckAtMs != 0 && now - lastForegroundCheckAtMs < FOREGROUND_CHECK_MS) return;
         lastForegroundCheckAtMs = now;
+        refreshDisplaySize();
         Context context = getContext();
         foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
         trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
         suppressed = onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
+    }
+
+    /** Reads the screen's real size, which is what the cocoon is positioned against. */
+    private void refreshDisplaySize() {
+        try {
+            WindowManager wm = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
+            if (wm == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                displayBounds.set(wm.getCurrentWindowMetrics().getBounds());
+                displayWidth = displayBounds.width();
+                displayHeight = displayBounds.height();
+            } else {
+                android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+                wm.getDefaultDisplay().getRealMetrics(metrics);
+                displayWidth = metrics.widthPixels;
+                displayHeight = metrics.heightPixels;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "refreshDisplaySize", e);
+        }
     }
 
     /**
@@ -768,16 +805,23 @@ final class EdgeGlowView extends View {
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
 
-        // Landscape means Deezer's two-pane layout, portrait its one-column one — see the ART_*
-        // constants. Read fresh every frame, so folding or unfolding the device moves the ribbon
-        // with the cover instead of needing anything to be told about it.
-        boolean wide = width > height;
+        // Measured against the screen, then translated into this view's own coordinates: the
+        // window is laid out with NO_LIMITS and into the display cutout, so its size and origin
+        // are not the screen's, and placing the ribbon with getWidth()/getHeight() drifted it
+        // well off the cover. Landscape means Deezer's two-pane layout, portrait its one-column
+        // one — read every frame, so folding the device moves the ribbon with the cover.
+        float screenW = displayWidth > 0 ? displayWidth : width;
+        float screenH = displayHeight > 0 ? displayHeight : height;
+        boolean wide = screenW > screenH;
         float half = wide
-            ? height * ART_WIDE_HEIGHT_FRACTION * 0.5f
-            : width * ART_TALL_WIDTH_FRACTION * 0.5f;
-        float cx = width * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION);
-        float cy = wide ? height * ART_WIDE_CENTER_Y_FRACTION : height * ART_TALL_TOP_FRACTION + half;
+            ? screenH * ART_WIDE_HEIGHT_FRACTION * 0.5f
+            : screenW * ART_TALL_WIDTH_FRACTION * 0.5f;
         if (half <= 0) return;
+        getLocationOnScreen(viewLocation);
+        float cx = screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
+            - viewLocation[0];
+        float cy = (wide ? screenH * ART_WIDE_CENTER_Y_FRACTION : screenH * ART_TALL_TOP_FRACTION + half)
+            - viewLocation[1];
 
         boolean live = lastLevelsAtMs != 0
             && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
@@ -800,8 +844,10 @@ final class EdgeGlowView extends View {
         // layout leaves the cover barely a tenth of the width from the left one, and a bundle
         // that just ran off it would read as cut in half. Allowed slightly past the edge rather
         // than squeezed to a thread, since a ribbon grazing the border still looks deliberate.
-        float room = Math.min(Math.min(cx, width - cx), Math.min(cy, height - cy)) * 1.06f
-            - half * COCOON_INNER;
+        float room = Math.min(
+            Math.min(cx + viewLocation[0], screenW - (cx + viewLocation[0])),
+            Math.min(cy + viewLocation[1], screenH - (cy + viewLocation[1]))
+        ) * 1.06f - half * COCOON_INNER;
         if (room > 0 && band + swing > room) {
             float squeeze = room / (band + swing);
             band *= squeeze;
@@ -831,6 +877,8 @@ final class EdgeGlowView extends View {
         }
 
         float waveScale = 1f / (2 * COCOON_WAVE_MAX);
+        for (Path tier : cocoonTiers) tier.reset();
+
         for (int s = 0; s < COCOON_STRANDS; s++) {
             float u = (float) s / (COCOON_STRANDS - 1); // 0 against the artwork .. 1 outermost
             float shear = u * shearSpan;
@@ -847,8 +895,7 @@ final class EdgeGlowView extends View {
             float s2 = (float) Math.sin(p2), c2 = (float) Math.cos(p2);
             float s3 = (float) Math.sin(p3), c3 = (float) Math.cos(p3);
 
-            Path path = cocoonPaths[s];
-            path.reset();
+            Path path = cocoonTiers[s * COCOON_TIERS / COCOON_STRANDS];
             for (int i = 0; i <= COCOON_SPOKES; i++) {
                 float wave = (COCOON_SIN3[i] * c1 + COCOON_COS3[i] * s1) * 0.085f
                     + (COCOON_SIN5[i] * c2 + COCOON_COS5[i] * s2) * 0.042f
@@ -865,40 +912,27 @@ final class EdgeGlowView extends View {
             path.close();
         }
 
-        // 1. A thin dark outline under each strand, following the same envelope as the light:
-        //    what keeps pale lines legible over a pale page, and Deezer's page is tinted from the
-        //    very artwork the palette came from, so pale is the normal case.
+        // A dark outline under each strand, following the same envelope as the light: what keeps
+        // pale lines legible over a pale page, and Deezer's page is tinted from the very artwork
+        // the palette came from, so pale is the normal case.
         paint.setShader(shade);
-        for (int s = 0; s < COCOON_STRANDS; s++) {
-            float u = (float) s / (COCOON_STRANDS - 1);
+        paint.setStrokeWidth(lineWidth * 1.8f);
+        for (int t = 0; t < COCOON_TIERS; t++) {
+            float u = (float) t / (COCOON_TIERS - 1);
             paint.setAlpha(clamp255((int) (COCOON_SHADOW_ALPHA * (1 - 0.55f * u))));
-            paint.setStrokeWidth(lineWidth * 2.2f);
-            canvas.drawPath(cocoonPaths[s], paint);
+            canvas.drawPath(cocoonTiers[t], paint);
         }
 
-        // 2. Bloom: a few strands restroked wide and faint. Light spreads; a hairline on its own
-        //    reads as wire. Only every fifth one carries it — bloomed from all of them the wide
-        //    strokes stack into a solid milky cloud and the weave disappears inside it.
+        // Then the strands themselves, dense against the cover and dissolving outward. There is
+        // no separate bloom pass any more: restroking the bundle wide and faint was most of the
+        // cost of a frame — some 25 million antialiased shaded pixels a second — and a border
+        // effect that stutters is worse than one that does not glow.
         paint.setShader(sweep);
-        paint.setAntiAlias(false); // a deliberately soft wide stroke gains nothing from it
-        for (int s = 0; s < COCOON_STRANDS; s += 5) {
-            float u = (float) s / (COCOON_STRANDS - 1);
-            float a = alpha * (1 - 0.6f * u);
-            paint.setAlpha(clamp255((int) (a * 0.09f)));
-            paint.setStrokeWidth(lineWidth * 9f);
-            canvas.drawPath(cocoonPaths[s], paint);
-            paint.setAlpha(clamp255((int) (a * 0.15f)));
-            paint.setStrokeWidth(lineWidth * 4f);
-            canvas.drawPath(cocoonPaths[s], paint);
-        }
-
-        // 3. The crisp strands themselves, dense against the cover and dissolving outward.
-        paint.setAntiAlias(true);
         paint.setStrokeWidth(lineWidth);
-        for (int s = 0; s < COCOON_STRANDS; s++) {
-            float u = (float) s / (COCOON_STRANDS - 1);
+        for (int t = 0; t < COCOON_TIERS; t++) {
+            float u = (float) t / (COCOON_TIERS - 1);
             paint.setAlpha(clamp255((int) (alpha * (1 - 0.6f * u))));
-            canvas.drawPath(cocoonPaths[s], paint);
+            canvas.drawPath(cocoonTiers[t], paint);
         }
 
         paint.setShader(null);

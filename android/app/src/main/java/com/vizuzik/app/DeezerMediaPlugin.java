@@ -501,9 +501,9 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             call.getString("colorMode", EdgeConfig.COLOR_AUTO),
             call.getString("customColors", null),
             data.optBoolean("top", true),
-            data.optBoolean("bottom", true),
-            data.optBoolean("left", true),
-            data.optBoolean("right", true),
+            data.optBoolean("bottom", false),
+            data.optBoolean("left", false),
+            data.optBoolean("right", false),
             data.optBoolean("onlyOverMusicApp", false),
             call.getString("cocoonFallback", EdgeConfig.STYLE_BARS)
         );
