@@ -26,6 +26,7 @@ const els = {
   edgeSettingsOpen: document.getElementById("edge-settings-open"),
   edgeSettingsSheet: document.getElementById("edge-settings-sheet"),
   edgeSettingsClose: document.getElementById("edge-settings-close"),
+  edgeOverlayEnabled: document.getElementById("edge-overlay-enabled"),
   edgeStyle: document.getElementById("edge-style"),
   edgeBand: document.getElementById("edge-band"),
   edgeColorMode: document.getElementById("edge-color-mode"),
@@ -733,24 +734,40 @@ function syncEdgeOverlay() {
   updateOverlayStatusBadge();
 }
 
-/** Tapping the badge: off/never-granted → on (asking for the permission first if needed); on → off. */
-function toggleEdgeOverlay() {
-  if (!overlaySupported) return;
-  edgeOverlayEnabled = !edgeOverlayEnabled;
-  rememberEdgeOverlayEnabled(edgeOverlayEnabled);
+/**
+ * Turns the overlay on or off — the one piece of state that outlives this screen, since
+ * EdgeOverlayController starts the overlay natively from it even when Vizuzik's webview never
+ * runs. Two controls share this: tapping the Edge badge in the topbar, and the "Mode
+ * superposition" switch in the settings panel.
+ */
+function setEdgeOverlayEnabled(enabled) {
+  edgeOverlayEnabled = enabled;
+  rememberEdgeOverlayEnabled(enabled);
   // Mirrored natively (EdgeOverlayPreference) so EdgeOverlayController — which has no access to
   // this page's localStorage — can start Edge Visualizer itself the first time a track plays,
   // even if Vizuzik's own webview never runs again this session.
-  DeezerMedia.setEdgeOverlayEnabled({ enabled: edgeOverlayEnabled }).catch(() => {});
-  if (edgeOverlayEnabled && !overlayPermissionGranted) {
+  DeezerMedia.setEdgeOverlayEnabled({ enabled }).catch(() => {});
+  if (enabled && !overlayPermissionGranted) {
+    // Close the settings panel first: both sheets sit at the same z-index and this one comes
+    // later in the DOM, so the explainer would otherwise open *behind* it — its "Continuer"
+    // button unreachable, and the switch left on for an overlay that can never run.
+    closeEdgeSettingsSheet();
     if (!hasOverlaySheetBeenSeen()) {
       openOverlaySheet();
     } else {
       DeezerMedia.requestOverlayPermission().catch(() => {});
     }
   }
+  // Whichever of the two controls was used, the other has to follow.
+  els.edgeOverlayEnabled.checked = enabled;
   updateOverlayStatusBadge();
   syncEdgeOverlay();
+}
+
+/** Tapping the badge: off/never-granted → on (asking for the permission first if needed); on → off. */
+function toggleEdgeOverlay() {
+  if (!overlaySupported) return;
+  setEdgeOverlayEnabled(!edgeOverlayEnabled);
 }
 
 /* --- the explainer sheet (edge overlay only) --- */
@@ -893,6 +910,11 @@ async function loadEdgeConfig() {
     ...native,
     customColors: readEdgeCustomColors(),
   });
+  // Not part of EdgeConfig: the on/off state lives in EdgeOverlayPreference and is tracked here
+  // by edgeOverlayEnabled. Greyed out where TYPE_APPLICATION_OVERLAY doesn't exist at all
+  // (below Android 8), where there is nothing to turn on.
+  els.edgeOverlayEnabled.checked = edgeOverlayEnabled;
+  els.edgeOverlayEnabled.disabled = !overlaySupported;
 }
 
 let edgeSettingsCloseTimer = null;
@@ -1011,6 +1033,17 @@ els.edgeSettingsOpen.addEventListener("click", () => {
 els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
 els.edgeSettingsSheet.addEventListener("click", (event) => {
   if (event.target === els.edgeSettingsSheet) closeEdgeSettingsSheet();
+});
+els.edgeOverlayEnabled.addEventListener("change", () => {
+  // Same guard toggleEdgeOverlay() has. The disabled attribute set in loadEdgeConfig() is only
+  // refreshed when the panel opens, so it can be stale if support is re-evaluated on a resume
+  // while the panel is still on screen — without this, an unsupported device could still persist
+  // "on" natively.
+  if (!overlaySupported) {
+    els.edgeOverlayEnabled.checked = false;
+    return;
+  }
+  setEdgeOverlayEnabled(els.edgeOverlayEnabled.checked);
 });
 els.edgeColorMode.addEventListener("change", () => {
   els.edgeCustomColors.hidden = els.edgeColorMode.value !== "custom";

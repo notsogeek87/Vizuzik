@@ -527,6 +527,34 @@ body[data-mode="cassette"] .mode-toggle .icon-cassette {
   padding: 6px 10px;
 }
 
+/* The master switch reads as a heading with its explanation underneath, rather than as one more
+   row of appearance tweaks — it is the only control here that changes what happens outside this
+   screen. */
+.edge-settings__row--switch {
+  align-items: flex-start;
+  padding-bottom: 14px;
+}
+
+.edge-settings__row--switch span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edge-settings__row--switch small {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: rgba(247, 248, 252, 0.55);
+}
+
+.edge-settings__row--switch input[type="checkbox"] {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: rgb(var(--c2));
+}
+
 .edge-settings__row--slider input[type="range"] {
   flex: 1;
   accent-color: rgb(var(--c2));

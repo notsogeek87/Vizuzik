@@ -242,6 +242,18 @@
       <div class="sheet__panel edge-settings__panel" role="dialog" aria-modal="true" aria-labelledby="edge-settings-title">
         <h2 id="edge-settings-title" class="sheet__title">Réglages Edge Visualizer</h2>
 
+        <!-- The master switch, kept first and separated from the appearance controls below: it
+             decides whether the overlay runs at all, including on its own while Vizuzik has never
+             been opened, which is the one thing here that has an effect outside this app. Mirrors
+             the same state as tapping the Edge badge in the topbar. -->
+        <label class="edge-settings__row edge-settings__row--switch">
+          <span>
+            Mode superposition
+            <small>Affiche le visualiseur par-dessus l'app de musique, même si Vizuzik n'est pas ouvert.</small>
+          </span>
+          <input id="edge-overlay-enabled" type="checkbox" />
+        </label>
+
         <label class="edge-settings__row">
           <span>Style</span>
           <select id="edge-style">
