@@ -49,6 +49,7 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 | Seulement par-dessus l'app de musique | Masque le contour dès que Deezer/Spotify n'est plus à l'écran. Activé par défaut ; demande l'autorisation « Accès aux données d'utilisation » — voir plus bas. |
 | Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un faisceau tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
 | Hauteur des barres | Jusqu'où les barres montent. N'agit que sur le style « Barres » : le contour est une bordure d'épaisseur fixe, et le cocon se dimensionne sur la pochette. |
+| Hors de l'app de musique | Ce que « Cocon » affiche quand Deezer n'est pas à l'écran : les barres ou le contour. Sans effet sur les deux autres styles. |
 | Fréquences utilisées | Quelle partie du spectre fait varier le contour : tout le spectre, seulement les basses, les médiums, ou les aigus. |
 | Couleurs | Auto (les trois accents extraits de la pochette du morceau) ou trois couleurs fixes. |
 | Intensité / Épaisseur / Luminosité / Sensibilité | Des multiplicateurs sur la réaction visuelle — 1 = comportement par défaut. |
@@ -125,6 +126,21 @@ tenir dans la place disponible plutôt que de sortir de l'écran.
 Un écran ou une version de Deezer éloignés de ces deux références dérivent, et rien ici ne peut
 le corriger sans véritable inspection de la mise en page — sans parler de Spotify ou d'un autre
 lecteur suivi, dont les mises en page sont différentes.
+
+### Seulement là où il a un sens
+
+« Cocon » encadre la pochette de l'app suivie. Ailleurs — la liste des titres de Deezer, une
+autre app — il n'encadrerait rien du tout. Dès que l'app de musique n'est pas celle à l'écran, ce
+style bascule donc sur celui choisi dans « Hors de l'app de musique » (barres ou contour), qui
+sont tous deux accrochés aux bords de l'écran et donc aussi justes par-dessus n'importe quoi.
+
+Deux nuances : ça demande la même autorisation d'accès aux données d'utilisation que le réglage
+précédent, et faute de pouvoir établir quelle app est devant, le style n'est pas changé — on ne
+dégrade rien au jugé. Et si « Seulement par-dessus l'app de musique » est activé, la question ne
+se pose pas : la superposition est déjà masquée dans ce cas.
+
+Ce que Vizuzik ne sait pas, en revanche, c'est *quel écran* de Deezer est affiché : rien ne
+distingue sa page de lecture de sa liste de titres depuis une fenêtre de superposition.
 
 ### Ce qui le rend fluide
 

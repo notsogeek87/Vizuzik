@@ -49,6 +49,7 @@ final class EdgeConfig {
     private static final String KEY_RIGHT = "edgeRight";
     private static final String KEY_ONLY_OVER_MUSIC_APP = "edgeOnlyOverMusicApp";
     private static final String KEY_BAR_SIZE = "edgeBarSize";
+    private static final String KEY_COCOON_FALLBACK = "edgeCocoonFallback";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -69,6 +70,9 @@ final class EdgeConfig {
         /** Hide the overlay unless the tracked music app is the one on screen — see
          *  ForegroundApp, and note it can only be honoured once "usage access" is granted. */
         final boolean onlyOverMusicApp;
+        /** What "cocoon" falls back to when the music app is not the one on screen: it is drawn
+         *  around where that app's album art sits, so anywhere else it frames nothing. */
+        final String cocoonFallback;
 
         Snapshot(
             String style,
@@ -83,7 +87,8 @@ final class EdgeConfig {
             boolean bottom,
             boolean left,
             boolean right,
-            boolean onlyOverMusicApp
+            boolean onlyOverMusicApp,
+            String cocoonFallback
         ) {
             this.style = style;
             this.intensity = intensity;
@@ -98,6 +103,7 @@ final class EdgeConfig {
             this.left = left;
             this.right = right;
             this.onlyOverMusicApp = onlyOverMusicApp;
+            this.cocoonFallback = cocoonFallback;
         }
     }
 
@@ -121,7 +127,8 @@ final class EdgeConfig {
             prefs.getBoolean(KEY_BOTTOM, true),
             prefs.getBoolean(KEY_LEFT, true),
             prefs.getBoolean(KEY_RIGHT, true),
-            prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, true)
+            prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, true),
+            prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS)
         );
     }
 
@@ -145,7 +152,8 @@ final class EdgeConfig {
         boolean bottom,
         boolean left,
         boolean right,
-        boolean onlyOverMusicApp
+        boolean onlyOverMusicApp,
+        String cocoonFallback
     ) {
         prefs(context)
             .edit()
@@ -166,6 +174,7 @@ final class EdgeConfig {
             .putBoolean(KEY_LEFT, left)
             .putBoolean(KEY_RIGHT, right)
             .putBoolean(KEY_ONLY_OVER_MUSIC_APP, onlyOverMusicApp)
+            .putString(KEY_COCOON_FALLBACK, cocoonFallback)
             .apply();
     }
 

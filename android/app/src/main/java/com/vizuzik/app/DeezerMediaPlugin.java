@@ -471,6 +471,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("left", config.left);
         result.put("right", config.right);
         result.put("onlyOverMusicApp", config.onlyOverMusicApp);
+        result.put("cocoonFallback", config.cocoonFallback);
         call.resolve(result);
     }
 
@@ -503,7 +504,8 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("bottom", true),
             data.optBoolean("left", true),
             data.optBoolean("right", true),
-            data.optBoolean("onlyOverMusicApp", true)
+            data.optBoolean("onlyOverMusicApp", true),
+            call.getString("cocoonFallback", EdgeConfig.STYLE_BARS)
         );
         call.resolve();
     }

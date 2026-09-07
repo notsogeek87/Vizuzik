@@ -26,6 +26,7 @@ const els = {
   edgeOverlayEnabled: document.getElementById("edge-overlay-enabled"),
   edgeStyle: document.getElementById("edge-style"),
   edgeBand: document.getElementById("edge-band"),
+  edgeCocoonFallback: document.getElementById("edge-cocoon-fallback"),
   edgeColorMode: document.getElementById("edge-color-mode"),
   edgeCustomColors: document.getElementById("edge-custom-colors"),
   edgeColor1: document.getElementById("edge-color-1"),
@@ -615,6 +616,7 @@ setInterval(updateOverlayStatusBadge, 500);
 const EDGE_SETTINGS_DEFAULTS = {
   style: "bars",
   band: "full",
+  cocoonFallback: "bars",
   colorMode: "auto",
   barSize: 1,
   intensity: 1,
@@ -648,6 +650,7 @@ function readEdgeSettingsFromForm() {
   return {
     style: els.edgeStyle.value,
     band: els.edgeBand.value,
+    cocoonFallback: els.edgeCocoonFallback.value,
     colorMode: els.edgeColorMode.value,
     customColors: [els.edgeColor1.value, els.edgeColor2.value, els.edgeColor3.value].join(","),
     barSize: parseFloat(els.edgeBarSize.value),
@@ -666,6 +669,7 @@ function readEdgeSettingsFromForm() {
 function applyEdgeSettingsToForm(config) {
   els.edgeStyle.value = config.style;
   els.edgeBand.value = config.band;
+  els.edgeCocoonFallback.value = config.cocoonFallback;
   els.edgeColorMode.value = config.colorMode;
   const colors = (config.customColors || EDGE_DEFAULT_COLORS).split(",");
   if (colors[0]) els.edgeColor1.value = colors[0];
@@ -847,6 +851,7 @@ els.edgeColorMode.addEventListener("change", () => {
 [
   els.edgeStyle,
   els.edgeBand,
+  els.edgeCocoonFallback,
   els.edgeColor1,
   els.edgeColor2,
   els.edgeColor3,

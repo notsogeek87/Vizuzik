@@ -242,6 +242,7 @@ final class EdgeGlowView extends View {
     private boolean edgeLeft = true;
     private boolean edgeRight = true;
     private boolean onlyOverMusicApp = true;
+    private String cocoonFallback = EdgeConfig.STYLE_BARS;
 
     // Whether the tracked app is currently something other than what's on screen, so this window
     // should paint nothing. Re-evaluated on a slow timer rather than per frame: answering it
@@ -249,6 +250,10 @@ final class EdgeGlowView extends View {
     // the music app is not worth paying for it 24 times a second.
     private static final long FOREGROUND_CHECK_MS = 1_000;
     private boolean suppressed;
+    // Whether the tracked app was found to be the one on screen, and whether that could be
+    // established at all — the two are different answers and are acted on differently.
+    private boolean foregroundKnown;
+    private boolean trackedAppOnScreen = true;
     private long lastForegroundCheckAtMs;
 
     EdgeGlowView(Context context) {
@@ -274,6 +279,7 @@ final class EdgeGlowView extends View {
         edgeLeft = config.left;
         edgeRight = config.right;
         onlyOverMusicApp = config.onlyOverMusicApp;
+        cocoonFallback = config.cocoonFallback;
         // Answer again on the next tick rather than keep a verdict reached under the old setting.
         lastForegroundCheckAtMs = 0;
     }
@@ -475,16 +481,25 @@ final class EdgeGlowView extends View {
     private void updateSuppression(long now) {
         if (lastForegroundCheckAtMs != 0 && now - lastForegroundCheckAtMs < FOREGROUND_CHECK_MS) return;
         lastForegroundCheckAtMs = now;
-        if (!onlyOverMusicApp) {
-            suppressed = false;
-            return;
-        }
         Context context = getContext();
-        if (context == null || !ForegroundApp.hasUsageAccess(context)) {
-            suppressed = false;
-            return;
-        }
-        suppressed = !ForegroundApp.isTrackedAppInForeground(context);
+        foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
+        trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
+        suppressed = onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
+    }
+
+    /**
+     * Which style to actually paint. Only "cocoon" is ever swapped: it is drawn around where the
+     * music app's own album art sits (see the ART_* constants), so anywhere but that app's
+     * now-playing screen it would be framing nothing at all. The other two are tied to the screen
+     * edges and are just as true over anything.
+     *
+     * Left alone when the foreground app cannot be established — the same rule as suppression:
+     * nothing is degraded on a guess.
+     */
+    private String activeStyle() {
+        if (!EdgeConfig.STYLE_COCOON.equals(style)) return style;
+        if (!foregroundKnown || trackedAppOnScreen) return style;
+        return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 
     @Override
@@ -494,9 +509,10 @@ final class EdgeGlowView extends View {
             // without the service having to be torn down and rebuilt every time someone glances
             // at another app.
             if (suppressed) return;
-            if (EdgeConfig.STYLE_BARS.equals(style)) {
+            String active = activeStyle();
+            if (EdgeConfig.STYLE_BARS.equals(active)) {
                 drawBars(canvas);
-            } else if (EdgeConfig.STYLE_COCOON.equals(style)) {
+            } else if (EdgeConfig.STYLE_COCOON.equals(active)) {
                 drawCocoon(canvas);
             } else {
                 drawGlow(canvas);
