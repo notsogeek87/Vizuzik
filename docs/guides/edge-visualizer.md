@@ -48,6 +48,7 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 |---|---|
 | Seulement par-dessus l'app de musique | Masque le contour dès que Deezer/Spotify n'est plus à l'écran. Activé par défaut ; demande l'autorisation « Accès aux données d'utilisation » — voir plus bas. |
 | Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un faisceau tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
+| Hauteur des barres | Jusqu'où les barres montent. N'agit que sur le style « Barres » : le contour est une bordure d'épaisseur fixe, et le cocon se dimensionne sur la pochette. |
 | Fréquences utilisées | Quelle partie du spectre fait varier le contour : tout le spectre, seulement les basses, les médiums, ou les aigus. |
 | Couleurs | Auto (les trois accents extraits de la pochette du morceau) ou trois couleurs fixes. |
 | Intensité / Épaisseur / Luminosité / Sensibilité | Des multiplicateurs sur la réaction visuelle — 1 = comportement par défaut. |
@@ -55,6 +56,21 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 
 Les changements s'appliquent immédiatement, même si le contour est déjà affiché — pas besoin de
 le redémarrer.
+
+## Le style « Barres »
+
+Les 32 bandes du spectre, chacune sur son bord. Ce n'est plus l'affichage brut des débuts :
+
+- les niveaux sont **lissés de façon asymétrique** — montée immédiate sur une attaque, descente
+  lente. Deux images consécutives d'un vrai spectre sautent beaucoup ; dessinées telles quelles,
+  les barres tremblent au lieu de danser ;
+- une **crête flottante** au-dessus de chaque barre retombe sous son propre poids, ce qui montre
+  la force d'un coup après que la barre elle-même soit redescendue ;
+- la rangée entière est peinte à travers un **dégradé qui court le long du bord** et balaye les
+  trois accents de la pochette, au lieu de 32 bâtons de la même couleur ;
+- les barres ont des **extrémités arrondies**, et leur hauteur maximale se mesure sur la **plus
+  petite dimension de l'écran** : sur un écran large, une fraction de la largeur laisserait les
+  rangées gauche et droite traverser presque un tiers de l'écran chacune.
 
 ## Le style « Cocon »
 

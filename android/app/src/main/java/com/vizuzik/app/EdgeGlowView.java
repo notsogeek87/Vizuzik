@@ -63,11 +63,12 @@ final class EdgeGlowView extends View {
     // mid ~190-1700 Hz (8-21), treble ~1700-7000 Hz (22-31).
     private static final int BASS_END = 8;
     private static final int MID_END = 22;
-    // How far a bar may reach inward, as a fraction of the screen dimension it grows along.
-    // Deliberately well under half: opposite edges are both enabled by default, so anything more
-    // lets two rows meet on a loud passage and cover the middle of whatever is underneath — this
-    // overlay is meant to frame the tracked app, not hide it.
-    private static final float BAR_MAX_FRACTION = 0.3f;
+    // How far a bar may reach inward, as a fraction of the screen's *smaller* dimension —
+    // deliberately not of the one it grows along. On a wide screen (a phone unfolded, a tablet)
+    // that would let the left and right rows each run almost a third of the way across, and the
+    // overlay is meant to frame the tracked app, not bury it. Well under half for the same
+    // reason: opposite edges are both on by default and must never meet in the middle.
+    private static final float BAR_MAX_FRACTION = 0.2f;
 
     // Where Deezer's own now-playing album art sits. This view has no way to read another app's
     // actual view bounds — there is no accessibility hook wired up for that — so "cocoon", the
@@ -146,6 +147,29 @@ final class EdgeGlowView extends View {
     private long lastBeatAtMs;
     private float beatEnergy;
 
+    // The cocoon's animation phases. Accumulated per frame rather than derived from the clock:
+    // their speeds rise with the music, and phase = elapsedTime * speed would jump violently the
+    // moment a speed changed — elapsedRealtime() is already in the tens of thousands of seconds
+    // by the time anyone opens the app, so even a small change in speed moves it hugely. Adding
+    // speed * dt each frame keeps the motion continuous however the speed moves, and keeps the
+    // values small enough for a float to still resolve them.
+    private float cocoonWaveA;
+    private float cocoonWaveB;
+    private float cocoonSweep;
+    private float cocoonShear;
+    private float cocoonOrbit;
+    private float cocoonTwinkle;
+
+    // The bars style used to draw whatever the capture last handed over, raw, which flickers:
+    // consecutive frames of a real spectrum jump around a lot. These follow it with an
+    // asymmetric ease — snap up on a transient, glide back down — the same shape the full-screen
+    // player uses, and the reason a spectrum feels like it is dancing rather than twitching.
+    // The peaks are the classic floating caps: they hold the value each band just reached and
+    // fall under gravity, which is what shows how hard a hit was after the bar itself has gone.
+    private float[] barLevels;
+    private float[] barPeaks;
+    private float[] barPeakFall;
+
     // Ambient-only breathing: three periods with no common multiple, so the glow never seems to
     // loop — same idea as _updateAmbient() in visualizer.js, just three oscillators instead of
     // per-band ones since this view has no spectrum to speak of, only a border.
@@ -166,6 +190,7 @@ final class EdgeGlowView extends View {
     private float thicknessMul = 1f;
     private float brightnessMul = 1f;
     private float sensitivity = 1f;
+    private float barSize = 1f;
     private int[][] customPalette; // non-null only in "custom" color mode
     private boolean edgeTop = true;
     private boolean edgeBottom = true;
@@ -197,6 +222,7 @@ final class EdgeGlowView extends View {
         thicknessMul = config.thickness;
         brightnessMul = config.brightness;
         sensitivity = config.sensitivity;
+        barSize = config.barSize;
         customPalette = config.customPalette;
         edgeTop = config.top;
         edgeBottom = config.bottom;
@@ -327,6 +353,8 @@ final class EdgeGlowView extends View {
             beatEnergy *= (float) Math.pow(0.9, dtMs / PULSE_DECAY_MS);
 
             ambientPhase += dtMs;
+            advanceCocoonPhases(dtMs / 1000f);
+            advanceBars(dtMs / 1000f);
             updateSuppression(now);
 
             invalidate();
@@ -336,6 +364,60 @@ final class EdgeGlowView extends View {
             // Kept outside the try body so one bad tick doesn't also kill every tick after it.
             handler.postDelayed(tick, FRAME_INTERVAL_MS);
         }
+    }
+
+    /**
+     * Winds the cocoon's phases on. Everything here speeds up with how loud the music actually
+     * is — but only when the spectrum is real: without capture `drive` stays at zero and the
+     * ribbon keeps its slow base rate, since a scene that surged and eased to a loudness it
+     * cannot hear is the same lie as an invented beat. beatEnergy is allowed in either regime;
+     * without capture it only ever rises on something that really happened.
+     */
+    private void advanceCocoonPhases(float dt) {
+        boolean live = lastLevelsAtMs != 0
+            && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
+        float drive = live ? clamp01(level) : 0f;
+        float beat = clamp01(beatEnergy);
+        cocoonWaveA = wrapTwoPi(cocoonWaveA + dt * (0.85f + drive * 1.7f));
+        cocoonWaveB = wrapTwoPi(cocoonWaveB + dt * (0.62f + drive * 1.15f));
+        cocoonSweep = wrapTwoPi(cocoonSweep + dt * (0.38f + drive * 0.55f + beat * 0.6f));
+        cocoonShear = wrapTwoPi(cocoonShear + dt * (0.42f + drive * 0.7f));
+        cocoonOrbit = wrapTwoPi(cocoonOrbit + dt * 0.05f);
+        cocoonTwinkle = wrapTwoPi(cocoonTwinkle + dt * 1.7f);
+    }
+
+    /** Eases the drawn spectrum towards the captured one and lets the peak caps fall. */
+    private void advanceBars(float dt) {
+        float[] bands = lastBands;
+        boolean live = bands != null && bands.length > 0 && lastLevelsAtMs != 0
+            && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
+        int count = live ? bands.length : (barLevels != null ? barLevels.length : 0);
+        if (count == 0) return;
+        if (barLevels == null || barLevels.length != count) {
+            barLevels = new float[count];
+            barPeaks = new float[count];
+            barPeakFall = new float[count];
+        }
+        // Frame-rate independent easing: the same visible attack and release whether this view is
+        // managing its full ~24fps or dropping frames behind a busy foreground app.
+        for (int i = 0; i < count; i++) {
+            float target = live ? clamp01(bands[i]) : 0f;
+            float rate = target > barLevels[i] ? 26f : 7f;
+            barLevels[i] += (target - barLevels[i]) * Math.min(1f, rate * dt);
+            if (barLevels[i] >= barPeaks[i]) {
+                barPeaks[i] = barLevels[i];
+                barPeakFall[i] = 0f;
+            } else {
+                barPeakFall[i] += dt * 0.9f;
+                barPeaks[i] = Math.max(barLevels[i], barPeaks[i] - barPeakFall[i] * dt * 2.2f);
+            }
+        }
+    }
+
+    private static float wrapTwoPi(float value) {
+        float tau = (float) (Math.PI * 2);
+        float wrapped = value % tau;
+        return wrapped < 0 ? wrapped + tau : wrapped;
     }
 
     /**
@@ -380,97 +462,157 @@ final class EdgeGlowView extends View {
     }
 
     /**
-     * The default style: each of the 32 bands drawn on its own rather than reduced to the single
-     * scalar drawGlow() works from. Started as a way to answer "is the data actually moving, or is
-     * the border just not showing it" — an average can sit fairly still while the individual bands
-     * swing a lot — and stayed the default because it shows what the capture delivers directly.
+     * Each of the 32 bands drawn on its own rather than reduced to the single scalar drawGlow()
+     * works from. It began as a way to answer "is the data actually moving, or is the border just
+     * not showing it" — an average can sit fairly still while the individual bands swing a lot —
+     * and stayed the default because it shows what the capture delivers most directly.
+     *
+     * What it draws is no longer raw, though: the levels are eased (see advanceBars()), the row
+     * is stroked through a gradient running along the edge so it sweeps the album's three accents
+     * instead of being one flat colour, each bar is a rounded cap rather than a bare rectangle,
+     * and a peak cap floats above each one and falls — the detail that shows how hard a band was
+     * hit after the bar itself has dropped away.
      */
     private void drawBars(Canvas canvas) {
         int width = getWidth();
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
 
-        // Same liveness check drawGlow() uses to fall back to ambient: without it, a capture that
-        // dies silently (no explicit clearLevels() call) would leave the last frame's bars lit on
-        // screen forever, exactly the frozen-glow bug this whole timeout mechanism exists to
-        // prevent — bars have no ambient regime to fall back to, so "not live" just means blank.
+        // Same liveness check drawGlow() falls back on: without it a capture that dies silently
+        // would leave the last frame's bars lit on screen forever. Bars have no ambient regime to
+        // fall back to — they show a spectrum or nothing, and inventing one is the thing this app
+        // does not do — so "not live" means the eased levels run down to zero and stay there.
         boolean live = lastLevelsAtMs != 0
             && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
-        float[] bands = lastBands;
-        if (!live || bands == null || bands.length == 0) {
-            return;
+        float[] levels = barLevels;
+        if (levels == null || levels.length == 0) return;
+        if (!live) {
+            boolean anythingLeft = false;
+            for (float v : levels) {
+                if (v > 0.004f) { anythingLeft = true; break; }
+            }
+            if (!anythingLeft) return;
         }
 
-        int from = bandFrom(bands.length);
-        int to = bandTo(bands.length);
+        int from = bandFrom(levels.length);
+        int to = bandTo(levels.length);
         if (to <= from) return;
 
-        int color = displayColor();
-        paint.setShader(null);
-        // Reset from whatever drawCocoon() may have left the shared Paint in — style can change
-        // live, mid-overlay, from a settings-panel edit.
         paint.setStyle(Paint.Style.FILL);
+        paint.setAntiAlias(true);
+        float pulse = clamp01(beatEnergy);
 
-        // Every edge the panel enables, not the bottom alone: leaving only Gauche/Droite checked
-        // would otherwise render nothing at all, which looks exactly like a capture that died.
-        if (edgeBottom) drawBarRow(canvas, bands, from, to, color, width, height, false);
-        if (edgeTop) drawBarRow(canvas, bands, from, to, color, width, height, true);
-        if (edgeLeft) drawBarColumn(canvas, bands, from, to, color, width, height, false);
-        if (edgeRight) drawBarColumn(canvas, bands, from, to, color, width, height, true);
+        if (edgeBottom) drawBarRow(canvas, levels, from, to, width, height, false, pulse);
+        if (edgeTop) drawBarRow(canvas, levels, from, to, width, height, true, pulse);
+        if (edgeLeft) drawBarColumn(canvas, levels, from, to, width, height, false, pulse);
+        if (edgeRight) drawBarColumn(canvas, levels, from, to, width, height, true, pulse);
+
+        paint.setShader(null);
+        paint.setAlpha(255);
+        paint.setAntiAlias(false);
     }
 
-    /** Peak length for one bar, honouring the thickness slider but never past the point where two
-     *  opposite rows would collide. */
+    /** Peak length for one bar, honouring the size slider but never past the point where two
+     *  opposite rows would collide across the middle of the app underneath. */
     private float barLimit(int extent) {
-        return Math.min(extent * BAR_MAX_FRACTION * thicknessMul, extent * 0.45f);
+        float reference = Math.min(getWidth(), getHeight());
+        return Math.min(reference * BAR_MAX_FRACTION * barSize, extent * 0.45f);
     }
 
     private float barLength(float bandLevel, int extent) {
-        float level = clamp01(bandLevel * intensity * sensitivity);
-        return Math.max(2f * density, level * barLimit(extent));
+        float value = clamp01(bandLevel * intensity * sensitivity);
+        return Math.max(2f * density, value * barLimit(extent));
     }
 
-    private void applyBarPaint(float bandLevel, int color) {
-        float level = clamp01(bandLevel * intensity * sensitivity);
-        int alpha = clamp255((int) ((120 + level * 135f) * brightnessMul));
-        paint.setColor((color & 0x00FFFFFF) | (alpha << 24));
+    /** The gradient a whole row is drawn through: the three album accents laid along the edge, so
+     *  the spectrum reads as one lit object instead of 32 identically-coloured sticks. */
+    private Shader barSweep(float x0, float y0, float x1, float y1) {
+        int[] colors = {
+            withAlpha(saturate(paletteColorAt(0f)), 255),
+            withAlpha(lit(paletteColorAt(0.6f), 0.55f), 255),
+            withAlpha(saturate(paletteColorAt(1.2f)), 255),
+            withAlpha(lit(paletteColorAt(1.8f), 0.45f), 255),
+            withAlpha(saturate(paletteColorAt(2.4f)), 255),
+        };
+        float[] stops = { 0f, 0.26f, 0.5f, 0.74f, 1f };
+        return new LinearGradient(x0, y0, x1, y1, colors, stops, Shader.TileMode.CLAMP);
+    }
+
+    private int barAlpha(float bandLevel, float pulse) {
+        float value = clamp01(bandLevel * intensity * sensitivity);
+        return clamp255((int) ((70 + value * 125f + pulse * 35f) * brightnessMul));
     }
 
     /** One row of bars along a horizontal edge, growing inward from it. */
-    private void drawBarRow(Canvas canvas, float[] bands, int from, int to, int color, int width, int height, boolean fromTop) {
+    private void drawBarRow(Canvas canvas, float[] levels, int from, int to, int width, int height,
+                            boolean fromTop, float pulse) {
         int n = to - from;
         float slot = (float) width / n;
+        float barWidth = slot * 0.7f;
+        float radius = barWidth * 0.5f;
+        paint.setShader(barSweep(0, 0, width, 0));
         for (int i = 0; i < n; i++) {
-            float length = barLength(bands[from + i], height);
-            applyBarPaint(bands[from + i], color);
-            float left = i * slot;
-            canvas.drawRect(
-                left + slot * 0.15f,
-                fromTop ? 0 : height - length,
-                left + slot * 0.85f,
-                fromTop ? length : height,
-                paint
+            float value = levels[from + i];
+            float length = barLength(value, height);
+            float left = i * slot + (slot - barWidth) * 0.5f;
+            paint.setAlpha(barAlpha(value, pulse));
+            canvas.drawRoundRect(
+                left,
+                fromTop ? -radius : height - length,
+                left + barWidth,
+                fromTop ? length : height + radius,
+                radius, radius, paint
             );
+            float peak = barPeaks[from + i];
+            if (peak > value + 0.02f) {
+                float peakAt = barLength(peak, height);
+                paint.setAlpha(clamp255((int) ((150 + pulse * 60f) * brightnessMul)));
+                canvas.drawRoundRect(
+                    left,
+                    fromTop ? peakAt : height - peakAt - barWidth * 0.34f,
+                    left + barWidth,
+                    fromTop ? peakAt + barWidth * 0.34f : height - peakAt,
+                    radius, radius, paint
+                );
+            }
         }
     }
 
     /** One column of bars along a vertical edge, growing inward from it. */
-    private void drawBarColumn(Canvas canvas, float[] bands, int from, int to, int color, int width, int height, boolean fromRight) {
+    private void drawBarColumn(Canvas canvas, float[] levels, int from, int to, int width, int height,
+                               boolean fromRight, float pulse) {
         int n = to - from;
         float slot = (float) height / n;
+        float barWidth = slot * 0.7f;
+        float radius = barWidth * 0.5f;
+        paint.setShader(barSweep(0, 0, 0, height));
         for (int i = 0; i < n; i++) {
-            float length = barLength(bands[from + i], width);
-            applyBarPaint(bands[from + i], color);
-            float top = i * slot;
-            canvas.drawRect(
-                fromRight ? width - length : 0,
-                top + slot * 0.15f,
-                fromRight ? width : length,
-                top + slot * 0.85f,
-                paint
+            float value = levels[from + i];
+            float length = barLength(value, width);
+            float top = i * slot + (slot - barWidth) * 0.5f;
+            paint.setAlpha(barAlpha(value, pulse));
+            canvas.drawRoundRect(
+                fromRight ? width - length : -radius,
+                top,
+                fromRight ? width + radius : length,
+                top + barWidth,
+                radius, radius, paint
             );
+            float peak = barPeaks[from + i];
+            if (peak > value + 0.02f) {
+                float peakAt = barLength(peak, width);
+                paint.setAlpha(clamp255((int) ((150 + pulse * 60f) * brightnessMul)));
+                canvas.drawRoundRect(
+                    fromRight ? width - peakAt : peakAt,
+                    top,
+                    fromRight ? width - peakAt + barWidth * 0.34f : peakAt + barWidth * 0.34f,
+                    top + barWidth,
+                    radius, radius, paint
+                );
+            }
         }
     }
+
 
     private void drawGlow(Canvas canvas) {
         int width = getWidth();
@@ -576,11 +718,18 @@ final class EdgeGlowView extends View {
             && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
         float[] bands = live ? lastBands : null;
         float loud = live ? clamp01(level) : 0.22f;
+        // Only real captured audio may drive the motion: without it the ribbon keeps its slow
+        // base rate rather than surging to a loudness it cannot hear.
+        float drive = live ? loud : 0f;
         float pulse = clamp01(beatEnergy);
-        float t = SystemClock.elapsedRealtime() / 1000f;
 
-        float band = Math.max(half * 0.08f, Math.min(half * COCOON_BAND * thicknessMul, half * 0.45f));
-        float swing = half * COCOON_SWING;
+        // The whole bundle breathes: it widens on loud passages and flares on an impulse, which
+        // is most of what makes it read as alive rather than as a decal.
+        float band = Math.max(
+            half * 0.08f,
+            Math.min(half * COCOON_BAND * thicknessMul * (1 + drive * 0.30f + pulse * 0.22f), half * 0.55f)
+        );
+        float swing = half * COCOON_SWING * (1 + drive * 0.25f);
 
         // How much room there is between the cover and the nearest screen edge. The unfolded
         // layout leaves the cover barely a tenth of the width from the left one, and a bundle
@@ -600,19 +749,20 @@ final class EdgeGlowView extends View {
         paint.setAntiAlias(true);
 
         float lineWidth = Math.max(1f, COCOON_LINE * density * thicknessMul);
-        float phaseA = t * 0.23f;
-        float phaseB = t * 0.17f;
-        int alpha = clamp255((int) ((175 + loud * 35f + pulse * 25f) * brightnessMul));
+        int alpha = clamp255((int) ((175 + loud * 45f + pulse * 55f) * brightnessMul));
+        // Oscillating rather than fixed: the weave visibly opens and closes instead of holding
+        // one shape while only the light moves over it.
+        float shearSpan = COCOON_SHEAR + 0.55f * (float) Math.sin(cocoonShear);
 
         // Built once and reused across all three passes: the alpha inside them is the envelope,
         // and Paint's own alpha scales the whole shader, so per-strand and per-pass brightness
         // needs no second gradient.
-        Shader sweep = buildCocoonSweep(cx, cy, half, t, false);
-        Shader shade = buildCocoonSweep(cx, cy, half, t, true);
+        Shader sweep = buildCocoonSweep(cx, cy, half, false);
+        Shader shade = buildCocoonSweep(cx, cy, half, true);
 
         for (int s = 0; s < COCOON_STRANDS; s++) {
             float u = (float) s / (COCOON_STRANDS - 1); // 0 against the artwork .. 1 outermost
-            float shear = u * COCOON_SHEAR;
+            float shear = u * shearSpan;
             Path path = cocoonPaths[s];
 
             path.reset();
@@ -620,12 +770,12 @@ final class EdgeGlowView extends View {
                 float f = (float) i / COCOON_SPOKES;
                 float angle = (float) (f * Math.PI * 2);
                 float wave = (float) (
-                    Math.sin(angle * 3 + phaseA + shear) * 0.085
-                        + Math.sin(angle * 5 - phaseB * 1.3 + shear * 1.7) * 0.042
-                        + Math.sin(angle * 2 - phaseB * 0.7 - shear) * 0.055
+                    Math.sin(angle * 3 + cocoonWaveA + shear) * 0.085
+                        + Math.sin(angle * 5 - cocoonWaveB * 1.3 + shear * 1.7) * 0.042
+                        + Math.sin(angle * 2 - cocoonWaveB * 0.7 - shear) * 0.055
                 );
                 float wave01 = (wave + COCOON_WAVE_MAX) / (2 * COCOON_WAVE_MAX);
-                float react = (sampleLevel(bands, f) * 0.09f + pulse * 0.03f) * intensity;
+                float react = (sampleLevel(bands, f) * 0.30f + pulse * 0.10f) * intensity;
                 float radius = half * squircle(angle) * COCOON_INNER
                     + band * u
                     + swing * wave01
@@ -673,7 +823,7 @@ final class EdgeGlowView extends View {
         }
 
         paint.setShader(null);
-        drawCocoonSparks(canvas, cx, cy, half, band + swing, t, loud, pulse);
+        drawCocoonSparks(canvas, cx, cy, half, band + swing, loud, pulse);
         paint.setAntiAlias(false);
     }
 
@@ -692,8 +842,8 @@ final class EdgeGlowView extends View {
      * holding the whole band at one middle value is what made the first attempt look like fog.
      * Turning slowly, so the crests travel around the weave.
      */
-    private Shader buildCocoonSweep(float cx, float cy, float half, float t, boolean dark) {
-        float angle = t * 0.11f;
+    private Shader buildCocoonSweep(float cx, float cy, float half, boolean dark) {
+        float angle = cocoonSweep;
         float reach = half * 1.6f;
         float dx = (float) Math.cos(angle) * reach;
         float dy = (float) Math.sin(angle) * reach;
@@ -722,15 +872,15 @@ final class EdgeGlowView extends View {
      *  alone — no per-frame state to keep, and the field stays put across a fold instead of
      *  reshuffling. */
     private void drawCocoonSparks(Canvas canvas, float cx, float cy, float half, float bandWidth,
-                                  float t, float loud, float pulse) {
+                                  float loud, float pulse) {
         paint.setStyle(Paint.Style.FILL);
         paint.setAlpha(255);
         for (int i = 0; i < 16; i++) {
             float seed = i * 2.399963f; // golden angle: spreads them without a visible pattern
-            float angle = seed + t * (0.05f + (i % 5) * 0.012f);
+            float angle = seed + cocoonOrbit * (1f + (i % 5) * 0.24f);
             float radius = half * squircle(angle) * COCOON_INNER
                 + bandWidth * (0.15f + 0.9f * frac01((float) Math.sin(seed * 12.9898f) * 43758.547f));
-            float twinkle = 0.35f + 0.65f * (float) Math.abs(Math.sin(t * 1.7 + seed));
+            float twinkle = 0.35f + 0.65f * (float) Math.abs(Math.sin(cocoonTwinkle + seed));
             float px = cx + (float) Math.cos(angle) * radius;
             float py = cy + (float) Math.sin(angle) * radius;
             float size = (1f + (i % 3) * 0.55f) * density * (0.7f + loud);

@@ -31,6 +31,7 @@ const els = {
   edgeColor1: document.getElementById("edge-color-1"),
   edgeColor2: document.getElementById("edge-color-2"),
   edgeColor3: document.getElementById("edge-color-3"),
+  edgeBarSize: document.getElementById("edge-bar-size"),
   edgeIntensity: document.getElementById("edge-intensity"),
   edgeThickness: document.getElementById("edge-thickness"),
   edgeBrightness: document.getElementById("edge-brightness"),
@@ -615,6 +616,7 @@ const EDGE_SETTINGS_DEFAULTS = {
   style: "bars",
   band: "full",
   colorMode: "auto",
+  barSize: 1,
   intensity: 1,
   thickness: 1,
   brightness: 1,
@@ -648,6 +650,7 @@ function readEdgeSettingsFromForm() {
     band: els.edgeBand.value,
     colorMode: els.edgeColorMode.value,
     customColors: [els.edgeColor1.value, els.edgeColor2.value, els.edgeColor3.value].join(","),
+    barSize: parseFloat(els.edgeBarSize.value),
     intensity: parseFloat(els.edgeIntensity.value),
     thickness: parseFloat(els.edgeThickness.value),
     brightness: parseFloat(els.edgeBrightness.value),
@@ -668,6 +671,7 @@ function applyEdgeSettingsToForm(config) {
   if (colors[0]) els.edgeColor1.value = colors[0];
   if (colors[1]) els.edgeColor2.value = colors[1];
   if (colors[2]) els.edgeColor3.value = colors[2];
+  els.edgeBarSize.value = config.barSize;
   els.edgeIntensity.value = config.intensity;
   els.edgeThickness.value = config.thickness;
   els.edgeBrightness.value = config.brightness;
@@ -846,6 +850,7 @@ els.edgeColorMode.addEventListener("change", () => {
   els.edgeColor1,
   els.edgeColor2,
   els.edgeColor3,
+  els.edgeBarSize,
   els.edgeIntensity,
   els.edgeThickness,
   els.edgeBrightness,

@@ -287,6 +287,12 @@
           <input id="edge-color-3" type="color" value="#38bdf8" aria-label="Couleur 3" />
         </div>
 
+        <!-- Only the "bars" style grows: the other two are a fixed border and a ribbon sized
+             from the album art itself. -->
+        <label class="edge-settings__row edge-settings__row--slider">
+          <span>Hauteur des barres</span>
+          <input id="edge-bar-size" type="range" min="0.3" max="2" step="0.05" value="1" />
+        </label>
         <label class="edge-settings__row edge-settings__row--slider">
           <span>Intensité</span>
           <input id="edge-intensity" type="range" min="0.3" max="2" step="0.05" value="1" />

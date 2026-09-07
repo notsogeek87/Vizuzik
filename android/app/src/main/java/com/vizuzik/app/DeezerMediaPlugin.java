@@ -464,6 +464,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("brightness", config.brightness);
         result.put("sensitivity", config.sensitivity);
         result.put("band", config.band);
+        result.put("barSize", config.barSize);
         result.put("colorMode", config.customPalette != null ? EdgeConfig.COLOR_CUSTOM : EdgeConfig.COLOR_AUTO);
         result.put("top", config.top);
         result.put("bottom", config.bottom);
@@ -495,6 +496,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             (float) data.optDouble("brightness", 1.0),
             (float) data.optDouble("sensitivity", 1.0),
             call.getString("band", EdgeConfig.BAND_FULL),
+            (float) data.optDouble("barSize", 1.0),
             call.getString("colorMode", EdgeConfig.COLOR_AUTO),
             call.getString("customColors", null),
             data.optBoolean("top", true),

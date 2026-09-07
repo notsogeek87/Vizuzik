@@ -48,6 +48,7 @@ final class EdgeConfig {
     private static final String KEY_LEFT = "edgeLeft";
     private static final String KEY_RIGHT = "edgeRight";
     private static final String KEY_ONLY_OVER_MUSIC_APP = "edgeOnlyOverMusicApp";
+    private static final String KEY_BAR_SIZE = "edgeBarSize";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -58,6 +59,8 @@ final class EdgeConfig {
         final float brightness;
         final float sensitivity;
         final String band;
+        /** How tall the "bars" style may grow, as a multiplier — see EdgeGlowView.barLimit(). */
+        final float barSize;
         final int[][] customPalette; // null when colorMode is "auto"
         final boolean top;
         final boolean bottom;
@@ -74,6 +77,7 @@ final class EdgeConfig {
             float brightness,
             float sensitivity,
             String band,
+            float barSize,
             int[][] customPalette,
             boolean top,
             boolean bottom,
@@ -87,6 +91,7 @@ final class EdgeConfig {
             this.brightness = brightness;
             this.sensitivity = sensitivity;
             this.band = band;
+            this.barSize = barSize;
             this.customPalette = customPalette;
             this.top = top;
             this.bottom = bottom;
@@ -110,6 +115,7 @@ final class EdgeConfig {
             prefs.getFloat(KEY_BRIGHTNESS, 1f),
             prefs.getFloat(KEY_SENSITIVITY, 1f),
             prefs.getString(KEY_BAND, BAND_FULL),
+            prefs.getFloat(KEY_BAR_SIZE, 1f),
             customPalette,
             prefs.getBoolean(KEY_TOP, true),
             prefs.getBoolean(KEY_BOTTOM, true),
@@ -132,6 +138,7 @@ final class EdgeConfig {
         float brightness,
         float sensitivity,
         String band,
+        float barSize,
         String colorMode,
         String customColorsCsv,
         boolean top,
@@ -151,6 +158,7 @@ final class EdgeConfig {
             .putFloat(KEY_BRIGHTNESS, brightness)
             .putFloat(KEY_SENSITIVITY, sensitivity)
             .putString(KEY_BAND, band)
+            .putFloat(KEY_BAR_SIZE, barSize)
             .putString(KEY_COLOR_MODE, colorMode)
             .putString(KEY_CUSTOM_COLORS, customColorsCsv)
             .putBoolean(KEY_TOP, top)
