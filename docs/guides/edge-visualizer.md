@@ -66,12 +66,23 @@ carrée) tout autour de la pochette de l'app suivie plutôt que sur les bords. M
 mode `cocoon` du lecteur plein écran — voir
 [Les sept modes de visualisation](modes-de-visualisation.md).
 
-Deux détails viennent du fait que ce style dessine **par-dessus une autre app**, et pas sur
-l'écran noir de Vizuzik : Deezer teinte sa page de lecture d'après la pochette, donc le fond est
-souvent clair. Un dégradé diagonal donne au faisceau une crête vive au lieu d'un ton laiteux
-uniforme, et chaque brin est posé sur une copie plus sombre et plus large de lui-même — la même
-raison qui fait qu'un texte clair porte une ombre. La première version utilisait au contraire une
-fusion additive : sur une page vert clair, éclaircir un fond déjà clair ne produit quasiment rien.
+Tout le reste vient du fait que ce style dessine **par-dessus une autre app**, et pas sur l'écran
+noir de Vizuzik. Deezer teinte sa page de lecture d'après la pochette — donc le fond est souvent
+clair, et surtout il est de la même couleur que la palette, puisque les deux sortent de la même
+image. Trois choses en découlent :
+
+- **l'opacité compte plus que la couleur.** Le dégradé qui habille les brins garde l'essentiel du
+  ruban autour d'un cinquième de l'opacité pleine, et deux arcs fins seulement brûlent en
+  blanc. Une lumière se lit comme une lumière quand elle est concentrée ; maintenir toute la
+  bande à une valeur moyenne, c'est ce qui donnait un brouillard laiteux ;
+- **les couleurs sont poussées loin du gris** (et les crêtes vers le blanc), pour un contraste qui
+  ne dépend pas d'avoir une teinte différente du fond — ce qui est impossible ici ;
+- **chaque brin est posé sur une copie plus sombre de lui-même**, la même raison qui fait qu'un
+  texte clair porte une ombre, et quelques brins sont repassés en traits larges et très
+  transparents pour le halo : la lumière déborde, un trait fin tout seul se lit comme un fil.
+
+La toute première version utilisait au contraire une fusion additive, sans rien de tout ça : sur
+une page vert clair, éclaircir un fond déjà clair ne produit quasiment rien.
 
 Le problème de fond, c'est que cette superposition n'a aucun moyen de lire la position réelle de
 la pochette dans l'app suivie — pas d'accès à sa hiérarchie de vues, aucun service

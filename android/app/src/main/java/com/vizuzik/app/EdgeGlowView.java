@@ -97,22 +97,27 @@ final class EdgeGlowView extends View {
     //
     // The path is a superellipse, not a circle: the thing it frames is a square cover, and a
     // circle around a square leaves gaps at the edge midpoints and crowds the corners.
-    private static final int COCOON_STRANDS = 24;
-    private static final int COCOON_SPOKES = 110;
-    private static final float COCOON_INNER = 1.04f;
-    private static final float COCOON_BAND = 0.17f;
-    private static final float COCOON_SWING = 0.11f;
-    private static final float COCOON_SHEAR = 0.42f;
+    private static final int COCOON_STRANDS = 26;
+    private static final int COCOON_SPOKES = 120;
+    private static final float COCOON_INNER = 1.045f;
+    private static final float COCOON_BAND = 0.20f;
+    private static final float COCOON_SWING = 0.12f;
+    private static final float COCOON_SHEAR = 0.45f;
     private static final float COCOON_SQUIRCLE = 3.4f;
+    private static final float COCOON_LINE = 0.5f;
+    private static final int COCOON_SHADOW_ALPHA = 33;
+    /** How far the ribbon's colours are pushed away from grey — see buildCocoonSweep(). */
+    private static final float COCOON_SATURATION = 1.65f;
     // Sum of the three lobe amplitudes below, used to bias the wave into 0..1 so it can only
     // ever push a strand outward: this view draws on top of the music app, so anything that
     // dipped inward would crawl across the album art it is supposed to be framing.
     private static final float COCOON_WAVE_MAX = 0.085f + 0.042f + 0.055f;
 
     private final Paint paint = new Paint();
-    // Reused across strands and frames: drawCocoon() rebuilds it 30 times per frame, and
-    // allocating a Path each time would hand the collector ~700 of them a second.
-    private final Path cocoonPath = new Path();
+    // One Path per strand, allocated once and rebuilt in place: drawCocoon() walks the whole
+    // bundle three times per frame (outline, bloom, strand), and rebuilding the geometry for
+    // each pass — or allocating Paths per frame — would be pure waste.
+    private final Path[] cocoonPaths = new Path[COCOON_STRANDS];
     private final float density;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tick = this::onTick;
@@ -180,6 +185,7 @@ final class EdgeGlowView extends View {
         super(context);
         density = context.getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
+        for (int i = 0; i < cocoonPaths.length; i++) cocoonPaths[i] = new Path();
     }
 
     /** Applied once at startup and again whenever the settings panel changes something while the
@@ -573,41 +579,43 @@ final class EdgeGlowView extends View {
         float pulse = clamp01(beatEnergy);
         float t = SystemClock.elapsedRealtime() / 1000f;
 
-        // Clamped rather than left to the slider alone: past roughly the cover's own size the
-        // ribbon stops framing it and starts burying the app around it.
         float band = Math.max(half * 0.08f, Math.min(half * COCOON_BAND * thicknessMul, half * 0.45f));
         float swing = half * COCOON_SWING;
 
-        // How much room there actually is between the cover and the nearest screen edge. On the
-        // unfolded layout the cover sits barely a tenth of the width from the left edge, so
-        // without this the bundle just runs off it and the ribbon reads as cut in half.
-        float room = Math.min(Math.min(cx, width - cx), Math.min(cy, height - cy)) * 0.98f
+        // How much room there is between the cover and the nearest screen edge. The unfolded
+        // layout leaves the cover barely a tenth of the width from the left one, and a bundle
+        // that just ran off it would read as cut in half. Allowed slightly past the edge rather
+        // than squeezed to a thread, since a ribbon grazing the border still looks deliberate.
+        float room = Math.min(Math.min(cx, width - cx), Math.min(cy, height - cy)) * 1.06f
             - half * COCOON_INNER;
         if (room > 0 && band + swing > room) {
             float squeeze = room / (band + swing);
             band *= squeeze;
             swing *= squeeze;
         }
-        float outer = half * COCOON_INNER + band + swing;
-
-        drawCocoonHalo(canvas, cx, cy, outer, loud, pulse);
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setAntiAlias(true);
 
-        float lineWidth = Math.max(1f, 0.55f * density * thicknessMul);
+        float lineWidth = Math.max(1f, COCOON_LINE * density * thicknessMul);
         float phaseA = t * 0.23f;
         float phaseB = t * 0.17f;
-        int alpha = clamp255((int) ((150 + loud * 40f + pulse * 26f) * brightnessMul));
-        Shader sweep = buildCocoonSweep(cx, cy, half, t);
+        int alpha = clamp255((int) ((175 + loud * 35f + pulse * 25f) * brightnessMul));
+
+        // Built once and reused across all three passes: the alpha inside them is the envelope,
+        // and Paint's own alpha scales the whole shader, so per-strand and per-pass brightness
+        // needs no second gradient.
+        Shader sweep = buildCocoonSweep(cx, cy, half, t, false);
+        Shader shade = buildCocoonSweep(cx, cy, half, t, true);
 
         for (int s = 0; s < COCOON_STRANDS; s++) {
             float u = (float) s / (COCOON_STRANDS - 1); // 0 against the artwork .. 1 outermost
             float shear = u * COCOON_SHEAR;
+            Path path = cocoonPaths[s];
 
-            cocoonPath.reset();
+            path.reset();
             for (int i = 0; i <= COCOON_SPOKES; i++) {
                 float f = (float) i / COCOON_SPOKES;
                 float angle = (float) (f * Math.PI * 2);
@@ -624,23 +632,44 @@ final class EdgeGlowView extends View {
                     + half * react * (0.25f + u * 0.5f);
                 float px = cx + (float) Math.cos(angle) * radius;
                 float py = cy + (float) Math.sin(angle) * radius;
-                if (i == 0) cocoonPath.moveTo(px, py);
-                else cocoonPath.lineTo(px, py);
+                if (i == 0) path.moveTo(px, py);
+                else path.lineTo(px, py);
             }
-            cocoonPath.close();
+            path.close();
+        }
 
-            paint.setShader(null);
-            paint.setColor(0);
-            paint.setAlpha(clamp255((int) (46 * (1 - 0.5f * u))));
-            paint.setStrokeWidth(lineWidth * 2.4f);
-            canvas.drawPath(cocoonPath, paint);
+        // 1. A thin dark outline under each strand, following the same envelope as the light:
+        //    what keeps pale lines legible over a pale page, and Deezer's page is tinted from the
+        //    very artwork the palette came from, so pale is the normal case.
+        paint.setShader(shade);
+        for (int s = 0; s < COCOON_STRANDS; s++) {
+            float u = (float) s / (COCOON_STRANDS - 1);
+            paint.setAlpha(clamp255((int) (COCOON_SHADOW_ALPHA * (1 - 0.55f * u))));
+            paint.setStrokeWidth(lineWidth * 2.2f);
+            canvas.drawPath(cocoonPaths[s], paint);
+        }
 
-            // Dense and bright against the cover, dissolving outward: a flat bundle reads as a
-            // ring, a fading one reads as a ribbon with a spine.
-            paint.setShader(sweep);
+        // 2. Bloom: a few strands restroked wide and faint. Light spreads; a hairline on its own
+        //    reads as wire. Only every fifth one carries it — bloomed from all of them the wide
+        //    strokes stack into a solid milky cloud and the weave disappears inside it.
+        paint.setShader(sweep);
+        for (int s = 0; s < COCOON_STRANDS; s += 5) {
+            float u = (float) s / (COCOON_STRANDS - 1);
+            float a = alpha * (1 - 0.6f * u);
+            paint.setAlpha(clamp255((int) (a * 0.09f)));
+            paint.setStrokeWidth(lineWidth * 9f);
+            canvas.drawPath(cocoonPaths[s], paint);
+            paint.setAlpha(clamp255((int) (a * 0.15f)));
+            paint.setStrokeWidth(lineWidth * 4f);
+            canvas.drawPath(cocoonPaths[s], paint);
+        }
+
+        // 3. The crisp strands themselves, dense against the cover and dissolving outward.
+        paint.setStrokeWidth(lineWidth);
+        for (int s = 0; s < COCOON_STRANDS; s++) {
+            float u = (float) s / (COCOON_STRANDS - 1);
             paint.setAlpha(clamp255((int) (alpha * (1 - 0.6f * u))));
-            paint.setStrokeWidth(lineWidth);
-            canvas.drawPath(cocoonPath, paint);
+            canvas.drawPath(cocoonPaths[s], paint);
         }
 
         paint.setShader(null);
@@ -649,68 +678,76 @@ final class EdgeGlowView extends View {
     }
 
     /**
-     * The diagonal sweep every strand is stroked with: near-white where the light "falls", back
-     * into the album's own colour away from it, turning slowly so the crest travels around the
-     * ribbon. Built once per frame and shared — per-strand brightness comes from Paint's alpha,
-     * which multiplies a shader rather than replacing it.
+     * The sweep every strand is stroked with — and, in its darker form, outlined with. Two things
+     * are happening in it.
+     *
+     * The colours run rich and saturated through the troughs and near-white at the crests. The
+     * palette comes from the album art and Deezer tints its own page from that same art, so
+     * straight out of the palette the ribbon is very nearly the colour of what is behind it;
+     * pushing the colours away from grey, and the crests towards white, gives it contrast that
+     * doesn't depend on the hue being different.
+     *
+     * And the alpha varies far more than the colour does: most of the ribbon sits at a fifth of
+     * full opacity and two slim arcs blaze. Light reads as light when it is concentrated —
+     * holding the whole band at one middle value is what made the first attempt look like fog.
+     * Turning slowly, so the crests travel around the weave.
      */
-    private Shader buildCocoonSweep(float cx, float cy, float half, float t) {
+    private Shader buildCocoonSweep(float cx, float cy, float half, float t, boolean dark) {
         float angle = t * 0.11f;
         float reach = half * 1.6f;
         float dx = (float) Math.cos(angle) * reach;
         float dy = (float) Math.sin(angle) * reach;
-        int[] colors = {
-            withAlpha(lit(paletteColorAt(0.35f), 0.15f), 140),
-            withAlpha(lit(paletteColorAt(0.35f), 0.92f), 255),
-            withAlpha(lit(paletteColorAt(0.95f), 0.45f), 230),
-            withAlpha(lit(paletteColorAt(1.35f), 0.20f), 128),
-        };
-        float[] stops = { 0f, 0.35f, 0.62f, 1f };
+        float[] envelope = { 0.18f, 0.32f, 1f, 0.45f, 0.26f, 0.85f, 0.34f, 0.18f };
+        float[] stops = { 0f, 0.16f, 0.30f, 0.44f, 0.58f, 0.74f, 0.88f, 1f };
+        int[] tones = dark
+            ? new int[] { 0, 0, 0, 0, 0, 0, 0, 0 }
+            : new int[] {
+                saturate(dim(paletteColorAt(1.0f), 0.55f)),
+                saturate(paletteColorAt(1.2f)),
+                lit(paletteColorAt(1.5f), 0.92f),
+                saturate(paletteColorAt(1.8f)),
+                saturate(dim(paletteColorAt(2.0f), 0.7f)),
+                lit(paletteColorAt(2.3f), 0.80f),
+                saturate(paletteColorAt(2.6f)),
+                saturate(dim(paletteColorAt(2.9f), 0.55f)),
+            };
+        int[] colors = new int[tones.length];
+        for (int i = 0; i < tones.length; i++) {
+            colors[i] = withAlpha(tones[i], Math.round(envelope[i] * 255));
+        }
         return new LinearGradient(cx - dx, cy - dy, cx + dx, cy + dy, colors, stops, Shader.TileMode.CLAMP);
     }
 
-    /** The soft bloom the strands sit in. A ring around the bundle, transparent in the middle:
-     *  a plain disc would wash out the album art it is supposed to be framing. */
-    private void drawCocoonHalo(Canvas canvas, float cx, float cy, float outer, float loud, float pulse) {
-        float radius = outer * 1.35f;
-        if (radius <= 0) return;
-        int glow = lit(paletteColorAt(0.35f), 0.4f) & 0x00FFFFFF;
-        int peak = glow | (clamp255((int) ((16 + loud * 18f + pulse * 26f) * brightnessMul)) << 24);
-        int[] colors = { glow, glow, peak, glow };
-        float[] stops = { 0f, 0.6f, 0.82f, 1f };
-        paint.setStyle(Paint.Style.FILL);
-        paint.setAlpha(255);
-        paint.setShader(new RadialGradient(cx, cy, radius, colors, stops, Shader.TileMode.CLAMP));
-        canvas.drawCircle(cx, cy, radius, paint);
-        paint.setShader(null);
-    }
-
-    /** Motes drifting in the ribbon. Deterministic from the index alone — no per-frame state to
-     *  keep, and the field stays put across a rotation instead of reshuffling. */
+    /** Motes drifting in the ribbon, each on its own soft halo. Deterministic from the index
+     *  alone — no per-frame state to keep, and the field stays put across a fold instead of
+     *  reshuffling. */
     private void drawCocoonSparks(Canvas canvas, float cx, float cy, float half, float bandWidth,
                                   float t, float loud, float pulse) {
         paint.setStyle(Paint.Style.FILL);
+        paint.setAlpha(255);
         for (int i = 0; i < 16; i++) {
             float seed = i * 2.399963f; // golden angle: spreads them without a visible pattern
             float angle = seed + t * (0.05f + (i % 5) * 0.012f);
             float radius = half * squircle(angle) * COCOON_INNER
                 + bandWidth * (0.15f + 0.9f * frac01((float) Math.sin(seed * 12.9898f) * 43758.547f));
             float twinkle = 0.35f + 0.65f * (float) Math.abs(Math.sin(t * 1.7 + seed));
-            paint.setColor(withAlpha(
-                lit(paletteColorAt(i % 3), 0.55f),
-                clamp255((int) ((70 + loud * 90f + pulse * 60f) * twinkle * brightnessMul))
-            ));
+            float px = cx + (float) Math.cos(angle) * radius;
+            float py = cy + (float) Math.sin(angle) * radius;
             float size = (1f + (i % 3) * 0.55f) * density * (0.7f + loud);
-            canvas.drawCircle(
-                cx + (float) Math.cos(angle) * radius,
-                cy + (float) Math.sin(angle) * radius,
-                size,
-                paint
-            );
+            paint.setColor(withAlpha(
+                lit(paletteColorAt(i % 3), 0.4f),
+                clamp255((int) ((30 + loud * 40f) * twinkle * brightnessMul))
+            ));
+            canvas.drawCircle(px, py, size * 3f, paint);
+            paint.setColor(withAlpha(
+                lit(paletteColorAt(i % 3), 0.75f),
+                clamp255((int) ((90 + loud * 90f + pulse * 60f) * twinkle * brightnessMul))
+            ));
+            canvas.drawCircle(px, py, size, paint);
         }
     }
 
-    /** Radius of a rounded square (superellipse) of half-size 1 at this angle. */
+
     private static float squircle(float angle) {
         double c = Math.abs(Math.cos(angle));
         double s = Math.abs(Math.sin(angle));
@@ -728,6 +765,30 @@ final class EdgeGlowView extends View {
             Math.round(r + (255 - r) * amount),
             Math.round(g + (255 - g) * amount),
             Math.round(b + (255 - b) * amount)
+        );
+    }
+
+    /** Multiplies a colour's distance from grey. Deezer tints its now-playing page from the same
+     *  artwork the palette is extracted from, so an unmodified palette colour lands very close to
+     *  whatever is behind the ribbon. */
+    private static int saturate(int color) {
+        int r = Color.red(color);
+        int g = Color.green(color);
+        int b = Color.blue(color);
+        float mean = (r + g + b) / 3f;
+        return Color.rgb(
+            clamp255(Math.round(mean + (r - mean) * COCOON_SATURATION)),
+            clamp255(Math.round(mean + (g - mean) * COCOON_SATURATION)),
+            clamp255(Math.round(mean + (b - mean) * COCOON_SATURATION))
+        );
+    }
+
+    /** Darkens a colour towards black — the troughs between the ribbon's lit crests. */
+    private static int dim(int color, float amount) {
+        return Color.rgb(
+            clamp255(Math.round(Color.red(color) * amount)),
+            clamp255(Math.round(Color.green(color) * amount)),
+            clamp255(Math.round(Color.blue(color) * amount))
         );
     }
 
