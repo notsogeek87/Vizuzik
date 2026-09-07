@@ -10,12 +10,14 @@
 // impulses left are pulse() calls for events that really happened (a track change, play/pause,
 // a swipe, a mode change).
 //
-// One analysis pass feeds six scenes:
+// One analysis pass feeds seven scenes:
 //   cover    - a restrained halo around the artwork (the art stays the hero)
 //   bars     - a mirrored spectrum stage, bass at the centre, treble at the edges
 //   radial   - a reactive corona ringing the spinning disc
 //   aurora   - flowing light ribbons, one per frequency slice
 //   nebula   - an orbiting particle galaxy with motion trails
+//   cocoon   - a woven ribbon of light wrapping tightly around the (still square) artwork,
+//              like cover its focus stays the art rather than a spinning disc
 //   cassette - a fixed full-screen illustration, drawn once in CSS/HTML rather than here (see
 //              index.html and style.css): the counterpoint to the spinning disc, so it never
 //              reacts to the beat and this engine draws nothing for it
@@ -23,7 +25,7 @@
 // Everything is drawn additively and then bloomed by blitting the frame back over itself
 // through a blur, which is what gives the neon "lit from within" look at almost no cost.
 
-export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cassette"];
+export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette"];
 
 // Matches TrackedSessionAudioSource's BAND_COUNT on the native side so live levels map 1:1 with
 // no interpolation needed.
@@ -432,7 +434,9 @@ export class Visualizer {
   }
 
   _seedOrbiters() {
-    const count = Math.round((this.style === "nebula" ? 130 : 46) * this.quality);
+    const count = Math.round(
+      (this.style === "nebula" ? 130 : this.style === "cocoon" ? 64 : 46) * this.quality
+    );
     this.orbiters = [];
     for (let i = 0; i < count; i++) {
       this.orbiters.push({
@@ -451,7 +455,8 @@ export class Visualizer {
   }
 
   _burstParticles() {
-    if (this.style === "cover" || this.style === "aurora" || this.style === "cassette") return;
+    if (this.style === "cover" || this.style === "aurora" || this.style === "cocoon" || this.style === "cassette")
+      return;
     const count = Math.round((this.style === "nebula" ? 10 : 6) * this.quality);
     const max = this.style === "nebula" ? 220 : 120;
     for (let i = 0; i < count && this.particles.length < max; i++) {
@@ -506,6 +511,9 @@ export class Visualizer {
         break;
       case "nebula":
         this._drawNebula(ctx, dt);
+        break;
+      case "cocoon":
+        this._drawCocoon(ctx);
         break;
       case "cassette":
         // Nothing to draw: the CSS layer carries the whole scene, and .fx is hidden in this
@@ -831,6 +839,78 @@ export class Visualizer {
     ctx.fill();
 
     this._drawRipples(ctx, x, y, this.focus.r, maxR);
+  }
+
+  /* --- cocoon: a woven ribbon of light wrapping tightly around the (still square) artwork --- */
+
+  _drawCocoon(ctx) {
+    const { x, y, r } = this.focus;
+    const pulse = 1 + this.beatEnergy * 0.08 + this.energy * 0.05;
+    const baseR = r * 1.24 * pulse;
+
+    // Soft body of light behind the ribbon, tighter than cover's halo so the strands read as
+    // wrapping the art rather than floating free of it.
+    const halo = ctx.createRadialGradient(x, y, r * 0.92, x, y, baseR * 1.75);
+    halo.addColorStop(0, this._rgba(0, 0.24 + this.beatEnergy * 0.2));
+    halo.addColorStop(0.55, this._rgba(1, 0.1));
+    halo.addColorStop(1, this._rgba(2, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(x, y, baseR * 1.75, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Three strands woven around the same base radius, each at its own frequency and drift
+    // speed so together they read as one flowing braid instead of three separate rings.
+    const strands = 3;
+    const spokes = 128;
+    for (let s = 0; s < strands; s++) {
+      const phase = this.time * (0.22 + s * 0.09) + s * 2.4;
+      const petals = 3 + s;
+      const drift = this.spin * (0.16 + s * 0.06) * (s % 2 ? -1 : 1);
+      const colorIndex = s % 3;
+
+      ctx.beginPath();
+      for (let i = 0; i <= spokes; i++) {
+        const t = i / spokes;
+        const angle = t * Math.PI * 2 + drift;
+        const level = this._mirroredBand(Math.round(t * (MIRROR_SLOTS - 1)));
+        const wobble =
+          Math.sin(angle * petals + phase) * 0.15 + Math.sin(angle * petals * 1.6 - phase * 1.3) * 0.06;
+        const rad = baseR * (1 + wobble + level * 0.3 + this.beatEnergy * 0.06) + s * r * 0.045;
+        const px = x + Math.cos(angle) * rad;
+        const py = y + Math.sin(angle) * rad;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = this._rgba(colorIndex, 0.16 + this.beatEnergy * 0.12);
+      ctx.lineWidth = 8 + s * 2;
+      ctx.stroke();
+      // A crisp filament riding the same curve, same trick as aurora's ribbons: keeps the
+      // soft band from reading as fog.
+      ctx.strokeStyle = this._rgba((colorIndex + 1) % 3, 0.5 + this.beatEnergy * 0.35);
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+
+    // Sparkles orbiting just outside the braid.
+    for (const o of this.orbiters) {
+      const level = this.bars[o.band];
+      const angle = o.angle + this.spin * o.speed * 0.55;
+      const rad = baseR * (0.94 + o.radius * 0.4) + level * r * 0.16;
+      const px = x + Math.cos(angle) * rad;
+      const py = y + Math.sin(angle) * rad;
+      const twinkle = 0.4 + 0.6 * Math.sin(this.time * 3.2 + o.twinkle);
+      const alpha = (0.15 + level * 0.6) * twinkle;
+      ctx.fillStyle = this._rgba(o.color, alpha);
+      ctx.beginPath();
+      ctx.arc(px, py, o.size * (0.5 + level), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    this._drawRipples(ctx, x, y, baseR * 0.9, baseR * 2.3);
   }
 
   /* --- shared bits --- */

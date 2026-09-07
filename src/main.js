@@ -67,6 +67,7 @@ const MODE_LABELS = {
   radial: "Corona",
   aurora: "Aurore",
   nebula: "Nébuleuse",
+  cocoon: "Cocon",
   cassette: "Cassette",
 };
 

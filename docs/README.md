@@ -31,7 +31,7 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
 
 ### Guides
 - [Gestes et contrôles](guides/gestes.md) — tap, swipe et barre de progression.
-- [Les six modes de visualisation](guides/modes-de-visualisation.md) — ce que voit
+- [Les sept modes de visualisation](guides/modes-de-visualisation.md) — ce que voit
   l'utilisateur et comment il en change.
 - [Edge Visualizer](guides/edge-visualizer.md) — le contour lumineux par-dessus l'app de musique :
   parcours d'activation, ce qui le fait réagir, le panneau de réglages, et ses limites.

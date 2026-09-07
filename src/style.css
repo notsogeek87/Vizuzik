@@ -467,6 +467,7 @@ body[data-mode="bars"] .mode-toggle .icon-bars,
 body[data-mode="radial"] .mode-toggle .icon-radial,
 body[data-mode="aurora"] .mode-toggle .icon-aurora,
 body[data-mode="nebula"] .mode-toggle .icon-nebula,
+body[data-mode="cocoon"] .mode-toggle .icon-cocoon,
 body[data-mode="cassette"] .mode-toggle .icon-cassette {
   display: block;
   animation: icon-pop 0.45s var(--ease-spring);
@@ -702,8 +703,10 @@ body.is-swipe-releasing .disc {
 }
 
 /* Viz modes: the cover becomes a spinning record, leaving the screen to the canvas while
-   keeping the artwork present as the centre of the composition. */
-body:not([data-mode="cover"]) .disc {
+   keeping the artwork present as the centre of the composition. Cocoon is the other
+   exception besides cover itself: its ribbon wraps the square artwork directly, so a round
+   spinning record underneath it would fight the shape the ribbon is drawn around. */
+body:not([data-mode="cover"]):not([data-mode="cocoon"]) .disc {
   width: 58%;
   height: 58%;
   border-radius: 50%;
@@ -718,12 +721,14 @@ body:not([data-mode="cover"]) .disc {
   animation-play-state: paused;
 }
 
-body:not([data-mode="cover"])[data-state="playing"] .disc__spin {
+body:not([data-mode="cover"]):not([data-mode="cocoon"])[data-state="playing"] .disc__spin {
   animation-play-state: running;
 }
 
-/* In cover mode the artwork must stay upright — a rotating album cover just reads as broken. */
-body[data-mode="cover"] .disc__spin {
+/* In cover and cocoon modes the artwork must stay upright — a rotating album cover just reads
+   as broken, and cocoon's ribbon is drawn around a fixed square, not a turning disc. */
+body[data-mode="cover"] .disc__spin,
+body[data-mode="cocoon"] .disc__spin {
   animation: none;
 }
 
@@ -755,7 +760,7 @@ body[data-mode="cover"] .disc__spin {
   );
 }
 
-body:not([data-mode="cover"]) .disc__grooves {
+body:not([data-mode="cover"]):not([data-mode="cocoon"]) .disc__grooves {
   opacity: 0.38;
 }
 
@@ -774,7 +779,7 @@ body:not([data-mode="cover"]) .disc__grooves {
   transition: opacity 0.5s var(--ease-out), transform 0.6s var(--ease-spring);
 }
 
-body:not([data-mode="cover"]) .disc__label {
+body:not([data-mode="cover"]):not([data-mode="cocoon"]) .disc__label {
   opacity: 1;
   transform: scale(1);
 }
