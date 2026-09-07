@@ -47,6 +47,7 @@ final class EdgeConfig {
     private static final String KEY_BOTTOM = "edgeBottom";
     private static final String KEY_LEFT = "edgeLeft";
     private static final String KEY_RIGHT = "edgeRight";
+    private static final String KEY_ONLY_OVER_MUSIC_APP = "edgeOnlyOverMusicApp";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -62,6 +63,9 @@ final class EdgeConfig {
         final boolean bottom;
         final boolean left;
         final boolean right;
+        /** Hide the overlay unless the tracked music app is the one on screen — see
+         *  ForegroundApp, and note it can only be honoured once "usage access" is granted. */
+        final boolean onlyOverMusicApp;
 
         Snapshot(
             String style,
@@ -74,7 +78,8 @@ final class EdgeConfig {
             boolean top,
             boolean bottom,
             boolean left,
-            boolean right
+            boolean right,
+            boolean onlyOverMusicApp
         ) {
             this.style = style;
             this.intensity = intensity;
@@ -87,6 +92,7 @@ final class EdgeConfig {
             this.bottom = bottom;
             this.left = left;
             this.right = right;
+            this.onlyOverMusicApp = onlyOverMusicApp;
         }
     }
 
@@ -108,7 +114,8 @@ final class EdgeConfig {
             prefs.getBoolean(KEY_TOP, true),
             prefs.getBoolean(KEY_BOTTOM, true),
             prefs.getBoolean(KEY_LEFT, true),
-            prefs.getBoolean(KEY_RIGHT, true)
+            prefs.getBoolean(KEY_RIGHT, true),
+            prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, true)
         );
     }
 
@@ -130,7 +137,8 @@ final class EdgeConfig {
         boolean top,
         boolean bottom,
         boolean left,
-        boolean right
+        boolean right,
+        boolean onlyOverMusicApp
     ) {
         prefs(context)
             .edit()
@@ -149,6 +157,7 @@ final class EdgeConfig {
             .putBoolean(KEY_BOTTOM, bottom)
             .putBoolean(KEY_LEFT, left)
             .putBoolean(KEY_RIGHT, right)
+            .putBoolean(KEY_ONLY_OVER_MUSIC_APP, onlyOverMusicApp)
             .apply();
     }
 

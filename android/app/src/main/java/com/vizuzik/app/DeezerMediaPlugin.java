@@ -383,6 +383,32 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
+     * Whether Vizuzik currently holds "usage access" — the special permission Edge Visualizer's
+     * "only over the music app" setting needs, since knowing which app is on screen is otherwise
+     * impossible from an overlay window (see ForegroundApp). Read on every resume, same reason as
+     * the two permission checks above: it is granted in a system Settings screen whose result the
+     * app never sees directly.
+     */
+    @PluginMethod
+    public void checkUsageAccess(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", ForegroundApp.hasUsageAccess(getContext()));
+        call.resolve(result);
+    }
+
+    /** Opens the system "usage access" screen. Like the other two, it only opens the screen. */
+    @PluginMethod
+    public void requestUsageAccess(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(intent)) {
+            call.resolve();
+        } else {
+            call.reject("unavailable");
+        }
+    }
+
+    /**
      * Starts OverlayEdgeGlowService. Orchestrated from the web layer (see syncEdgeOverlay() in
      * main.js) whenever the webview is alive — called only once Vizuzik itself is backgrounded, a
      * track is actually playing, and the overlay permission is already known to be granted, so a
@@ -443,6 +469,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("bottom", config.bottom);
         result.put("left", config.left);
         result.put("right", config.right);
+        result.put("onlyOverMusicApp", config.onlyOverMusicApp);
         call.resolve(result);
     }
 
@@ -473,7 +500,8 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("top", true),
             data.optBoolean("bottom", true),
             data.optBoolean("left", true),
-            data.optBoolean("right", true)
+            data.optBoolean("right", true),
+            data.optBoolean("onlyOverMusicApp", true)
         );
         call.resolve();
     }

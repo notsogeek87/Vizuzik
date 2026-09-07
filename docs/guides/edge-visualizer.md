@@ -46,7 +46,8 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 
 | Réglage | Effet |
 |---|---|
-| Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un ruban tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
+| Seulement par-dessus l'app de musique | Masque le contour dès que Deezer/Spotify n'est plus à l'écran. Activé par défaut ; demande l'autorisation « Accès aux données d'utilisation » — voir plus bas. |
+| Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un faisceau tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
 | Fréquences utilisées | Quelle partie du spectre fait varier le contour : tout le spectre, seulement les basses, les médiums, ou les aigus. |
 | Couleurs | Auto (les trois accents extraits de la pochette du morceau) ou trois couleurs fixes. |
 | Intensité / Épaisseur / Luminosité / Sensibilité | Des multiplicateurs sur la réaction visuelle — 1 = comportement par défaut. |
@@ -59,24 +60,54 @@ le redémarrer.
 
 Les styles « Barres » et « Contour lumineux » ne dessinent jamais que sur les quatre bords de
 l'écran — voir *Le principe* plus haut : la superposition est censée encadrer l'app suivie, pas
-la recouvrir. « Cocon » déroge à cette règle : un ruban tressé (trois brins, même principe que le
-mode `cocoon` du lecteur plein écran de Vizuzik — voir
-[Les sept modes de visualisation](modes-de-visualisation.md)) est dessiné centré sur la pochette
-de l'app suivie plutôt que sur les bords.
+la recouvrir. « Cocon » déroge à cette règle : un faisceau d'une vingtaine de brins fins,
+dessiné en carré arrondi (une superellipse, pas un cercle : ce qu'il encadre est une pochette
+carrée) tout autour de la pochette de l'app suivie plutôt que sur les bords. Même idée que le
+mode `cocoon` du lecteur plein écran — voir
+[Les sept modes de visualisation](modes-de-visualisation.md).
 
-Le problème, c'est que cette superposition n'a aucun moyen de lire la position réelle de la
-pochette dans l'app suivie — pas d'accès à sa hiérarchie de vues, aucun service d'accessibilité
-branché pour ça. `EdgeGlowView` estime donc cette position par une fraction fixe de la largeur et
-de la hauteur de l'écran (`ART_CENTER_X_FRACTION` / `ART_TOP_FRACTION` / `ART_WIDTH_FRACTION`),
-mesurée une fois sur une capture d'écran de référence de Deezer. Ça place bien le ruban sur les
-appareils et versions de Deezer proches de cette référence, mais dérive sur un écran de
-proportions différentes ou une mise en page Deezer qui aurait changé — et n'a bien sûr aucune
-chance d'être juste pour Spotify ou un autre lecteur suivi.
+Deux détails viennent du fait que ce style dessine **par-dessus une autre app**, et pas sur
+l'écran noir de Vizuzik : Deezer teinte sa page de lecture d'après la pochette, donc le fond est
+souvent clair. Un dégradé diagonal donne au faisceau une crête vive au lieu d'un ton laiteux
+uniforme, et chaque brin est posé sur une copie plus sombre et plus large de lui-même — la même
+raison qui fait qu'un texte clair porte une ombre. La première version utilisait au contraire une
+fusion additive : sur une page vert clair, éclaircir un fond déjà clair ne produit quasiment rien.
+
+Le problème de fond, c'est que cette superposition n'a aucun moyen de lire la position réelle de
+la pochette dans l'app suivie — pas d'accès à sa hiérarchie de vues, aucun service
+d'accessibilité branché pour ça. `EdgeGlowView` estime donc cette position par une fraction fixe
+de la largeur et de la hauteur de l'écran (`ART_CENTER_X_FRACTION` / `ART_TOP_FRACTION` /
+`ART_WIDTH_FRACTION`), mesurée sur une capture d'écran de Deezer : un carré de 728 px de côté,
+centré, à 192 px du haut sur un écran de 1248×1823. Ça place bien le ruban sur les appareils et
+versions de Deezer proches de cette référence, mais dérive sur un écran de proportions
+différentes ou une mise en page Deezer qui aurait changé — et n'a bien sûr aucune chance d'être
+juste pour Spotify ou un autre lecteur suivi.
+
+## Seulement par-dessus l'app de musique
+
+Par défaut, la superposition ne s'affiche que lorsque l'app suivie est **réellement à l'écran** :
+sortir de Deezer pour lire un message la fait disparaître, y revenir la ramène. C'est le premier
+réglage du panneau.
+
+Une fenêtre de superposition ne voit pas ce qu'il y a en dessous, et la session multimédia ne dit
+rien de l'app affichée — un Deezer en pause en arrière-plan y ressemble trait pour trait à un
+Deezer au premier plan. La seule façon de le savoir sans service d'accessibilité est
+`UsageStatsManager`, qui demande l'autorisation spéciale **« Accès aux données d'utilisation »**
+(voir `ForegroundApp.java`). Elle est accordée dans un écran système, comme les deux autres
+autorisations spéciales de l'app, et n'est demandée qu'au moment où on active ce réglage.
+
+Tant qu'elle n'est pas accordée, rien ne peut répondre à la question, et le contour **reste
+visible partout** plutôt que de se cacher au jugé : une décoration qui refuse silencieusement
+d'apparaître est un bien pire échec qu'une décoration qui apparaît de trop. Le libellé du réglage
+le dit dans ce cas. Rien d'autre n'est lu de ces statistiques : seulement le nom du dernier
+paquet passé au premier plan, jamais conservé ni envoyé nulle part.
 
 ## Prérequis et limitations
 
 - Android 8 (API 26) ou supérieur — en dessous, `TYPE_APPLICATION_OVERLAY` n'existe pas et le
   badge reste masqué.
+- « Seulement par-dessus l'app de musique » demande en plus l'accès aux données d'utilisation ;
+  sans lui, le réglage n'a simplement aucun effet.
 - La réaction en direct demande `RECORD_AUDIO` déjà accordé ; sans ça (et sans capture
   session audio à suivre), le contour respire en ambiant, jamais en inventant un tempo.
 - Une fois activé une première fois (réglage + permission d'overlay accordée), fonctionne même si

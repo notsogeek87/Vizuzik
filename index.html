@@ -243,6 +243,17 @@
           <input id="edge-overlay-enabled" type="checkbox" />
         </label>
 
+        <!-- Needs "usage access" to be honoured: nothing else can tell an overlay window which
+             app is actually on screen. Left on with the permission missing, the overlay simply
+             keeps showing everywhere rather than hiding on a guess — see ForegroundApp. -->
+        <label class="edge-settings__row edge-settings__row--switch">
+          <span>
+            Seulement par-dessus l'app de musique
+            <small id="edge-only-music-app-hint">Masque le visualiseur dès que Deezer n'est plus à l'écran.</small>
+          </span>
+          <input id="edge-only-music-app" type="checkbox" checked />
+        </label>
+
         <label class="edge-settings__row">
           <span>Style</span>
           <select id="edge-style">

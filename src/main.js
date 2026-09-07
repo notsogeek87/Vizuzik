@@ -39,6 +39,8 @@ const els = {
   edgeBottom: document.getElementById("edge-bottom"),
   edgeLeft: document.getElementById("edge-left"),
   edgeRight: document.getElementById("edge-right"),
+  edgeOnlyMusicApp: document.getElementById("edge-only-music-app"),
+  edgeOnlyMusicAppHint: document.getElementById("edge-only-music-app-hint"),
   modeToggle: document.getElementById("mode-toggle"),
   modeToast: document.getElementById("mode-toast"),
   title: document.getElementById("title"),
@@ -457,6 +459,31 @@ let edgeOverlayEnabled = isEdgeOverlayEnabled();
 // syncEdgeOverlay() ever changes this, and always right after telling the native side to match.
 let edgeOverlayRunning = false;
 
+// "Usage access": the extra grant the "only over the music app" setting needs, since nothing
+// else can tell an overlay window which app is actually on screen (see ForegroundApp.java).
+// Optional by design — without it the overlay simply keeps showing everywhere, so the setting
+// degrades to "off" rather than to an overlay that never appears.
+let usageAccessGranted = false;
+
+async function syncUsageAccess() {
+  try {
+    const state = await DeezerMedia.checkUsageAccess();
+    usageAccessGranted = !!(state && state.granted);
+  } catch (err) {
+    // Older native build without the method: leave it unknown and say nothing about it.
+    usageAccessGranted = false;
+  }
+  updateUsageAccessHint();
+}
+
+function updateUsageAccessHint() {
+  if (!els.edgeOnlyMusicAppHint) return;
+  els.edgeOnlyMusicAppHint.textContent =
+    els.edgeOnlyMusicApp.checked && !usageAccessGranted
+      ? "Autorisation « Accès aux données d'utilisation » requise — touchez pour l'accorder, sinon le visualiseur reste visible partout."
+      : "Masque le visualiseur dès que Deezer n'est plus à l'écran.";
+}
+
 /** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */
 async function syncOverlayPermission() {
   try {
@@ -596,6 +623,7 @@ const EDGE_SETTINGS_DEFAULTS = {
   bottom: true,
   left: true,
   right: true,
+  onlyOverMusicApp: true,
 };
 
 function readEdgeCustomColors() {
@@ -628,6 +656,7 @@ function readEdgeSettingsFromForm() {
     bottom: els.edgeBottom.checked,
     left: els.edgeLeft.checked,
     right: els.edgeRight.checked,
+    onlyOverMusicApp: els.edgeOnlyMusicApp.checked,
   };
 }
 
@@ -647,6 +676,7 @@ function applyEdgeSettingsToForm(config) {
   els.edgeBottom.checked = config.bottom;
   els.edgeLeft.checked = config.left;
   els.edgeRight.checked = config.right;
+  els.edgeOnlyMusicApp.checked = config.onlyOverMusicApp;
   els.edgeCustomColors.hidden = config.colorMode !== "custom";
 }
 
@@ -778,7 +808,9 @@ els.overlaySheet.addEventListener("click", (event) => {
 });
 
 els.edgeSettingsOpen.addEventListener("click", () => {
-  loadEdgeConfig().then(openEdgeSettingsSheet);
+  loadEdgeConfig()
+    .then(syncUsageAccess)
+    .then(openEdgeSettingsSheet);
 });
 els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
 els.edgeSettingsSheet.addEventListener("click", (event) => {
@@ -795,6 +827,15 @@ els.edgeOverlayEnabled.addEventListener("change", () => {
   }
   setEdgeOverlayEnabled(els.edgeOverlayEnabled.checked);
 });
+els.edgeOnlyMusicApp.addEventListener("change", () => {
+  updateUsageAccessHint();
+  // Only ever asked for on a deliberate switch-on, never at launch: it is the one setting that
+  // needs a second system screen, and it is optional.
+  if (els.edgeOnlyMusicApp.checked && !usageAccessGranted) {
+    DeezerMedia.requestUsageAccess().catch(() => {});
+  }
+});
+
 els.edgeColorMode.addEventListener("change", () => {
   els.edgeCustomColors.hidden = els.edgeColorMode.value !== "custom";
   pushEdgeConfig();
@@ -813,6 +854,7 @@ els.edgeColorMode.addEventListener("change", () => {
   els.edgeBottom,
   els.edgeLeft,
   els.edgeRight,
+  els.edgeOnlyMusicApp,
 ].forEach((el) => {
   el.addEventListener("input", pushEdgeConfig);
   el.addEventListener("change", pushEdgeConfig);
@@ -1173,6 +1215,7 @@ document.addEventListener("visibilitychange", () => {
     refresh().catch(() => {});
     syncAudioPermission();
     syncOverlayPermission();
+    syncUsageAccess();
   } else {
     // Nothing to animate against a hidden screen; rAF would be throttled anyway, but this
     // also drops the offscreen buffers' work entirely.
@@ -1201,6 +1244,7 @@ applyDisplayMode(false);
   await refresh().catch(() => {});
   requestAudioPermission();
   syncOverlayPermission();
+  syncUsageAccess();
   loadEdgeConfig();
   // Cold-start mirror: EdgeOverlayPreference only remembers what setEdgeOverlayEnabled() last
   // wrote, and until now that only ever happened inside toggleEdgeOverlay() — someone who turned
