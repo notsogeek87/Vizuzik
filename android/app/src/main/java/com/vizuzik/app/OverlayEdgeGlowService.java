@@ -157,6 +157,22 @@ public class OverlayEdgeGlowService extends Service
             PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
+        // Without this the window is laid out in the "default" cutout mode, which keeps it clear
+        // of the notch and the status bar in portrait — so the bars stopped at the top of the app
+        // rather than the top of the phone, with a band of nothing above them. FLAG_LAYOUT_NO_LIMITS
+        // alone does not cover this; the cutout mode is its own decision.
+        //
+        // It does not put anything *over* the status bar: TYPE_APPLICATION_OVERLAY sits below
+        // TYPE_STATUS_BAR in the window order, so the clock and system icons still draw on top.
+        // What it buys is the band itself, which is transparent on both Deezer and the launcher.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            params.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+        // Belt and braces: a view that fits system windows would be inset away from the very
+        // edges this one exists to draw on.
+        view.setFitsSystemWindows(false);
         try {
             windowManager.addView(view, params);
         } catch (Exception e) {

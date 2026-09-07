@@ -184,6 +184,18 @@ constate qu'elle manque.
 Rien d'autre n'est lu de ces statistiques : seulement le nom du dernier paquet passé au premier
 plan, jamais conservé ni envoyé nulle part.
 
+## Jusqu'où va la superposition
+
+La fenêtre couvre tout l'écran, **encoche et barre d'état comprises**. Ça ne va pas de soi :
+sans `layoutInDisplayCutoutMode`, Android met la fenêtre en retrait de l'encoche en portrait et
+les barres s'arrêtent en haut de l'app plutôt qu'en haut du téléphone, avec une bande vide
+au-dessus. `FLAG_LAYOUT_NO_LIMITS` ne suffit pas : le mode d'encoche est une décision distincte.
+
+Une limite subsiste, du système : `TYPE_APPLICATION_OVERLAY` est **sous** la barre d'état dans
+l'ordre des fenêtres. L'horloge et les icônes système restent donc dessinées par-dessus les
+barres ; ce qui est gagné, c'est la bande elle-même, transparente aussi bien sur Deezer que sur
+l'écran d'accueil.
+
 ## Prérequis et limitations
 
 - Android 8 (API 26) ou supérieur — en dessous, `TYPE_APPLICATION_OVERLAY` n'existe pas et le
