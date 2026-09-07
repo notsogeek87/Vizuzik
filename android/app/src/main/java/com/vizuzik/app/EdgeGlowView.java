@@ -42,7 +42,10 @@ final class EdgeGlowView extends View {
     // the very first frame on screen forever. A Handler tied to the main Looper's own message
     // queue has no such dependency on the window being considered for vsync by the system; a
     // plain border glow doesn't need frame-perfect vsync timing anyway.
-    private static final long FRAME_INTERVAL_MS = 42; // ~24fps
+    // ~30fps. Was 24, which is enough for a border glow but reads as choppy on the cocoon's
+    // travelling weave; affordable now that a frame no longer recomputes the ribbon's geometry
+    // from scratch.
+    private static final long FRAME_INTERVAL_MS = 33;
     private static final int[][] FALLBACK_PALETTE = {
         { 124, 92, 255 },
         { 236, 72, 153 },
@@ -98,27 +101,69 @@ final class EdgeGlowView extends View {
     //
     // The path is a superellipse, not a circle: the thing it frames is a square cover, and a
     // circle around a square leaves gaps at the edge midpoints and crowds the corners.
-    private static final int COCOON_STRANDS = 26;
-    private static final int COCOON_SPOKES = 120;
+    private static final int COCOON_STRANDS = 22;
+    private static final int COCOON_SPOKES = 96;
     private static final float COCOON_INNER = 1.045f;
     private static final float COCOON_BAND = 0.20f;
     private static final float COCOON_SWING = 0.12f;
     private static final float COCOON_SHEAR = 0.45f;
     private static final float COCOON_SQUIRCLE = 3.4f;
-    private static final float COCOON_LINE = 0.5f;
+    private static final float COCOON_LINE = 0.62f;
     private static final int COCOON_SHADOW_ALPHA = 33;
     /** How far the ribbon's colours are pushed away from grey — see buildCocoonSweep(). */
-    private static final float COCOON_SATURATION = 1.65f;
+    private static final float COCOON_SATURATION = 2.3f;
+    // How far the ribbon's hue is turned away from the album's own. Deezer tints its now-playing
+    // page from the very artwork the palette is extracted from, so an unturned ribbon lands on
+    // roughly the colour of the page behind it and disappears into it — on a green cover it was
+    // green on green, and no amount of saturation rescues that. Near-complementary: still the
+    // track's own colour, answered rather than repeated, and it changes with every track. The
+    // "Couleurs / Personnalisées" setting bypasses this entirely.
+    private static final float COCOON_HUE_TURN = 150f;
     // Sum of the three lobe amplitudes below, used to bias the wave into 0..1 so it can only
     // ever push a strand outward: this view draws on top of the music app, so anything that
     // dipped inward would crawl across the album art it is supposed to be framing.
     private static final float COCOON_WAVE_MAX = 0.085f + 0.042f + 0.055f;
+
+    // Everything about the ribbon that depends only on where you are around it, computed once at
+    // class load: the superellipse radius (three Math.pow calls each), the unit vector, and the
+    // sines and cosines of the three lobe frequencies. All of it used to be recomputed for every
+    // strand of every frame even though it is identical across strands and never changes —
+    // roughly 226,000 Math.pow and 377,000 trig calls a second on the main thread, which is what
+    // made the ribbon stutter. What is left per strand is six trig calls for its own phase
+    // offsets, and the angle-sum identity turns the rest into multiply-adds.
+    private static final float[] COCOON_COS = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_SIN = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_SHAPE = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_SIN3 = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_COS3 = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_SIN5 = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_COS5 = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_SIN2 = new float[COCOON_SPOKES + 1];
+    private static final float[] COCOON_COS2 = new float[COCOON_SPOKES + 1];
+
+    static {
+        for (int i = 0; i <= COCOON_SPOKES; i++) {
+            double a = i / (double) COCOON_SPOKES * Math.PI * 2;
+            COCOON_COS[i] = (float) Math.cos(a);
+            COCOON_SIN[i] = (float) Math.sin(a);
+            COCOON_SHAPE[i] = squircle((float) a);
+            COCOON_SIN3[i] = (float) Math.sin(a * 3);
+            COCOON_COS3[i] = (float) Math.cos(a * 3);
+            COCOON_SIN5[i] = (float) Math.sin(a * 5);
+            COCOON_COS5[i] = (float) Math.cos(a * 5);
+            COCOON_SIN2[i] = (float) Math.sin(a * 2);
+            COCOON_COS2[i] = (float) Math.cos(a * 2);
+        }
+    }
 
     private final Paint paint = new Paint();
     // One Path per strand, allocated once and rebuilt in place: drawCocoon() walks the whole
     // bundle three times per frame (outline, bloom, strand), and rebuilding the geometry for
     // each pass — or allocating Paths per frame — would be pure waste.
     private final Path[] cocoonPaths = new Path[COCOON_STRANDS];
+    // The spectrum sampled once per frame around the ribbon: it depends on the angle, not on the
+    // strand, so sampling it inside the strand loop did the same work 22 times over.
+    private final float[] cocoonLevels = new float[COCOON_SPOKES + 1];
     private final float density;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tick = this::onTick;
@@ -530,7 +575,7 @@ final class EdgeGlowView extends View {
         int[] colors = {
             withAlpha(saturate(paletteColorAt(0f)), 255),
             withAlpha(lit(paletteColorAt(0.6f), 0.55f), 255),
-            withAlpha(saturate(paletteColorAt(1.2f)), 255),
+            withAlpha(saturate(ribbonColor(1.2f)), 255),
             withAlpha(lit(paletteColorAt(1.8f), 0.45f), 255),
             withAlpha(saturate(paletteColorAt(2.4f)), 255),
         };
@@ -749,7 +794,7 @@ final class EdgeGlowView extends View {
         paint.setAntiAlias(true);
 
         float lineWidth = Math.max(1f, COCOON_LINE * density * thicknessMul);
-        int alpha = clamp255((int) ((175 + loud * 45f + pulse * 55f) * brightnessMul));
+        int alpha = clamp255((int) ((205 + loud * 40f + pulse * 50f) * brightnessMul));
         // Oscillating rather than fixed: the weave visibly opens and closes instead of holding
         // one shape while only the light moves over it.
         float shearSpan = COCOON_SHEAR + 0.55f * (float) Math.sin(cocoonShear);
@@ -760,28 +805,40 @@ final class EdgeGlowView extends View {
         Shader sweep = buildCocoonSweep(cx, cy, half, false);
         Shader shade = buildCocoonSweep(cx, cy, half, true);
 
+        for (int i = 0; i <= COCOON_SPOKES; i++) {
+            cocoonLevels[i] = (sampleLevel(bands, (float) i / COCOON_SPOKES) * 0.30f + pulse * 0.10f)
+                * intensity;
+        }
+
+        float waveScale = 1f / (2 * COCOON_WAVE_MAX);
         for (int s = 0; s < COCOON_STRANDS; s++) {
             float u = (float) s / (COCOON_STRANDS - 1); // 0 against the artwork .. 1 outermost
             float shear = u * shearSpan;
-            Path path = cocoonPaths[s];
+            float inner = half * COCOON_INNER;
+            float reach = half * (0.25f + u * 0.5f);
+            float offset = band * u;
 
+            // sin(ka + phase) split by the angle-sum identity, so the per-point work is six
+            // multiply-adds against the tables instead of three sines.
+            float p1 = cocoonWaveA + shear;
+            float p2 = -cocoonWaveB * 1.3f + shear * 1.7f;
+            float p3 = -cocoonWaveB * 0.7f - shear;
+            float s1 = (float) Math.sin(p1), c1 = (float) Math.cos(p1);
+            float s2 = (float) Math.sin(p2), c2 = (float) Math.cos(p2);
+            float s3 = (float) Math.sin(p3), c3 = (float) Math.cos(p3);
+
+            Path path = cocoonPaths[s];
             path.reset();
             for (int i = 0; i <= COCOON_SPOKES; i++) {
-                float f = (float) i / COCOON_SPOKES;
-                float angle = (float) (f * Math.PI * 2);
-                float wave = (float) (
-                    Math.sin(angle * 3 + cocoonWaveA + shear) * 0.085
-                        + Math.sin(angle * 5 - cocoonWaveB * 1.3 + shear * 1.7) * 0.042
-                        + Math.sin(angle * 2 - cocoonWaveB * 0.7 - shear) * 0.055
-                );
-                float wave01 = (wave + COCOON_WAVE_MAX) / (2 * COCOON_WAVE_MAX);
-                float react = (sampleLevel(bands, f) * 0.30f + pulse * 0.10f) * intensity;
-                float radius = half * squircle(angle) * COCOON_INNER
-                    + band * u
-                    + swing * wave01
-                    + half * react * (0.25f + u * 0.5f);
-                float px = cx + (float) Math.cos(angle) * radius;
-                float py = cy + (float) Math.sin(angle) * radius;
+                float wave = (COCOON_SIN3[i] * c1 + COCOON_COS3[i] * s1) * 0.085f
+                    + (COCOON_SIN5[i] * c2 + COCOON_COS5[i] * s2) * 0.042f
+                    + (COCOON_SIN2[i] * c3 + COCOON_COS2[i] * s3) * 0.055f;
+                float radius = inner * COCOON_SHAPE[i]
+                    + offset
+                    + swing * ((wave + COCOON_WAVE_MAX) * waveScale)
+                    + cocoonLevels[i] * reach;
+                float px = cx + COCOON_COS[i] * radius;
+                float py = cy + COCOON_SIN[i] * radius;
                 if (i == 0) path.moveTo(px, py);
                 else path.lineTo(px, py);
             }
@@ -803,6 +860,7 @@ final class EdgeGlowView extends View {
         //    reads as wire. Only every fifth one carries it — bloomed from all of them the wide
         //    strokes stack into a solid milky cloud and the weave disappears inside it.
         paint.setShader(sweep);
+        paint.setAntiAlias(false); // a deliberately soft wide stroke gains nothing from it
         for (int s = 0; s < COCOON_STRANDS; s += 5) {
             float u = (float) s / (COCOON_STRANDS - 1);
             float a = alpha * (1 - 0.6f * u);
@@ -815,6 +873,7 @@ final class EdgeGlowView extends View {
         }
 
         // 3. The crisp strands themselves, dense against the cover and dissolving outward.
+        paint.setAntiAlias(true);
         paint.setStrokeWidth(lineWidth);
         for (int s = 0; s < COCOON_STRANDS; s++) {
             float u = (float) s / (COCOON_STRANDS - 1);
@@ -842,24 +901,33 @@ final class EdgeGlowView extends View {
      * holding the whole band at one middle value is what made the first attempt look like fog.
      * Turning slowly, so the crests travel around the weave.
      */
+    /** The ribbon's take on a palette colour: turned off the album's hue so it cannot vanish
+     *  into Deezer's page, unless the user has pinned their own colours. */
+    private int ribbonColor(float index) {
+        int base = paletteColorAt(index);
+        return customPalette != null ? base : rotateHue(base, COCOON_HUE_TURN);
+    }
+
     private Shader buildCocoonSweep(float cx, float cy, float half, boolean dark) {
         float angle = cocoonSweep;
         float reach = half * 1.6f;
         float dx = (float) Math.cos(angle) * reach;
         float dy = (float) Math.sin(angle) * reach;
-        float[] envelope = { 0.18f, 0.32f, 1f, 0.45f, 0.26f, 0.85f, 0.34f, 0.18f };
+        // Raised off the floor since the first version was too faint to make out on a device:
+        // still a strong crest-to-trough range, but nothing falls away to almost nothing.
+        float[] envelope = { 0.34f, 0.55f, 1f, 0.68f, 0.46f, 0.92f, 0.56f, 0.34f };
         float[] stops = { 0f, 0.16f, 0.30f, 0.44f, 0.58f, 0.74f, 0.88f, 1f };
         int[] tones = dark
             ? new int[] { 0, 0, 0, 0, 0, 0, 0, 0 }
             : new int[] {
-                saturate(dim(paletteColorAt(1.0f), 0.55f)),
-                saturate(paletteColorAt(1.2f)),
-                lit(paletteColorAt(1.5f), 0.92f),
-                saturate(paletteColorAt(1.8f)),
-                saturate(dim(paletteColorAt(2.0f), 0.7f)),
-                lit(paletteColorAt(2.3f), 0.80f),
-                saturate(paletteColorAt(2.6f)),
-                saturate(dim(paletteColorAt(2.9f), 0.55f)),
+                saturate(dim(ribbonColor(1.0f), 0.55f)),
+                saturate(ribbonColor(1.2f)),
+                lit(saturate(ribbonColor(1.5f)), 0.72f),
+                saturate(ribbonColor(1.8f)),
+                saturate(dim(ribbonColor(2.0f), 0.7f)),
+                lit(saturate(ribbonColor(2.3f)), 0.6f),
+                saturate(ribbonColor(2.6f)),
+                saturate(dim(ribbonColor(2.9f), 0.55f)),
             };
         int[] colors = new int[tones.length];
         for (int i = 0; i < tones.length; i++) {
@@ -885,12 +953,12 @@ final class EdgeGlowView extends View {
             float py = cy + (float) Math.sin(angle) * radius;
             float size = (1f + (i % 3) * 0.55f) * density * (0.7f + loud);
             paint.setColor(withAlpha(
-                lit(paletteColorAt(i % 3), 0.4f),
+                lit(saturate(ribbonColor(i % 3)), 0.35f),
                 clamp255((int) ((30 + loud * 40f) * twinkle * brightnessMul))
             ));
             canvas.drawCircle(px, py, size * 3f, paint);
             paint.setColor(withAlpha(
-                lit(paletteColorAt(i % 3), 0.75f),
+                lit(saturate(ribbonColor(i % 3)), 0.7f),
                 clamp255((int) ((90 + loud * 90f + pulse * 60f) * twinkle * brightnessMul))
             ));
             canvas.drawCircle(px, py, size, paint);
@@ -915,6 +983,40 @@ final class EdgeGlowView extends View {
             Math.round(r + (255 - r) * amount),
             Math.round(g + (255 - g) * amount),
             Math.round(b + (255 - b) * amount)
+        );
+    }
+
+    /** Turns a colour's hue by `degrees`, keeping how light and how colourful it is. */
+    private static int rotateHue(int color, float degrees) {
+        float r = Color.red(color) / 255f;
+        float g = Color.green(color) / 255f;
+        float b = Color.blue(color) / 255f;
+        float max = Math.max(r, Math.max(g, b));
+        float min = Math.min(r, Math.min(g, b));
+        float delta = max - min;
+        if (delta <= 0.0001f) return color; // grey has no hue to turn
+
+        float hue;
+        if (max == r) hue = ((g - b) / delta) % 6f;
+        else if (max == g) hue = (b - r) / delta + 2f;
+        else hue = (r - g) / delta + 4f;
+        hue = (hue * 60f + degrees) % 360f;
+        if (hue < 0) hue += 360f;
+
+        float c = delta;
+        float x = c * (1 - Math.abs((hue / 60f) % 2f - 1));
+        float m = min;
+        float rr, gg, bb;
+        if (hue < 60) { rr = c; gg = x; bb = 0; }
+        else if (hue < 120) { rr = x; gg = c; bb = 0; }
+        else if (hue < 180) { rr = 0; gg = c; bb = x; }
+        else if (hue < 240) { rr = 0; gg = x; bb = c; }
+        else if (hue < 300) { rr = x; gg = 0; bb = c; }
+        else { rr = c; gg = 0; bb = x; }
+        return Color.rgb(
+            clamp255(Math.round((rr + m) * 255)),
+            clamp255(Math.round((gg + m) * 255)),
+            clamp255(Math.round((bb + m) * 255))
         );
     }
 

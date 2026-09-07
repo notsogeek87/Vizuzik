@@ -91,8 +91,11 @@ image. Trois choses en découlent :
   ruban autour d'un cinquième de l'opacité pleine, et deux arcs fins seulement brûlent en
   blanc. Une lumière se lit comme une lumière quand elle est concentrée ; maintenir toute la
   bande à une valeur moyenne, c'est ce qui donnait un brouillard laiteux ;
-- **les couleurs sont poussées loin du gris** (et les crêtes vers le blanc), pour un contraste qui
-  ne dépend pas d'avoir une teinte différente du fond — ce qui est impossible ici ;
+- **la teinte est tournée vers la complémentaire de la pochette** (150°), et poussée loin du
+  gris. Sans ça, le ruban tombe sur la couleur même de la page — sur une pochette verte, du vert
+  sur du vert, qu'aucune saturation ne rattrape. C'est toujours la couleur du morceau, mais
+  répondue au lieu d'être répétée, et elle change à chaque titre. Le réglage
+  « Couleurs / Personnalisées » court-circuite tout ça ;
 - **chaque brin est posé sur une copie plus sombre de lui-même**, la même raison qui fait qu'un
   texte clair porte une ombre, et quelques brins sont repassés en traits larges et très
   transparents pour le halo : la lumière déborde, un trait fin tout seul se lit comme un fil.
@@ -122,6 +125,18 @@ tenir dans la place disponible plutôt que de sortir de l'écran.
 Un écran ou une version de Deezer éloignés de ces deux références dérivent, et rien ici ne peut
 le corriger sans véritable inspection de la mise en page — sans parler de Spotify ou d'un autre
 lecteur suivi, dont les mises en page sont différentes.
+
+### Ce qui le rend fluide
+
+Tout ce qui ne dépend que de l'angle — le rayon de la superellipse (trois `Math.pow` à chaque
+point), le vecteur unitaire, les sinus et cosinus des trois fréquences de lobe — est calculé
+**une seule fois**, au chargement de la classe, dans des tables. C'était auparavant recalculé
+pour chaque brin de chaque image alors que c'est identique d'un brin à l'autre et ne change
+jamais : environ 226 000 `Math.pow` et 377 000 appels trigonométriques par seconde sur le thread
+principal, ce qui se voyait à l'œil. Il ne reste que six appels trigonométriques par brin, pour
+son propre déphasage, l'identité de la somme d'angles transformant le reste en
+multiplications-additions. Le spectre, lui, est échantillonné une fois par image et non une fois
+par brin. La boucle tourne du coup à 30 images/s au lieu de 24.
 
 ## Seulement par-dessus l'app de musique
 
