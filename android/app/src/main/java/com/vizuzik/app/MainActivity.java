@@ -27,6 +27,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DeezerMediaPlugin.class);
         super.onCreate(savedInstanceState);
         EdgeOverlayController.getInstance().init(getApplicationContext());
+        // Also started from NowPlayingListenerService, which is the earlier of the two whenever
+        // notification access is granted. Started here too for the process that comes up via the
+        // Activity instead: the sooner it listens, the smaller the window in which the tracked
+        // app's one-shot session broadcast can be missed (see AudioSessionRegistry).
+        AudioSessionRegistry.getInstance().start(getApplicationContext());
         // Vizuzik is meant to be looked at, not touched — propped up as a car/desk display for
         // as long as the music plays. Without this the screen times out and locks like any
         // other app, which defeats the whole point of it being on screen at all.

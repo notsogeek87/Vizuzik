@@ -52,6 +52,16 @@ final class EdgeOverlayController implements DeezerMediaBridge.Listener {
         sync();
     }
 
+    /** The service is gone — including when it stopped itself rather than being asked to, which is
+     *  why this can't be inferred from requestStop() alone. Re-syncs rather than just clearing the
+     *  flag: this can also arrive *after* a newer start (foreground Vizuzik, then straight back to
+     *  Deezer, destroying the old instance last), and leaving the flag false while the overlay is
+     *  in fact running would make the next stop a no-op and strand it on screen. */
+    void onServiceStopped() {
+        lastStarted = false;
+        sync();
+    }
+
     /** Re-evaluates and acts — called on every now-playing change (this class's own listener
      *  callback above) and on every MainActivity foreground/background transition. */
     void sync() {
@@ -68,11 +78,13 @@ final class EdgeOverlayController implements DeezerMediaBridge.Listener {
             && !MainActivity.isForeground();
 
         if (shouldRun == lastStarted) return;
-        lastStarted = shouldRun;
         if (shouldRun) {
-            OverlayEdgeGlowService.requestStart(appContext);
+            // Only counts as started if the request actually went through — a foreground-service
+            // start refused from the background must leave this false so the next event retries.
+            lastStarted = OverlayEdgeGlowService.requestStart(appContext);
         } else {
             OverlayEdgeGlowService.requestStop(appContext);
+            lastStarted = false;
         }
     }
 }

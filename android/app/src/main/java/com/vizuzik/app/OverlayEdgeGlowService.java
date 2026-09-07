@@ -84,8 +84,23 @@ public class OverlayEdgeGlowService extends Service
      * are idempotent on the receiving end (onStartCommand() no-ops if the view already exists;
      * Android no-ops stopService() on an already-stopped service).
      */
-    static void requestStart(Context context) {
-        ContextCompat.startForegroundService(context, new Intent(context, OverlayEdgeGlowService.class));
+    /** @return whether the service was actually asked to start — false means the caller's own
+     *  "it's running now" bookkeeping must not be set, or it would never retry. */
+    static boolean requestStart(Context context) {
+        try {
+            ContextCompat.startForegroundService(context, new Intent(context, OverlayEdgeGlowService.class));
+            return true;
+        } catch (Exception e) {
+            // From Android 12, starting a foreground service while the process is in the
+            // background throws ForegroundServiceStartNotAllowedException. EdgeOverlayController
+            // calls this from DeezerMediaBridge callbacks, which fire on the tracked app's media
+            // events — i.e. routinely while Vizuzik itself is fully backgrounded — so this is a
+            // reachable path, and an uncaught exception on the main thread there takes down the
+            // whole app rather than just the overlay. Same rule as startForegroundNotification()
+            // below: never crash Vizuzik for the sake of a border effect.
+            Log.w(TAG, "startForegroundService", e);
+            return false;
+        }
     }
 
     static void requestStop(Context context) {
@@ -314,6 +329,11 @@ public class OverlayEdgeGlowService extends Service
         if (trackedSessionAudioSource != null) {
             trackedSessionAudioSource.stop();
         }
+        // Several paths above stop this service on their own (no overlay permission, addView
+        // refused, startForeground failing). Without telling the controller, its "already started"
+        // bookkeeping stays stuck on true and it never asks again for the rest of the process —
+        // the overlay would just silently never come back.
+        EdgeOverlayController.getInstance().onServiceStopped();
         super.onDestroy();
     }
 }

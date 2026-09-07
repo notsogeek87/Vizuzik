@@ -41,6 +41,11 @@ public class NowPlayingListenerService extends NotificationListenerService {
         // plays, without the user ever having to open Vizuzik first.
         EdgeOverlayController.getInstance().init(getApplicationContext());
         DeezerMediaBridge.getInstance().addListener(EdgeOverlayController.getInstance());
+        // Same reasoning, and the reason this has to happen *here* rather than when the overlay
+        // starts: the music app announces its audio session once, when it opens it, so anything
+        // that only starts listening after the user has switched to that app has already missed
+        // it. See AudioSessionRegistry.
+        AudioSessionRegistry.getInstance().start(getApplicationContext());
         mediaSessionManager = (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
         ComponentName component = new ComponentName(this, NowPlayingListenerService.class);
         try {

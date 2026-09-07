@@ -1,14 +1,9 @@
 package com.vizuzik.app;
 
 import android.Manifest;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.media.audiofx.AudioEffect;
 import android.media.audiofx.Visualizer;
-import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -21,16 +16,16 @@ import androidx.core.content.ContextCompat;
  * RECORD_AUDIO (already requested by "mic" mode in the full-screen player; see
  * MicCaptureThread/startMicCapture()).
  *
- * How the session id is found: Android's standard playback stacks (MediaPlayer, ExoPlayer's
- * AudioTrack path) send AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION whenever a new
- * *non-zero* audio session opens (and ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION when it goes
- * away), carrying that session's id and the playing app's package name — the traditional way a
- * third-party equalizer/visualizer app attaches to whatever's currently playing without knowing
- * in advance which app or session that will be. Validated on-device before writing this (see
- * VisualizerProbe, the throwaway prototype this class replaces for production use): on the test
- * device, attaching to the "output mix" (session 0) is refused outright by the OS
- * (ERROR_INVALID_OPERATION), but attaching to the tracked app's own session via this broadcast
- * works and returns real, moving FFT data.
+ * How the session id is found: AudioSessionRegistry, which listens process-wide for the
+ * ACTION_OPEN/CLOSE_AUDIO_EFFECT_CONTROL_SESSION broadcasts Android's standard playback stacks
+ * send and caches the tracked app's currently open session. This class deliberately does not
+ * register for those broadcasts itself — see AudioSessionRegistry's class doc: the open broadcast
+ * fires once, when the player opens its session, which is always well before this source starts,
+ * so listening from here caught nothing and left the overlay permanently in its ambient regime.
+ * Validated on-device before writing this (see VisualizerProbe, the throwaway prototype this class
+ * replaces for production use): on the test device, attaching to the "output mix" (session 0) is
+ * refused outright by the OS (ERROR_INVALID_OPERATION), but attaching to the tracked app's own
+ * session works and returns real, moving FFT data.
  *
  * Produces the same 32-band, 55 Hz-7000 Hz logarithmic loudness spectrum as
  * AudioCaptureService/MicCaptureThread, so EdgeGlowView.pushLevels() takes levels from this
@@ -96,12 +91,7 @@ final class TrackedSessionAudioSource {
     private final double[] bandFrequencies = new double[BAND_COUNT];
     private final float[] smoothedBands = new float[BAND_COUNT];
 
-    private final BroadcastReceiver sessionReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            onAudioEffectSessionEvent(intent);
-        }
-    };
+    private final AudioSessionRegistry.Listener registryListener = this::onSessionChanged;
 
     private final Visualizer.OnDataCaptureListener captureListener = new Visualizer.OnDataCaptureListener() {
         @Override
@@ -133,35 +123,23 @@ final class TrackedSessionAudioSource {
         }
     }
 
-    /** Starts listening for a session to attach to. Attaching itself only happens once a
-     *  matching broadcast arrives — see onAudioEffectSessionEvent(). */
+    /** Attaches straight away to whatever session the registry already knows about — the normal
+     *  case, since the tracked app started playing before this source ever ran — and follows any
+     *  later change from there. */
     void start() {
         if (workerThread != null) return;
         workerThread = new HandlerThread("VizuzikTrackedSessionAudio");
         workerThread.start();
         workerHandler = new Handler(workerThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION);
-        filter.addAction(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION);
-        // This broadcast comes from another app's process (the tracked app's player), not the
-        // system, so on API 33+ it needs to be declared explicitly or registerReceiver() throws
-        // on API 34+ targets. Delivered on the main thread (no Handler passed) — fine, since
-        // onAudioEffectSessionEvent() only reads two Intent extras before handing the real work
-        // to workerHandler.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            appContext.registerReceiver(sessionReceiver, filter, Context.RECEIVER_EXPORTED);
-        } else {
-            appContext.registerReceiver(sessionReceiver, filter);
-        }
+        AudioSessionRegistry registry = AudioSessionRegistry.getInstance();
+        registry.start(appContext);
+        registry.addListener(registryListener);
+        onSessionChanged(registry.currentSessionId());
     }
 
     void stop() {
-        try {
-            appContext.unregisterReceiver(sessionReceiver);
-        } catch (IllegalArgumentException ignored) {
-            // Already unregistered, or start() was never called.
-        }
+        AudioSessionRegistry.getInstance().removeListener(registryListener);
         if (workerHandler != null) {
             workerHandler.post(this::releaseVisualizer);
         }
@@ -173,31 +151,28 @@ final class TrackedSessionAudioSource {
         }
     }
 
-    private void onAudioEffectSessionEvent(Intent intent) {
-        int sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, -1);
-        String packageName = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME);
-        if (sessionId <= 0 || packageName == null || !MusicApps.isKnownPackage(packageName)) {
-            return;
-        }
+    /** Called on the registry's thread (or this one's caller, at start()) — hands every decision
+     *  straight to workerHandler, since everything below it touches the Visualizer. */
+    private void onSessionChanged(int sessionId) {
         Handler handler = workerHandler;
         if (handler == null) return; // stop() already ran.
-        if (AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION.equals(intent.getAction())) {
-            handler.post(() -> onSessionClosed(sessionId));
+        if (sessionId <= 0) {
+            handler.post(this::onSessionClosed);
         } else {
-            handler.post(() -> attach(sessionId, packageName));
+            handler.post(() -> attach(sessionId));
         }
     }
 
     /** Runs on workerHandler's thread. */
-    private void onSessionClosed(int sessionId) {
-        if (sessionId != attachedSessionId) return; // Some other session closing, not ours.
+    private void onSessionClosed() {
+        if (attachedSessionId == -1) return; // Nothing was attached in the first place.
         releaseVisualizer();
         listener.onSourceLost();
     }
 
     /** Runs on workerHandler's thread — so does every callback the Visualizer built here ever
      *  fires, since delivery follows the creating thread's Looper. */
-    private void attach(int sessionId, String packageName) {
+    private void attach(int sessionId) {
         // Some players resend ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION for the same session on a
         // focus change or route switch, without the session actually closing — tearing down and
         // recreating the Visualizer for that would just be a brief, avoidable glow dropout.
@@ -228,7 +203,7 @@ final class TrackedSessionAudioSource {
             visualizer = v;
             attachedSessionId = sessionId;
         } catch (Exception e) {
-            Log.w(TAG, "Impossible d'attacher le Visualizer à la session de " + packageName, e);
+            Log.w(TAG, "Impossible d'attacher le Visualizer à la session " + sessionId, e);
             listener.onSourceLost();
         }
     }
