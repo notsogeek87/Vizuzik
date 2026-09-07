@@ -23,7 +23,7 @@ Une étiquette apparaît brièvement pour nommer le mode. Le choix est mémoris�
 | `radial` | Corona | Couronne de rayons autour du disque, étincelles en orbite et ondes de choc à chaque impulsion. |
 | `aurora` | Aurore | Six rubans de lumière traversant l'écran, un par tranche de fréquence. |
 | `nebula` | Nébuleuse | Galaxie de particules en orbite laissant des traînées lumineuses. |
-| `cassette` | Cassette | Illustration plein écran d'une cassette audio — l'écran du téléphone devient la fenêtre d'un baladeur. Le boîtier ne bouge pas, mais les deux bobines (bande enroulée, dents du moyeu) tournent pendant la lecture et s'arrêtent à la pause ; les moyeux et la plaque de marque suivent la palette de la pochette, et la pochette du morceau en cours est imprimée sur l'étiquette. Ce mode force l'écran en paysage (voir plus bas) ; si le téléphone reste en portrait le temps que la rotation se fasse, l'illustration pivote pour rester plein écran. **Taper** l'écran replie les boutons de lecture, la barre de progression, la carte titre/artiste et la barre du haut (badge de capture + bouton de mode) pour une vue totalement dégagée de la cassette ; un second tap les ramène. Le titre/artiste (près du haut, sur une carte translucide) reste volontairement à l'écart des bobines. |
+| `cassette` | Cassette | Illustration plein écran d'une cassette audio — l'écran du téléphone devient la fenêtre d'un baladeur. Le boîtier ne bouge pas, mais les deux bobines (bande enroulée, dents du moyeu) tournent pendant la lecture et s'arrêtent à la pause ; les moyeux et la plaque de marque suivent la palette de la pochette, et la pochette du morceau en cours est imprimée sur l'étiquette. Ce mode force l'écran en paysage (voir plus bas) ; si le téléphone reste en portrait le temps que la rotation se fasse, l'illustration pivote pour rester plein écran. **Taper** l'écran replie les boutons de lecture, la barre de progression, la carte titre/artiste et la barre du haut (badge d'état audio + bouton de mode) pour une vue totalement dégagée de la cassette ; un second tap les ramène. Le titre/artiste (près du haut, sur une carte translucide) reste volontairement à l'écart des bobines. |
 
 Hors mode `cover`, la pochette se transforme en disque vinyle : elle rétrécit, s'arrondit,
 tourne pendant la lecture et s'arrête à la pause. En mode `cassette`, elle disparaît
@@ -47,10 +47,11 @@ paysage plutôt que de rester centrés verticalement, pour profiter d'un écran 
 - Les couleurs de toute l'interface viennent de la pochette du morceau en cours.
 - Un titre trop long défile lentement au lieu d'être coupé.
 
-## Sans capture audio
+## Quand l'application n'entend rien
 
-Sans capture du son réel (voir [Activer le son réel](capture-audio.md)), l'application **ne
-fait semblant d'aucun rythme**. Elle ne peut pas entendre la musique, et une pulsation inventée
+Quand rien n'arrive de la capture (autorisation refusée, ou aucune session audio à suivre —
+voir [Une seule source audio](../architecture/2026-09-07-source-audio-unique.md)), l'application
+**ne fait semblant d'aucun rythme**. Elle ne peut pas entendre la musique, et une pulsation inventée
 tomberait forcément à côté de celle qu'on écoute — ce qui se remarque bien plus qu'une image
 calme.
 
@@ -63,5 +64,5 @@ calme.
 - l'écran ne s'illumine d'un coup que sur ce qui arrive vraiment : changement de morceau,
   lecture/pause, glissement pour changer de titre, changement de mode.
 
-Le badge en haut à gauche indique toujours l'état réel, et reste le moyen d'activer la
-capture.
+Le badge en haut à gauche dit toujours ce que le visualiseur entend réellement. Ce n'est
+qu'un indicateur : il n'y a plus de source à choisir.

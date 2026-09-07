@@ -11,10 +11,9 @@ import android.util.Log;
 import androidx.core.content.ContextCompat;
 
 /**
- * Feeds OverlayEdgeGlowService a real-time loudness spectrum straight from the tracked app's own
- * audio session, via android.media.audiofx.Visualizer — no MediaProjection consent dialog, only
- * RECORD_AUDIO (already requested by "mic" mode in the full-screen player; see
- * MicCaptureThread/startMicCapture()).
+ * The app's audio source: a real-time loudness spectrum taken straight from the tracked app's own
+ * audio session via android.media.audiofx.Visualizer — no MediaProjection consent dialog, only
+ * RECORD_AUDIO (asked for once by requestAudioPermission() in DeezerMediaPlugin).
  *
  * How the session id is found: AudioSessionRegistry, which listens process-wide for the
  * ACTION_OPEN/CLOSE_AUDIO_EFFECT_CONTROL_SESSION broadcasts Android's standard playback stacks
@@ -27,14 +26,10 @@ import androidx.core.content.ContextCompat;
  * refused outright by the OS (ERROR_INVALID_OPERATION), but attaching to the tracked app's own
  * session works and returns real, moving FFT data.
  *
- * Produces the same 32-band, 55 Hz-7000 Hz logarithmic loudness spectrum as
- * AudioCaptureService/MicCaptureThread, so EdgeGlowView.pushLevels() takes levels from this
- * source exactly as it already does from AudioLevelsBridge — no changes needed there. The band
- * table and smoothing formula are mirrored here rather than shared, same as MicCaptureThread
- * mirrors AudioCaptureService's — this source runs in yet another context (its own worker
- * thread, driven by FFT bins rather than raw PCM), and the project's own precedent is to keep
- * each capture path's copy independent rather than couple three different contexts to one
- * shared helper.
+ * Produces a 32-band, 55 Hz-7000 Hz logarithmic loudness spectrum, published through
+ * AudioLevelsBridge (see TrackedAudioCapture) to both the full-screen visualizer and the edge
+ * overlay. Two earlier sources — a microphone thread and a MediaProjection service — produced the
+ * same band layout and have since been removed; this is now the only one.
  *
  * Everything Visualizer-related (construction, capture callbacks, release) runs on a dedicated
  * background thread with its own Looper, never the main thread: an AudioEffect subclass delivers
@@ -97,7 +92,7 @@ final class TrackedSessionAudioSource {
         @Override
         public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
             // Not requested (see setDataCaptureListener() below) — the FFT alone is enough to
-            // build the band spectrum EdgeGlowView expects.
+            // build the band spectrum the visualizers expect.
         }
 
         @Override
@@ -136,6 +131,12 @@ final class TrackedSessionAudioSource {
         registry.start(appContext);
         registry.addListener(registryListener);
         onSessionChanged(registry.currentSessionId());
+    }
+
+    /** Re-runs the attach decision for whatever session is open right now — see
+     *  TrackedAudioCapture.onAudioPermissionGranted(), the only caller. */
+    void retryAttach() {
+        onSessionChanged(AudioSessionRegistry.getInstance().currentSessionId());
     }
 
     void stop() {
@@ -209,8 +210,8 @@ final class TrackedSessionAudioSource {
     }
 
     /**
-     * Buckets the FFT capture into the same 32 log-spaced bands AudioCaptureService/
-     * MicCaptureThread produce. Android's Visualizer FFT byte layout: fft[0]=Re(0),
+     * Buckets the FFT capture into 32 log-spaced bands. Android's Visualizer FFT byte layout:
+     * fft[0]=Re(0),
      * fft[1]=Re(captureSize/2), and for bin i in 1..captureSize/2-1: fft[2i]=Re(i), fft[2i+1]=Im(i)
      * — frequency resolution is sampleRateHz/captureSize, so each target frequency maps to
      * bin = round(freq * captureSize / sampleRateHz).

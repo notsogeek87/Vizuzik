@@ -9,7 +9,7 @@ active, ou qui se demande pourquoi l'écran est plus calme qu'avant dans ce cas.
 ## Le contexte
 
 Vizuzik n'entend la musique que si l'utilisateur a accordé la capture système (voir
-[Le consentement de capture audio](2026-09-03-consentement-capture-audio.md)). Sans elle, le
+[Le consentement de capture audio](../legacy/2026-09-03-consentement-capture-audio.md)). Sans elle, le
 moteur produisait un « groove » de substitution : un kick synthétique dont le BPM était tiré au
 hasard entre 96 et 140, **retiré à chaque battement**. Ce faux kick traversait ensuite le vrai
 détecteur de rythme et pilotait tout : lueur du disque, ondes de choc, gerbes de particules,

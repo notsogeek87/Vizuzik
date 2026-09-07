@@ -6,14 +6,16 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
- * In-process singleton shared between AudioCaptureService (which analyzes the tracked app's own
- * audio output) and its listeners. Mirrors DeezerMediaBridge's pattern: both run in the app's
- * default process, so a static holder is enough — no IPC needed.
+ * In-process singleton carrying the loudness spectrum from TrackedAudioCapture — the app's one
+ * audio source — to everything that draws it. Mirrors DeezerMediaBridge's pattern: it all runs in
+ * the app's default process, so a static holder is enough, no IPC needed.
  *
- * More than one listener at a time: DeezerMediaPlugin (streaming to the web layer) and
- * OverlayEdgeGlowService (the Edge Visualizer background overlay) both need the same levels, in
+ * More than one listener at a time: DeezerMediaPlugin (streaming to the full-screen visualizer)
+ * and OverlayEdgeGlowService (the edge effect over the other app) both need the same levels, in
  * parallel — the overlay exists precisely for the moments the web layer isn't in the foreground,
- * so neither can simply replace the other the way a single-listener field would.
+ * so neither can simply replace the other the way a single-listener field would. Sharing one
+ * source between them is also what lets a single Visualizer serve both without either having to
+ * know the other exists.
  */
 final class AudioLevelsBridge {
 
@@ -31,24 +33,8 @@ final class AudioLevelsBridge {
     }
 
     private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
-    // Written by AudioCaptureService, read by DeezerMediaPlugin from the web layer's thread:
-    // volatile rather than synchronized so a state query can never block on a capture callback.
-    private volatile boolean capturing;
 
     private AudioLevelsBridge() {}
-
-    /**
-     * Whether AudioCaptureService currently holds a live MediaProjection. The web layer asks on
-     * every resume: the answer is what lets it skip re-requesting a consent it already has, since
-     * its own JS state is lost whenever the webview is recreated but the service isn't.
-     */
-    boolean isCapturing() {
-        return capturing;
-    }
-
-    void markCapturing() {
-        capturing = true;
-    }
 
     void addListener(Listener listener) {
         listeners.add(listener);
@@ -72,7 +58,6 @@ final class AudioLevelsBridge {
     }
 
     void publishStopped() {
-        capturing = false;
         for (Listener listener : listeners) {
             try {
                 listener.onCaptureStopped();

@@ -2,7 +2,7 @@
 
 **Statut :** partiellement révoqué le 2026-09-05 · **Date :** 2026-09-03 · **Concerne :**
 `src/main.js`, `index.html`, `MainActivity.java`, `DeezerMediaPlugin.java`, `MusicApps.java`,
-`MusicAppPreference.java`, `NowPlayingListenerService.java`, `AudioCaptureService.java`
+`MusicAppPreference.java`, `NowPlayingListenerService.java`, `AudioSessionRegistry.java`
 
 > **Mise à jour 2026-09-05 :** la partie « ouvrir l'app de musique soi-même » (le cas « aucune
 > session du tout » de la section « Reprendre plutôt que quitter l'écran ») a été retirée à la
@@ -40,7 +40,7 @@ Résolu une fois par installation, avant tout le reste, par `resolveMusicApp()` 
 
 Le choix est ensuite miroité côté natif via `DeezerMediaPlugin.setMusicAppTarget()`, qui l'écrit
 dans `MusicAppPreference` (une `SharedPreferences` toute simple). C'est nécessaire parce que
-`NowPlayingListenerService` (qui repère la session média active) et `AudioCaptureService` (qui
+`NowPlayingListenerService` (qui repère la session média active) et `AudioSessionRegistry` (qui
 borne la capture audio à l'UID de la bonne app) tournent côté natif, sans accès au `localStorage`
 de la webview. `MusicApps.java` centralise les deux noms de paquet connus et les clés qui les
 désignent (`"deezer"` / `"spotify"`) des deux côtés du pont.
@@ -87,7 +87,7 @@ plus, pas de moins. Vizuzik évite donc de le faire dès qu'il peut s'en passer 
 même IIFE de démarrage que la résolution de l'app, pas dans `visibilitychange` ni dans aucune
 fonction rappelée plus tard. Les répéter à chaque retour au premier plan referait exactement ce
 que Vizuzik essaie d'éviter ailleurs (voir
-[Le consentement de capture audio comme parcours](2026-09-03-consentement-capture-audio.md)) :
+[Le consentement de capture audio comme parcours](../legacy/2026-09-03-consentement-capture-audio.md)) :
 relancer un titre que l'utilisateur vient justement de mettre en pause, ou rouvrir l'app de
 musique alors qu'il vient de revenir regarder les visuels.
 
@@ -101,8 +101,12 @@ même document) demande déjà le consentement système dès qu'un titre est aff
 `vizuzik:realAudio` vaut `"on"`. En amorçant l'app plus tôt dans le parcours, ce lancement
 automatique fait simplement arriver ce moment plus tôt aussi — sans changer ses garde-fous (une
 demande par session, jamais en arrière-plan, jamais hors de l'écran lecteur), et sans se soucier
-de savoir laquelle des deux apps tourne : `AudioCaptureService` résout déjà l'UID à capturer
-dynamiquement, depuis la session active ou, à défaut, depuis `MusicAppPreference`.
+de savoir laquelle des deux apps tourne : la capture résout déjà sa cible dynamiquement, depuis la
+session active ou, à défaut, depuis `MusicAppPreference`.
+
+> **Note du 2026-09-07.** Le consentement système décrit dans ce paragraphe n'existe plus : la
+> capture par `MediaProjection` a été remplacée par une source qui n'en demande aucun. Voir
+> [Une seule source audio](2026-09-07-source-audio-unique.md).
 
 ## Conséquences
 

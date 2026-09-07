@@ -34,7 +34,7 @@ réagisse même quand l'utilisateur avait choisi « Micro » comme source dans l
 
 Le mécanisme d'overlay en lui-même — la fenêtre `WindowManager`, `EdgeGlowView`, `OverlayPalette`
 — n'a jamais été mis en cause une fois son propre bug de vsync corrigé (point 1). Et le chemin
-audio réel (`AudioPlaybackCapture` via `AudioCaptureService`, sans aucun micro) n'apparaît dans
+audio réel (sans aucun micro) n'apparaît dans
 aucun des bugs listés.
 
 ## La décision
@@ -75,7 +75,7 @@ choisies dans les réglages, voir plus bas.
 Contrairement à la première tentative (qui n'avait qu'un bouton on/off), cette version ajoute un
 panneau de réglages complet : style (un seul pour l'instant, `glow`), fréquences utilisées
 (spectre entier / basses / médiums / aigus — un découpage approximatif des 32 bandes 55 Hz-7000 Hz
-déjà produites par `AudioCaptureService`), intensité, épaisseur, luminosité, sensibilité,
+déjà produites par la capture native), intensité, épaisseur, luminosité, sensibilité,
 couleurs (auto depuis la pochette, ou trois couleurs fixes), et l'activation indépendante de
 chacun des quatre bords.
 
@@ -121,7 +121,7 @@ et confirmé sur appareil (Samsung Galaxy Z Fold8, via un prototype de diagnosti
 
 `TrackedSessionAudioSource.java` porte ce mécanisme en production : il écoute cette diffusion,
 attache un `Visualizer` à la session de l'app suivie, et transforme la capture FFT en le même
-spectre 32 bandes log (55 Hz-7000 Hz) que `AudioCaptureService`/`MicCaptureThread` produisent —
+spectre 32 bandes log (55 Hz-7000 Hz) —
 `EdgeGlowView.pushLevels()` ne voit aucune différence entre les sources. Tout le travail
 (construction du `Visualizer`, callbacks de capture, libération) tourne sur un `HandlerThread`
 dédié : un objet `AudioEffect` livre ses callbacks sur le thread qui l'a construit s'il a un
@@ -178,17 +178,23 @@ côtés).
 Permissions déjà en place (`RECORD_AUDIO`, `FOREGROUND_SERVICE`,
 `FOREGROUND_SERVICE_MEDIA_PROJECTION`), le badge en trois temps (expliquer une fois, mémoriser, ne
 plus jamais redemander) pour `SYSTEM_ALERT_WINDOW`, et la règle d'arrêt : `onTaskRemoved()` coupe
-le service dès que l'utilisateur retire Vizuzik des applications récentes — même règle que
-`AudioCaptureService`, c'est le vrai « stop », pas simplement Deezer au premier plan.
+le service dès que l'utilisateur retire Vizuzik des applications récentes.
+
+> **Révisé le 2026-09-07.** Cette règle d'arrêt a été supprimée : elle contredisait le démarrage
+> autonome (l'overlay tourne précisément quand Vizuzik n'est pas là) et, surtout, elle ne
+> fonctionnait pas — `NowPlayingListenerService` survit au retrait de la tâche et continue de
+> publier, donc le premier événement de lecture suivant relançait l'overlay dans la seconde. Ce
+> qui l'éteint est le réglage « Mode superposition », ou l'arrêt de la lecture.
 
 ## Limitations
 
 - Sous Android 7 et moins (`Build.VERSION.SDK_INT < 26`), `TYPE_APPLICATION_OVERLAY` n'existe pas :
   le badge et le bouton de réglages restent cachés plutôt que d'offrir une fonctionnalité qui
   échouerait silencieusement.
-- Le consentement `MediaProjection` (audio réel) doit être redonné après un swipe complet de
-  Vizuzik hors des applications récentes, comme aujourd'hui pour le visualiseur plein écran — ce
-  n'est pas spécifique à l'overlay.
+- Si le processus démarre alors que la lecture est **déjà** en cours, la diffusion annonçant la
+  session audio est passée et aucune API ne permet de la redemander : l'effet reste ambiant
+  jusqu'au morceau suivant. Voir
+  [Une seule source audio](2026-09-07-source-audio-unique.md).
 - **Compilation vérifiée par CI, pas testée manuellement dans cette session** : l'environnement de
   développement utilisé ici n'a ni SDK Android ni émulateur — impossible de compiler ou de lancer
   l'app localement. Chaque changement a donc été vérifié via le workflow GitHub Actions
@@ -198,3 +204,11 @@ le service dès que l'utilisateur retire Vizuzik des applications récentes — 
   ci-dessus) — capture réelle et variable confirmée. **Le rendu du contour lui-même une fois
   branché dessus (constante d'échelle, latence perçue, comportement en arrière-plan prolongé,
   pli/dépli) reste à confirmer visuellement sur l'appareil.**
+
+## Mise à jour 2026-09-07 : la source est devenue celle de toute l'app
+
+`TrackedSessionAudioSource`, introduit ici pour l'overlay, a remplacé depuis les trois sources
+sélectionnables du lecteur plein écran (micro, MediaProjection, ambiance) : c'est désormais la
+seule de l'application, partagée par les deux effets. Les mentions de repli sur `MediaProjection`
+ci-dessus ne valent plus. Voir
+[Une seule source audio](2026-09-07-source-audio-unique.md).

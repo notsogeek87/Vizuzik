@@ -24,7 +24,7 @@ toutes les cinq secondes sur la position réelle.
 | **Glisser vers la gauche** | Morceau suivant |
 | **Glisser vers la droite** | Morceau précédent |
 | Bouton rond en haut à droite | Mode de visualisation suivant |
-| Badge en haut à gauche | Activer la capture du son réel |
+| Badge en haut à gauche | Rien — indicateur d'état audio, pas un bouton |
 
 Le glissement doit dépasser environ 64 px horizontaux pour déclencher le changement ; en
 dessous, la pochette revient en place. Pendant le geste elle suit le doigt avec un léger retard

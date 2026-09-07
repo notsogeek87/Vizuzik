@@ -55,15 +55,6 @@
             </intent-filter>
         </service>
 
-        <!-- Analyzes Deezer's own audio output (AudioPlaybackCapture, API 29+) to drive the
-             real-time visualizer. Started only after the user grants the MediaProjection
-             consent requested by DeezerMediaPlugin. -->
-        <service
-            android:name=".AudioCaptureService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
-
         <!-- Draws the edge-glow overlay (see OverlayEdgeGlowService) on top of whichever app is
              in front. "specialUse" is the closest of Android's declared foreground-service types
              to what this actually is — a decorative visual layered over another app while media
@@ -96,7 +87,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- The "display over other apps" special permission (granted per-app in system Settings,
@@ -105,18 +95,15 @@
          DeezerMediaPlugin.java for the settings screen this opens. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <!-- Micro mode: a plain AudioRecord on the phone's own mic (see MicCaptureThread.java),
-         deliberately not the WebView's getUserMedia() — that path is WebRTC-shaped under the
-         hood and pulls Android's audio mode into its "in a call" state for as long as it's open,
-         which over Bluetooth is what makes a connected car head unit switch into its own
-         phone-call UI. DeezerMediaPlugin requests this at runtime itself (the "microphone"
-         permission alias), same as any other dangerous permission. -->
+    <!-- Android calls this "microphone", but nothing here ever opens the microphone: it is what
+         android.media.audiofx.Visualizer requires in order to attach to the music app's own audio
+         session (see TrackedSessionAudioSource), which is the app's single audio source.
+         DeezerMediaPlugin.requestAudioPermission() asks for it at runtime. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Without this, PackageManager#getApplicationInfo(...) / getLaunchIntentForPackage(...)
-         can fail on Android 11+ package-visibility restrictions, breaking both the UID lookup
-         AudioCaptureService uses to scope playback capture to the tracked app, and the install
-         detection / auto-launch DeezerMediaPlugin does for each app it knows about. -->
+         can fail on Android 11+ package-visibility restrictions, breaking the install detection
+         and auto-launch DeezerMediaPlugin does for each app it knows about. -->
     <queries>
         <package android:name="deezer.android.app" />
         <package android:name="com.spotify.music" />

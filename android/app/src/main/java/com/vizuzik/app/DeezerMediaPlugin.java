@@ -10,8 +10,6 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.media.projection.MediaProjectionConfig;
-import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.net.Uri;
@@ -20,9 +18,7 @@ import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
 import android.util.Base64;
 
-import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationManagerCompat;
-import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -30,7 +26,6 @@ import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
@@ -44,12 +39,6 @@ import java.util.Set;
 )
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
-    // Owned directly (no Service, no singleton bridge): mic capture only ever runs while the
-    // webview is alive and Vizuzik is in the foreground (see applyAudioSource() in main.js,
-    // which stops it the moment the app is backgrounded), so its lifetime can just follow the
-    // plugin's own.
-    private MicCaptureThread micCaptureThread;
-
     @Override
     protected void handleOnStart() {
         DeezerMediaBridge.getInstance().addListener(this);
@@ -60,18 +49,9 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     protected void handleOnStop() {
         DeezerMediaBridge.getInstance().removeListener(this);
         AudioLevelsBridge.getInstance().removeListener(this);
-        // Deliberately NOT stopping AudioCaptureService here: handleOnStop() fires on every
-        // brief backgrounding (switching apps, checking a notification), not just on actually
-        // closing Vizuzik. It's a real foreground service and is meant to keep running while
-        // backgrounded — stopping it here meant returning to the app never showed live audio
-        // again without redoing the whole consent flow, since nothing re-requested it. It's
-        // stopped for real in AudioCaptureService#onTaskRemoved(), when the user removes
-        // Vizuzik from recents.
-        //
-        // The mic thread has no such reason to survive: it isn't a Service, and the whole point
-        // of it is that it's cheap to re-acquire, so any teardown of this plugin/webview takes
-        // it down too rather than leaking a live AudioRecord.
-        stopMicCaptureInternal();
+        // Nothing to tear down beyond these two listeners: the audio source itself
+        // (TrackedAudioCapture) is owned process-wide and deliberately outlives this webview —
+        // the edge overlay needs it precisely when Vizuzik is backgrounded.
     }
 
     @PluginMethod
@@ -147,7 +127,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
 
     /**
      * Mirrors the web layer's choice of tracked app ("deezer" or "spotify") into
-     * MusicAppPreference, so NowPlayingListenerService and AudioCaptureService — which don't
+     * MusicAppPreference, so NowPlayingListenerService and AudioSessionRegistry — which don't
      * have access to localStorage — can read the same value.
      */
     @PluginMethod
@@ -327,98 +307,51 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Whether real audio capture is possible on this device, and whether it is running right now.
-     * The web layer asks on every resume: its own flags live in the webview and are wiped whenever
-     * that is recreated, while AudioCaptureService keeps running across it. Without this, a
-     * returning user was shown "activate real audio" for a capture that was already live, and
-     * tapping it re-ran the system consent dialog for nothing.
+     * Requests RECORD_AUDIO, the one permission the visualizer needs. Android names it
+     * "microphone" in its dialog, but nothing here ever opens the microphone: it is what
+     * android.media.audiofx.Visualizer requires to attach to the music app's own audio session
+     * (see TrackedSessionAudioSource). Asked from here because that source runs in a background
+     * service, which has no Activity to show a permission dialog from.
      */
     @PluginMethod
-    public void getCaptureState(PluginCall call) {
+    public void requestAudioPermission(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            resolveAudioPermission(call, true);
+            return;
+        }
+        requestPermissionForAlias("microphone", call, "handleAudioPermission");
+    }
+
+    /** The same answer without ever showing a dialog — asked on every resume, since the grant can
+     *  be made (or taken back) from Android's own Settings while Vizuzik is in the background. */
+    @PluginMethod
+    public void getAudioPermission(PluginCall call) {
+        resolveAudioPermission(call, getPermissionState("microphone") == PermissionState.GRANTED);
+    }
+
+    @PermissionCallback
+    private void handleAudioPermission(PluginCall call) {
+        resolveAudioPermission(call, getPermissionState("microphone") == PermissionState.GRANTED);
+    }
+
+    private void resolveAudioPermission(PluginCall call, boolean granted) {
+        if (granted) {
+            // The source declines to attach while ungranted, and only learns of a new session
+            // when the player opens one — so without this nudge a grant made mid-track appears
+            // to do nothing until the next track.
+            TrackedAudioCapture.getInstance().onAudioPermissionGranted();
+        }
         JSObject result = new JSObject();
-        boolean supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-            && getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE) != null;
-        result.put("supported", supported);
-        result.put("running", supported && AudioLevelsBridge.getInstance().isCapturing());
+        result.put("granted", granted);
         call.resolve(result);
-    }
-
-    /**
-     * Requests the system MediaProjection consent needed to capture the tracked app's own audio
-     * output (Android 10+ only). Once granted, starts AudioCaptureService, which streams a
-     * real-time loudness spectrum back via "audioLevels" events for as long as the service runs.
-     */
-    @PluginMethod
-    public void startVisualizerCapture(PluginCall call) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            call.reject("unsupported");
-            return;
-        }
-        if (AudioLevelsBridge.getInstance().isCapturing()) {
-            // Already granted and running: showing the system dialog again would be pure noise,
-            // and accepting it would tear down the projection we're already using.
-            JSObject result = new JSObject();
-            result.put("alreadyRunning", true);
-            call.resolve(result);
-            return;
-        }
-        MediaProjectionManager manager =
-            (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        if (manager == null) {
-            call.reject("unsupported");
-            return;
-        }
-
-        Intent captureIntent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14's default createScreenCaptureIntent() shows a "share a single app"
-            // picker first; on at least some devices, picking an app there just switches to it
-            // and never returns a grant, leaving the user stuck having to navigate back
-            // manually with nothing captured. Requesting the default display directly skips
-            // that picker and goes straight to the "entire screen" consent, which does work —
-            // and since we only ever read the audio track (no virtual display is ever created),
-            // capturing the whole screen vs. a single app makes no difference to us.
-            captureIntent = manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay());
-        } else {
-            captureIntent = manager.createScreenCaptureIntent();
-        }
-        startActivityForResult(call, captureIntent, "handleCaptureResult");
-    }
-
-    @ActivityCallback
-    private void handleCaptureResult(PluginCall call, ActivityResult result) {
-        if (call == null) {
-            return;
-        }
-        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
-            call.reject("denied");
-            return;
-        }
-        Intent serviceIntent = new Intent(getContext(), AudioCaptureService.class);
-        serviceIntent.putExtra("resultCode", result.getResultCode());
-        serviceIntent.putExtra("data", result.getData());
-        ContextCompat.startForegroundService(getContext(), serviceIntent);
-        JSObject granted = new JSObject();
-        granted.put("alreadyRunning", false);
-        call.resolve(granted);
-    }
-
-    @PluginMethod
-    public void stopVisualizerCapture(PluginCall call) {
-        stopAudioCaptureService();
-        call.resolve();
-    }
-
-    private void stopAudioCaptureService() {
-        getContext().stopService(new Intent(getContext(), AudioCaptureService.class));
     }
 
     /**
      * Whether the edge-glow overlay (drawn over the tracked app itself, MuViz Edge-style) can run
      * on this device (Android 8+, TYPE_APPLICATION_OVERLAY) and whether the "display over other
      * apps" special permission is currently granted. The web layer checks this on every resume —
-     * same reasoning as getCaptureState(): the grant is made in a system Settings screen the app
-     * never sees the result of directly, so the only way to know is to ask again on return.
+     * same reasoning as getAudioPermission(): the grant is made in a system Settings screen the
+     * app never sees the result of directly, so the only way to know is to ask again on return.
      */
     @PluginMethod
     public void checkOverlayPermission(PluginCall call) {
@@ -543,67 +476,6 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("right", true)
         );
         call.resolve();
-    }
-
-    /**
-     * Starts the "micro" source: a plain AudioRecord on the phone's own microphone (see
-     * MicCaptureThread for why it's deliberately not the WebView's getUserMedia()). Just the
-     * ordinary RECORD_AUDIO runtime permission — requested here if not already granted — with no
-     * system consent dialog and no MediaProjection, so unlike startVisualizerCapture() this is
-     * safe to call from an automatic, no-user-gesture path.
-     */
-    @PluginMethod
-    public void startMicCapture(PluginCall call) {
-        if (micCaptureThread != null) {
-            call.resolve();
-            return;
-        }
-        if (getPermissionState("microphone") == PermissionState.GRANTED) {
-            beginMicCapture(call);
-        } else {
-            requestPermissionForAlias("microphone", call, "handleMicPermissionResult");
-        }
-    }
-
-    @PermissionCallback
-    private void handleMicPermissionResult(PluginCall call) {
-        if (getPermissionState("microphone") == PermissionState.GRANTED) {
-            beginMicCapture(call);
-        } else {
-            call.reject("denied");
-        }
-    }
-
-    private void beginMicCapture(PluginCall call) {
-        MicCaptureThread thread = new MicCaptureThread(levels -> {
-            JSArray array = new JSArray();
-            for (float level : levels) {
-                array.put((Object) level);
-            }
-            JSObject result = new JSObject();
-            result.put("levels", array);
-            notifyListeners("micLevels", result);
-        });
-        if (!thread.prepare()) {
-            call.reject("unsupported");
-            return;
-        }
-        micCaptureThread = thread;
-        thread.start();
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void stopMicCapture(PluginCall call) {
-        stopMicCaptureInternal();
-        call.resolve();
-    }
-
-    private void stopMicCaptureInternal() {
-        if (micCaptureThread != null) {
-            micCaptureThread.stopCapture();
-            micCaptureThread = null;
-        }
     }
 
     @Override

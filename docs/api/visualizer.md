@@ -33,7 +33,7 @@ visualizer.start();
 
 | Méthode | Description |
 |---------|-------------|
-| `setLevels(levels)` | Spectre temps réel, 32 valeurs 0..1, fourni par `AudioCaptureService`. Au-delà de 500 ms sans appel, le moteur repasse en régime ambiant. |
+| `setLevels(levels)` | Spectre temps réel, 32 valeurs 0..1, fourni par `TrackedSessionAudioSource` via l'événement `audioLevels`. Au-delà de 500 ms sans appel, le moteur repasse en régime ambiant. |
 | `setPlaying(bool)` | En pause, les barres retombent au repos et le disque cesse de tourner. |
 | `setStyle(style)` | Une valeur de `VISUAL_STYLES`. Réinitialise particules, ondes et traînées. |
 | `setPalette(palette)` | Objet renvoyé par `extractPalette()`. Les couleurs sont rejointes par interpolation, pas d'un coup. Ne déclenche **pas** d'onde de choc : c'est `pulse()` qui marque le changement de morceau. |
@@ -97,3 +97,35 @@ dans `style.css`). Son `case` dans `_draw()` ne fait rien — `.fx` est caché p
 mode — et elle est exclue de `_burstParticles()` : rien n'y réagit au son. Les deux bobines
 tournent en CSS pendant la lecture (`.cassette__reel`, pilotée par `body[data-state="playing"]`,
 la même donnée que `.disc__spin`) mais à vitesse constante, pas sur le rythme.
+
+## L'autorisation audio
+
+Le spectre vient du natif : un `Visualizer` Android attaché à la session audio de l'app de musique
+(voir [Une seule source audio](../architecture/2026-09-07-source-audio-unique.md)). Il n'y a rien à
+démarrer ni à arrêter depuis le web — la capture est possédée par le processus et partagée avec
+l'overlay. Il reste seulement une autorisation à obtenir.
+
+| Méthode plugin | Description |
+|---|---|
+| `requestAudioPermission()` | Demande `RECORD_AUDIO`, en montrant la fenêtre système si nécessaire. Appelée **une fois**, au démarrage. Résout `{ granted: boolean }`. |
+| `getAudioPermission()` | Même réponse, **sans jamais afficher de fenêtre**. Appelée à chaque retour au premier plan : l'autorisation peut être accordée ou retirée depuis les Réglages Android pendant que Vizuzik est en arrière-plan. |
+
+Les deux préviennent le natif quand l'autorisation vient d'être accordée, pour qu'il s'attache à la
+session **déjà** en cours au lieu d'attendre le morceau suivant.
+
+Android nomme cette autorisation « microphone » dans sa fenêtre. Rien n'ouvre jamais le micro :
+c'est ce que `Visualizer` exige pour s'attacher à une session audio.
+
+### Événements
+
+| Événement | Description |
+|---|---|
+| `audioLevels` | `{ levels: number[32] }`, ~30 fois par seconde. À passer tel quel à `setLevels()`. |
+| `audioCaptureStopped` | La session audio suivie s'est fermée. Rien à réconcilier : le moteur repasse en ambiant tout seul dès que les niveaux cessent d'arriver. |
+
+### Supprimé le 2026-09-07
+
+`startVisualizerCapture()`, `stopVisualizerCapture()`, `getCaptureState()`, `startMicCapture()`,
+`stopMicCapture()` et l'événement `micLevels` n'existent plus — avec les deux moteurs de capture
+qu'ils pilotaient.
+

@@ -17,7 +17,7 @@ exactement comme s'il n'était pas là.
 
 ## Le parcours
 
-1. **Badge « ▶ Activer Edge Visualizer »**, à côté de celui du son réel, dans la barre du haut.
+1. **Badge « ▶ Activer Edge Visualizer »**, à côté du badge d'état audio, dans la barre du haut.
 2. **Au premier appui :** un écran d'explication apparaît — ce que le contour affiche, la
    permission système qui suit (**Afficher par-dessus les autres applications**), et le fait que
    c'est purement décoratif. *« Plus tard »* referme sans rien demander au système.
@@ -30,13 +30,15 @@ exactement comme s'il n'était pas là.
 
 ## Ce qui fait réagir le contour
 
-Le contour réagit en direct à la musique dès que `RECORD_AUDIO` est accordé (le même accord que le
-mode Micro du plein écran) — via `android.media.audiofx.Visualizer`, attaché à la session audio de
-l'app suivie, **sans jamais ouvrir la fenêtre système MediaProjection**. Si ce mécanisme n'est pas
-disponible (autre app, autre version d'Android), le contour retombe sur la capture MediaProjection
-existante (voir [Activer le son réel](capture-audio.md)) si elle est active, puis, en dernier
-recours, sur un régime ambiant (respiration douce + un à-coup honnête sur chaque changement de
-morceau ou lecture/pause) qui n'invente jamais de rythme.
+Le contour réagit en direct à la musique dès que `RECORD_AUDIO` est accordé — via
+`android.media.audiofx.Visualizer`, attaché à la session audio de l'app suivie, **sans jamais
+ouvrir de fenêtre de consentement**. C'est la source unique de toute l'application, partagée avec
+le lecteur plein écran (voir
+[Une seule source audio](../architecture/2026-09-07-source-audio-unique.md)).
+
+Il n'y a pas de repli : quand elle n'a rien à écouter (autorisation refusée, ou aucune session
+audio à suivre), le contour passe en régime ambiant — respiration douce, plus un à-coup honnête sur
+chaque changement de morceau ou lecture/pause — et n'invente jamais de rythme.
 
 ## Réglages
 
@@ -58,12 +60,12 @@ le redémarrer.
 - Android 8 (API 26) ou supérieur — en dessous, `TYPE_APPLICATION_OVERLAY` n'existe pas et le
   badge reste masqué.
 - La réaction en direct demande `RECORD_AUDIO` déjà accordé ; sans ça (et sans capture
-  MediaProjection active non plus), le contour respire en ambiant, jamais en inventant un tempo.
+  session audio à suivre), le contour respire en ambiant, jamais en inventant un tempo.
 - Une fois activé une première fois (réglage + permission d'overlay accordée), fonctionne même si
   Vizuzik n'est plus jamais ouvert ensuite — voir
   [l'ADR correspondant](../architecture/2026-09-06-edge-visualizer.md) pour comment.
-- Ne capture jamais le microphone en arrière-plan : une première version le faisait pour que le
-  contour réagisse même en mode Micro, mais ça s'est révélé peu fiable et a été abandonné (voir la
+- N'ouvre jamais le microphone : une première version le faisait, mais ça s'est révélé peu fiable
+  et a été abandonné (voir la
   même ADR).
 
 ## Repartir de zéro

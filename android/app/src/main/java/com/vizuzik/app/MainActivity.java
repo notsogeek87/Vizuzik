@@ -32,6 +32,11 @@ public class MainActivity extends BridgeActivity {
         // Activity instead: the sooner it listens, the smaller the window in which the tracked
         // app's one-shot session broadcast can be missed (see AudioSessionRegistry).
         AudioSessionRegistry.getInstance().start(getApplicationContext());
+        // Normally already started by NowPlayingListenerService, but not always: notification
+        // access can be granted while the system hasn't bound that service yet (the case
+        // requestListenerRebind() exists for). Without this, the player screen would show with no
+        // audio source ever constructed — and there is no second source left to fall back on.
+        TrackedAudioCapture.getInstance().start(getApplicationContext());
         // Vizuzik is meant to be looked at, not touched — propped up as a car/desk display for
         // as long as the music plays. Without this the screen times out and locks like any
         // other app, which defeats the whole point of it being on screen at all.

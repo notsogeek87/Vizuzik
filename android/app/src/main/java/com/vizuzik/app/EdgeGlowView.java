@@ -56,8 +56,8 @@ final class EdgeGlowView extends View {
     /** Past this long without a single level, the capture counts as gone and ambient takes over. */
     private static final long LIVE_LEVELS_TIMEOUT_MS = 1_200;
 
-    // 32 bands, 55 Hz-7000 Hz logarithmic — same layout AudioCaptureService/MicCaptureThread
-    // produce. Rough index ranges for EdgeConfig's frequency choice: bass ~55-190 Hz (0-7),
+    // 32 bands, 55 Hz-7000 Hz logarithmic — the layout TrackedSessionAudioSource produces.
+    // Rough index ranges for EdgeConfig's frequency choice: bass ~55-190 Hz (0-7),
     // mid ~190-1700 Hz (8-21), treble ~1700-7000 Hz (22-31).
     private static final int BASS_END = 8;
     private static final int MID_END = 22;
@@ -80,8 +80,8 @@ final class EdgeGlowView extends View {
     private long lastFrameMs;
 
     // Written from the audio-capture thread, read from the UI thread on every frame: plain
-    // volatile fields rather than a lock, same tradeoff as AudioLevelsBridge.capturing — a
-    // decorative glow can tolerate a one-frame-old value, but must never block the capture loop.
+    // volatile fields rather than a lock: a decorative glow can tolerate a one-frame-old value,
+    // but must never block the capture loop.
     //
     // "Live" is a timestamp rather than a boolean on purpose: a boolean set on the first level
     // and never cleared is exactly how the glow used to freeze — one silent death of the capture
@@ -168,10 +168,9 @@ final class EdgeGlowView extends View {
     }
 
     /**
-     * Called from a capture thread — AudioCaptureService's (via AudioLevelsBridge) or
-     * TrackedSessionAudioSource's own — and since Edge Visualizer can have both wired in at once
-     * (one as a fallback for the other), two different threads can legitimately call this at
-     * close to the same time. Synchronized because bassHistory/bassCursor below are a plain
+     * Called from the capture engine's worker thread rather than the main one, and the view can
+     * be re-fed by a new capture while an old one's last callback is still in flight.
+     * Synchronized because bassHistory/bassCursor below are a plain
      * ring buffer with no other protection: two unsynchronized writers could tear a value or
      * lose an increment, corrupting the beat detector. The critical section is a fixed handful of
      * float operations on a 48-element array, called at most a few dozen times a second — never

@@ -1,3 +1,8 @@
+> **Archivé le 2026-09-07.** La capture par `MediaProjection` décrite ici a été supprimée : une
+> source unique attachée à la session audio de l'app de musique la remplace, sans aucune fenêtre de
+> consentement. Voir [Une seule source audio](../architecture/2026-09-07-source-audio-unique.md).
+> Conservé pour la trace du raisonnement, plus rien ici ne décrit le code actuel.
+
 # Activer le son réel
 
 **Pour qui :** utilisateurs qui veulent que les visualisations suivent réellement la musique.
@@ -44,7 +49,7 @@ La capture s'arrête pour de bon quand Vizuzik est retiré des applications réc
 
 | Affichage | Signification |
 |-----------|---------------|
-| `▶ Activer le son réel` | Aucune capture : régime ambiant, sans rythme inventé (voir [Les modes](modes-de-visualisation.md#sans-capture-audio)). Appuyable. |
+| `▶ Activer le son réel` | Aucune capture : régime ambiant, sans rythme inventé (voir [Les modes](../guides/modes-de-visualisation.md)). Appuyable. |
 | `● Connexion…` | Demande en cours. |
 | `● Son réel` | Les visualisations suivent l'audio de l'app suivie. |
 | `● Son réel prêt` | Capture active, lecture en pause : rien à écouter pour l'instant. |

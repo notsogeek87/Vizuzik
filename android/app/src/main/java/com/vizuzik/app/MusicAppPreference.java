@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 
 /**
  * Which music app's MediaSession to track and whose audio to capture, mirrored here so that
- * NowPlayingListenerService and AudioCaptureService — native components that don't have access
+ * NowPlayingListenerService and AudioSessionRegistry — native components that don't have access
  * to the webview's localStorage, where the web layer keeps its own copy of this choice — can
  * read the same value. DeezerMediaPlugin.setMusicAppTarget() is the only writer.
  */

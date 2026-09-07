@@ -8,9 +8,6 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
 ### Architecture
 - [Moteur visuel réactif](architecture/2026-09-03-moteur-visuel-reactif.md) — pourquoi un seul
   canvas plein écran, une seule boucle d'animation et trois variables CSS pilotent toute l'app.
-- [Le consentement de capture audio comme parcours](architecture/2026-09-03-consentement-capture-audio.md)
-  — comment la fenêtre système Android, impossible à supprimer, n'est plus croisée qu'une fois
-  par lancement.
 - [Le rythme hors capture](architecture/2026-09-03-rythme-hors-capture.md) — pourquoi
   l'application n'invente plus de tempo quand elle n'entend pas la musique, et ce qui anime
   l'écran à la place.
@@ -18,6 +15,9 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
   — comment Vizuzik décide s'il suit Deezer ou Spotify, pourquoi il ne demande qu'en cas
   d'ambiguïté réelle, et pourquoi il ouvre l'app choisie au lancement plutôt que d'attendre
   qu'on le fasse.
+- [Une seule source audio](architecture/2026-09-07-source-audio-unique.md) — pourquoi le micro, le
+  « son réel » et le mode ambiance ont disparu au profit d'une source unique attachée à la session
+  audio de l'app de musique, sans aucune fenêtre de consentement.
 - [Edge Visualizer : le contour lumineux, sans micro cette fois](architecture/2026-09-06-edge-visualizer.md)
   — l'overlay décoratif dessiné sur les bords de l'écran par-dessus l'app de musique, ce qui a
   été retenu (et pourquoi) d'une première tentative retirée, et le panneau de réglages qui
@@ -33,8 +33,11 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
 - [Gestes et contrôles](guides/gestes.md) — tap, swipe et barre de progression.
 - [Les six modes de visualisation](guides/modes-de-visualisation.md) — ce que voit
   l'utilisateur et comment il en change.
-- [Activer le son réel](guides/capture-audio.md) — capture de la sortie audio de l'app suivie
-  (Deezer ou Spotify) : parcours d'activation, lecture du badge, et ce qui ne redéclenche plus
-  la fenêtre système.
 - [Edge Visualizer](guides/edge-visualizer.md) — le contour lumineux par-dessus l'app de musique :
   parcours d'activation, ce qui le fait réagir, le panneau de réglages, et ses limites.
+
+### Archives
+Documentation conservée pour la trace du raisonnement, mais qui ne décrit plus le code actuel.
+- [Le consentement de capture audio comme parcours](legacy/2026-09-03-consentement-capture-audio.md)
+- [Activer le son réel](legacy/capture-audio.md)
+

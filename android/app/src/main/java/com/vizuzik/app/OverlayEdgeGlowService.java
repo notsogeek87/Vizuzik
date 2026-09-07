@@ -32,34 +32,18 @@ import androidx.core.content.ContextCompat;
  * layer (startEdgeOverlay()/stopEdgeOverlay() in DeezerMediaPlugin, driven by syncEdgeOverlay()
  * in main.js) while the webview is running, and EdgeOverlayController natively (via
  * NowPlayingListenerService) so the same thing happens even if Vizuzik's own Activity/webview has
- * never launched this session. It listens to the same
- * two bridges DeezerMediaPlugin does — DeezerMediaBridge for the current track's artwork (turned
- * into a glow color via OverlayPalette) and AudioLevelsBridge for real audio levels, the same
- * AudioPlaybackCapture pipeline the full-screen visualizer already uses.
+ * never launched this session. It listens to the same two bridges DeezerMediaPlugin does —
+ * DeezerMediaBridge for the current track's artwork (turned into a glow color via OverlayPalette)
+ * and AudioLevelsBridge for the loudness spectrum.
  *
- * Deliberately does not touch the microphone. An earlier version of this exact feature also ran
- * its own mic capture in the background so the glow could react even when the user's chosen
- * audio source was "mic" rather than "real audio" — that turned out to be the one part of the
- * feature that never worked reliably: two AudioRecords racing over the same microphone (this
- * service opening one the instant the full-screen player released it), a foreground-service type
- * that has to be declared exactly right or the whole app crashes, and a "live" flag that could get
- * stuck. Those are all consequences of sharing a mic between two independent components, not of
- * drawing an overlay — so this version simply never opens a second mic stream. When "mic" is the
- * chosen source (or capture isn't running at all), the glow falls back to its ambient regime
- * below, exactly like the full-screen player does before real audio is granted.
- *
- * Live reactivity primarily comes from TrackedSessionAudioSource (android.media.audiofx.
- * Visualizer attached to the tracked app's own audio session, found via a system broadcast —
- * validated on-device before being wired in here, see its class doc) rather than AudioLevelsBridge:
- * it needs only RECORD_AUDIO, never the MediaProjection consent dialog AudioCaptureService
- * requires. AudioLevelsBridge stays wired in alongside it as a fallback, per the same reasoning
- * that already justifies keeping the ambient regime below — a device/Android build where the
- * broadcast never arrives (or RECORD_AUDIO isn't granted) should still light up if "son réel" is
- * already running, rather than silently doing less than the previous version could.
+ * Never opens the microphone, and never needs to: the levels come from TrackedAudioCapture, the
+ * app's single audio source, owned process-wide rather than by this service. That ownership is the
+ * point — one Visualizer serves both this overlay and Vizuzik's own full-screen player, so moving
+ * between them never tears a capture down and builds another one up.
  */
 public class OverlayEdgeGlowService extends Service
-    implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener, SharedPreferences.OnSharedPreferenceChangeListener,
-        TrackedSessionAudioSource.Listener {
+    implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener,
+        SharedPreferences.OnSharedPreferenceChangeListener {
 
     private static final String TAG = "OverlayEdgeGlow";
     private static final String CHANNEL_ID = "vizuzik_overlay";
@@ -68,7 +52,6 @@ public class OverlayEdgeGlowService extends Service
     private WindowManager windowManager;
     private NotificationManager notificationManager;
     private EdgeGlowView glowView;
-    private TrackedSessionAudioSource trackedSessionAudioSource;
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -83,9 +66,10 @@ public class OverlayEdgeGlowService extends Service
      * Vizuzik itself is in the foreground), so in practice they always agree anyway. Both calls
      * are idempotent on the receiving end (onStartCommand() no-ops if the view already exists;
      * Android no-ops stopService() on an already-stopped service).
+     *
+     * @return whether the service was actually asked to start — false means the caller's own
+     *     "it's running now" bookkeeping must not be set, or it would never retry.
      */
-    /** @return whether the service was actually asked to start — false means the caller's own
-     *  "it's running now" bookkeeping must not be set, or it would never retry. */
     static boolean requestStart(Context context) {
         try {
             ContextCompat.startForegroundService(context, new Intent(context, OverlayEdgeGlowService.class));
@@ -151,10 +135,6 @@ public class OverlayEdgeGlowService extends Service
             // (see DeezerMediaBridge), so there's no need to also ask for it here.
             DeezerMediaBridge.getInstance().addListener(this);
             AudioLevelsBridge.getInstance().addListener(this);
-            if (trackedSessionAudioSource == null) {
-                trackedSessionAudioSource = new TrackedSessionAudioSource(this, this);
-            }
-            trackedSessionAudioSource.start();
         }
         return START_STICKY;
     }
@@ -259,12 +239,9 @@ public class OverlayEdgeGlowService extends Service
     }
 
     /**
-     * Serves both AudioLevelsBridge.Listener and TrackedSessionAudioSource.Listener — they
-     * declare the identical onLevels(float[]) signature, and both feed the glow the exact same
-     * way, so one implementation satisfies both interfaces. Called on whichever capture engine's
-     * own thread produced the levels, never the main thread — an uncaught exception there still
-     * takes down the whole app by default, so this gets the same guard as the main-thread
-     * callbacks elsewhere in this class.
+     * Called on the capture engine's own worker thread, never the main thread — an uncaught
+     * exception there still takes down the whole app by default, so this gets the same guard as
+     * the main-thread callbacks elsewhere in this class.
      */
     @Override
     public void onLevels(float[] levels) {
@@ -278,16 +255,6 @@ public class OverlayEdgeGlowService extends Service
     @Override
     public void onCaptureStopped() {
         if (glowView != null) glowView.clearLevels();
-    }
-
-    /** The tracked app's session closed, or attaching to it failed outright — falls back to
-     *  whatever AudioLevelsBridge is still providing (possibly nothing, in which case
-     *  EdgeGlowView's own liveness timeout drops it to ambient on its own). */
-    @Override
-    public void onSourceLost() {
-        // No explicit glowView.clearLevels() here: unlike AudioLevelsBridge.onCaptureStopped()
-        // above (a clean, deliberate stop), this can fire while AudioLevelsBridge is still live —
-        // clearing levels here would incorrectly blank out a still-working fallback.
     }
 
     /** A settings-panel edit while the overlay is already running — applied live, no restart. */
@@ -304,8 +271,7 @@ public class OverlayEdgeGlowService extends Service
         return null;
     }
 
-    // No onTaskRemoved() override, deliberately — unlike AudioCaptureService, whose capture only
-    // exists by way of a MediaProjection grant the Activity obtained. This overlay is meant to run
+    // No onTaskRemoved() override, deliberately. This overlay is meant to run
     // precisely when Vizuzik isn't there: it starts on its own from NowPlayingListenerService the
     // first time a track plays, with the Activity never launched at all, so having a swipe out of
     // recents stop it made no sense. It also didn't work — NowPlayingListenerService survives task
@@ -326,9 +292,6 @@ public class OverlayEdgeGlowService extends Service
         EdgeConfig.unregisterListener(this, this);
         DeezerMediaBridge.getInstance().removeListener(this);
         AudioLevelsBridge.getInstance().removeListener(this);
-        if (trackedSessionAudioSource != null) {
-            trackedSessionAudioSource.stop();
-        }
         // Several paths above stop this service on their own (no overlay permission, addView
         // refused, startForeground failing). Without telling the controller, its "already started"
         // bookkeeping stays stuck on true and it never asks again for the rest of the process —

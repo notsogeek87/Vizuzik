@@ -1,3 +1,8 @@
+> **Archivé le 2026-09-07.** La capture par `MediaProjection` décrite ici a été supprimée : une
+> source unique attachée à la session audio de l'app de musique la remplace, sans aucune fenêtre de
+> consentement. Voir [Une seule source audio](../architecture/2026-09-07-source-audio-unique.md).
+> Conservé pour la trace du raisonnement, plus rien ici ne décrit le code actuel.
+
 # Le consentement de capture audio comme parcours, pas comme fenêtre
 
 **Statut :** adopté · **Date :** 2026-09-03 · **Concerne :**

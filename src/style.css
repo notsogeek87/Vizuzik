@@ -403,6 +403,18 @@ body[data-state="playing"] .cassette__reel {
   transform: scale(0.96);
 }
 
+/* #capture-status is a plain span (see index.html): it reports what the visualizer is hearing and
+   there is nothing left to switch, so it must not offer any of a control's affordances. The class
+   is shared with #overlay-status, which is still a real button. */
+span.capture-status {
+  display: inline-block;
+  cursor: default;
+}
+
+span.capture-status:active {
+  transform: none;
+}
+
 .capture-status[data-status="live"] {
   color: #6ee7a8;
   border-color: rgba(110, 231, 168, 0.35);

@@ -46,6 +46,10 @@ public class NowPlayingListenerService extends NotificationListenerService {
         // that only starts listening after the user has switched to that app has already missed
         // it. See AudioSessionRegistry.
         AudioSessionRegistry.getInstance().start(getApplicationContext());
+        // The app's one audio source, started here for the same reason: it must be capturing
+        // before the user switches to the music app, whether the effect that consumes it ends up
+        // being the overlay or Vizuzik's own player.
+        TrackedAudioCapture.getInstance().start(getApplicationContext());
         mediaSessionManager = (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
         ComponentName component = new ComponentName(this, NowPlayingListenerService.class);
         try {
@@ -69,6 +73,10 @@ public class NowPlayingListenerService extends NotificationListenerService {
         // nothing else around (MainActivity may never have run this session) to correct it.
         DeezerMediaBridge.getInstance().clear();
         DeezerMediaBridge.getInstance().removeListener(EdgeOverlayController.getInstance());
+        // Symmetric with the start in onListenerConnected(). Without notification access there is
+        // no tracked session left to follow, and an attached Visualizer would otherwise keep
+        // RECORD_AUDIO in continuous use for the rest of the process's life.
+        TrackedAudioCapture.getInstance().stop();
     }
 
     @Override

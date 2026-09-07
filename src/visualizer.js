@@ -1,5 +1,6 @@
-// Full-screen music visualizer. When AudioCaptureService is capturing Deezer's real output
-// (Android 10+, user-granted), every scene is driven by the actual spectrum via setLevels().
+// Full-screen music visualizer. While the music app's own audio session is being captured
+// natively (see TrackedSessionAudioSource.java), every scene is driven by the actual spectrum via
+// setLevels().
 //
 // Without capture the engine goes AMBIENT rather than faking a groove: it never guesses a
 // tempo. A made-up beat is compared by the ear against the one it can actually hear, so a
@@ -24,7 +25,7 @@
 
 export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cassette"];
 
-// Matches AudioCaptureService's BAND_COUNT on the native side so live levels map 1:1 with
+// Matches TrackedSessionAudioSource's BAND_COUNT on the native side so live levels map 1:1 with
 // no interpolation needed.
 const BAR_COUNT = 32;
 const LIVE_LEVELS_TIMEOUT_MS = 500;
@@ -175,7 +176,7 @@ export class Visualizer {
     this._seedOrbiters();
   }
 
-  /** Feeds a real-time loudness spectrum (0..1 per band) from AudioCaptureService. */
+  /** Feeds a real-time loudness spectrum (0..1 per band) from the native capture. */
   setLevels(levels) {
     if (!levels || !levels.length) return;
     this.liveLevels = levels;
