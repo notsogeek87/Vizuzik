@@ -468,6 +468,38 @@ let edgeOverlayRunning = false;
 // degrades to "off" rather than to an overlay that never appears.
 let usageAccessGranted = false;
 
+// Asked once, on the first launch that actually reaches the player, so it sits alongside the
+// microphone and notification-access grants instead of hiding inside the settings panel. The
+// answer is never re-asked automatically: a system screen reopening itself every launch is what
+// makes people uninstall things. The panel keeps its own button for changing one's mind.
+const USAGE_ACCESS_ASKED_KEY = "vizuzik:usageAccessAsked";
+
+function hasAskedUsageAccess() {
+  try {
+    return localStorage.getItem(USAGE_ACCESS_ASKED_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function rememberUsageAccessAsked() {
+  try {
+    localStorage.setItem(USAGE_ACCESS_ASKED_KEY, "on");
+  } catch (err) {
+    /* see hasAskedUsageAccess() */
+  }
+}
+
+async function askUsageAccessOnce() {
+  if (hasAskedUsageAccess()) return;
+  await syncUsageAccess();
+  if (usageAccessGranted) return;
+  // Stamped before opening the screen, not after: whether they grant it or back out, this was
+  // their one unprompted ask.
+  rememberUsageAccessAsked();
+  DeezerMedia.requestUsageAccess().catch(() => {});
+}
+
 async function syncUsageAccess() {
   try {
     const state = await DeezerMedia.checkUsageAccess();
@@ -1252,9 +1284,15 @@ applyDisplayMode(false);
     await DeezerMedia.setMusicAppTarget({ app }).catch(() => {});
   }
   await refresh().catch(() => {});
-  requestAudioPermission();
+  // Awaited so the two never collide: this one shows a system dialog, and the usage-access ask
+  // below opens a system screen.
+  await requestAudioPermission();
   syncOverlayPermission();
-  syncUsageAccess();
+  await syncUsageAccess();
+  // Only once the player is actually on screen: with notification access still missing there is
+  // nothing to explain this by, and it would land on top of that flow. It then happens on the
+  // launch after that access is granted instead.
+  if (!els.player.hidden) askUsageAccessOnce();
   loadEdgeConfig();
   // Cold-start mirror: EdgeOverlayPreference only remembers what setEdgeOverlayEnabled() last
   // wrote, and until now that only ever happened inside toggleEdgeOverlay() — someone who turned

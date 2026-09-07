@@ -180,8 +180,12 @@ Une fenêtre de superposition ne voit pas ce qu'il y a en dessous, et la session
 rien de l'app affichée — un Deezer en pause en arrière-plan y ressemble trait pour trait à un
 Deezer au premier plan. La seule façon de le savoir sans service d'accessibilité est
 `UsageStatsManager`, qui demande l'autorisation spéciale **« Accès aux données d'utilisation »**
-(voir `ForegroundApp.java`). Elle est accordée dans un écran système, comme les deux autres
-autorisations spéciales de l'app, et n'est demandée qu'au moment où on active ce réglage.
+(voir `ForegroundApp.java`). Elle est accordée dans un écran système, comme les deux autres autorisations spéciales de l'app,
+et elle est demandée **une fois, au premier lancement qui atteint l'écran lecteur** — donc au
+même moment que le micro et l'accès aux notifications, et non plus seulement depuis le panneau.
+Une seule fois : un écran système qui se rouvre à chaque lancement est ce qui fait désinstaller
+une app. La réponse est mémorisée sous `vizuzik:usageAccessAsked`, et le bouton du panneau reste
+là pour changer d'avis.
 
 Tant qu'elle n'est pas accordée, rien ne peut répondre à la question : le contour **reste visible
 partout** et le Cocon ne bascule sur rien, plutôt que de se cacher ou de se dégrader au jugé. Le
