@@ -17,6 +17,9 @@ final class EdgeConfig {
     // See EdgeGlowView.drawBars() — each band drawn on its own instead of averaged into the
     // glow's single scalar. The default since STYLE_VERSION 2.
     static final String STYLE_BARS = "bars";
+    // See EdgeGlowView.drawCocoon() — a woven ribbon centred on Deezer's own album art rather
+    // than the four screen edges the other two styles are confined to.
+    static final String STYLE_COCOON = "cocoon";
 
     static final String BAND_FULL = "full";
     static final String BAND_BASS = "bass";

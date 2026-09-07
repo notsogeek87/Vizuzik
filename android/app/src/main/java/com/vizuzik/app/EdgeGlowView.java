@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Shader;
 import android.os.Handler;
 import android.os.Looper;
@@ -27,9 +28,9 @@ import android.view.View;
  * colors (or a fixed custom palette, see EdgeConfig), and a real event (track change, play/pause)
  * is still allowed an honest pulse.
  *
- * Two rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
- * each of the 32 bands on its own, and "glow", the border that averages them into one scalar.
- * onDraw() is where a third (particles, waves…) would plug in alongside them.
+ * Three rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
+ * each of the 32 bands on its own; "glow", the border that averages them into one scalar; and
+ * "cocoon", the one style that isn't edge-only — see drawCocoon() below for why and how.
  */
 final class EdgeGlowView extends View {
 
@@ -66,6 +67,18 @@ final class EdgeGlowView extends View {
     // lets two rows meet on a loud passage and cover the middle of whatever is underneath — this
     // overlay is meant to frame the tracked app, not hide it.
     private static final float BAR_MAX_FRACTION = 0.3f;
+
+    // Where Deezer's own now-playing album art sits, measured from a reference screenshot:
+    // centred horizontally, its top edge a little below Deezer's own top bar, sized as a
+    // fraction of the screen's width (it reads as square on the device that screenshot came
+    // from). This view has no way to read another app's actual view bounds — there is no
+    // accessibility hook wired up for that — so "cocoon" (the one style drawn around a point
+    // rather than along the four edges) works from this fixed estimate rather than a real
+    // measurement. It will drift on a device or Deezer layout the screenshot doesn't match;
+    // there is nothing to correct that against short of adding real layout inspection.
+    private static final float ART_CENTER_X_FRACTION = 0.5f;
+    private static final float ART_TOP_FRACTION = 0.095f;
+    private static final float ART_WIDTH_FRACTION = 0.64f;
 
     private final Paint paint = new Paint();
     private final float density;
@@ -279,6 +292,8 @@ final class EdgeGlowView extends View {
         try {
             if (EdgeConfig.STYLE_BARS.equals(style)) {
                 drawBars(canvas);
+            } else if (EdgeConfig.STYLE_COCOON.equals(style)) {
+                drawCocoon(canvas);
             } else {
                 drawGlow(canvas);
             }
@@ -315,6 +330,9 @@ final class EdgeGlowView extends View {
 
         int color = displayColor();
         paint.setShader(null);
+        // Reset from whatever drawCocoon() may have left the shared Paint in — style can change
+        // live, mid-overlay, from a settings-panel edit.
+        paint.setStyle(Paint.Style.FILL);
 
         // Every edge the panel enables, not the bottom alone: leaving only Gauche/Droite checked
         // would otherwise render nothing at all, which looks exactly like a capture that died.
@@ -382,6 +400,9 @@ final class EdgeGlowView extends View {
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
 
+        // Reset from whatever drawCocoon() may have left the shared Paint in — style can change
+        // live, mid-overlay, from a settings-panel edit.
+        paint.setStyle(Paint.Style.FILL);
         int color = displayColor();
         // beatEnergy carries either a real detected beat (live) or a real event's pulse() —
         // track change, play/pause — in both regimes.
@@ -433,11 +454,115 @@ final class EdgeGlowView extends View {
         canvas.drawRect(left, top, left + w, top + h, paint);
     }
 
+    /**
+     * The one style that isn't confined to the four screen edges: a woven ribbon of light (three
+     * strands, same idea as src/visualizer.js's "cocoon" scene on Vizuzik's own full-screen
+     * player) wrapped around where Deezer's own album art sits on screen — see
+     * ART_CENTER_X_FRACTION/ART_TOP_FRACTION/ART_WIDTH_FRACTION above for where that estimate
+     * comes from and its limits. Reuses the same beat/palette/ambient state the other two styles
+     * already maintain; only the geometry and per-point spectrum sampling are new.
+     */
+    private void drawCocoon(Canvas canvas) {
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        float fx = width * ART_CENTER_X_FRACTION;
+        float artHalf = width * ART_WIDTH_FRACTION * 0.5f;
+        float fy = height * ART_TOP_FRACTION + artHalf;
+
+        boolean live = lastLevelsAtMs != 0
+            && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
+        float[] bands = live ? lastBands : null;
+
+        float pulse = clamp01(beatEnergy);
+        float restR = artHalf * (1.16f + pulse * 0.05f);
+        float t = SystemClock.elapsedRealtime() / 1000f;
+
+        paint.setShader(null);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+
+        int strands = 3;
+        int spokes = 96;
+        Path path = new Path();
+        for (int s = 0; s < strands; s++) {
+            float phase = t * (0.22f + s * 0.09f) + s * 2.4f;
+            float petals = 3 + s;
+            float drift = t * (0.16f + s * 0.06f) * (s % 2 == 0 ? 1 : -1);
+
+            path.reset();
+            for (int i = 0; i <= spokes; i++) {
+                float frac = (float) i / spokes;
+                float angle = (float) (frac * Math.PI * 2) + drift;
+                float level = sampleLevel(bands, frac);
+                float wobble = (float) (
+                    Math.sin(angle * petals + phase) * 0.15
+                        + Math.sin(angle * petals * 1.6 - phase * 1.3) * 0.06
+                );
+                float rad = restR * (1 + wobble + level * 0.3f * intensity + pulse * 0.06f * intensity)
+                    + s * artHalf * 0.05f;
+                float px = fx + (float) Math.cos(angle) * rad;
+                float py = fy + (float) Math.sin(angle) * rad;
+                if (i == 0) path.moveTo(px, py);
+                else path.lineTo(px, py);
+            }
+            path.close();
+
+            int mainColor = paletteColorAt(s);
+            int filamentColor = paletteColorAt(s + 1);
+
+            paint.setColor((mainColor & 0x00FFFFFF) | (clamp255((int) ((36 + pulse * 30f) * brightnessMul)) << 24));
+            paint.setStrokeWidth((8f + s * 2f) * thicknessMul * density);
+            canvas.drawPath(path, paint);
+
+            // A crisp filament riding the same curve, same trick as the full-screen player's
+            // aurora/cocoon scenes: keeps the soft band from reading as fog.
+            paint.setColor((filamentColor & 0x00FFFFFF) | (clamp255((int) ((120 + pulse * 90f) * brightnessMul)) << 24));
+            paint.setStrokeWidth(1.4f * density);
+            canvas.drawPath(path, paint);
+        }
+    }
+
+    /**
+     * Spectrum level for one point around the ribbon, mirrored the same way the full-screen
+     * player's _mirroredBand() is: bass in the middle of the ring, treble at the seam. Without
+     * live bands (capture not granted, or momentarily stalled) this falls back to the same
+     * three-incommensurate-wave breathing drawGlow() uses in ambient mode, phase-shifted by
+     * position around the ring so it reads as a slow current rather than one uniform pulse — a
+     * gentle "still alive" without ever claiming to have heard a beat it didn't.
+     */
+    private float sampleLevel(float[] bands, float frac) {
+        if (bands != null && bands.length > 0) {
+            float d = Math.abs(frac - 0.5f) * 2f;
+            int idx = Math.round(d * (bands.length - 1));
+            idx = Math.max(0, Math.min(bands.length - 1, idx));
+            return clamp01(bands[idx] * sensitivity);
+        }
+        double a = Math.sin((ambientPhase + frac * 4000) / 7_000.0 * Math.PI * 2);
+        double b = Math.sin((ambientPhase + frac * 6000) / 11_000.0 * Math.PI * 2 + 1.7);
+        double c = Math.sin((ambientPhase + frac * 3000) / 17_000.0 * Math.PI * 2 + 3.1);
+        return clamp01((float) (0.15 + (a + b + c) / 3.0 * 0.12));
+    }
+
     private int displayColor() {
+        return paletteColorAt(0f);
+    }
+
+    /**
+     * Palette colour at a floating index, offset by the same ambient colour travel displayColor()
+     * rides on — lets several elements each sit at their own fixed offset into the travelling
+     * palette instead of all showing the exact same colour at once. drawCocoon()'s three strands
+     * use this at 0/1/2 so they read as distinct threads rather than one flat ring.
+     */
+    private int paletteColorAt(float floatIndex) {
         int[][] palette = currentPalette();
-        int index = (int) Math.floor(colorShift) % 3;
+        float p = floatIndex + colorShift;
+        int base = (int) Math.floor(p);
+        int index = ((base % 3) + 3) % 3;
         int next = (index + 1) % 3;
-        float frac = colorShift - (float) Math.floor(colorShift);
+        float frac = p - (float) Math.floor(p);
         int[] a = palette[index];
         int[] b = palette[next];
         int r = Math.round(a[0] + (b[0] - a[0]) * frac);

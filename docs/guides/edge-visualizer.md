@@ -46,7 +46,7 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 
 | Réglage | Effet |
 |---|---|
-| Style | Une seule implémentation pour l'instant (« Contour lumineux ») ; l'architecture permet d'en ajouter d'autres plus tard. |
+| Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un ruban tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
 | Fréquences utilisées | Quelle partie du spectre fait varier le contour : tout le spectre, seulement les basses, les médiums, ou les aigus. |
 | Couleurs | Auto (les trois accents extraits de la pochette du morceau) ou trois couleurs fixes. |
 | Intensité / Épaisseur / Luminosité / Sensibilité | Des multiplicateurs sur la réaction visuelle — 1 = comportement par défaut. |
@@ -54,6 +54,24 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 
 Les changements s'appliquent immédiatement, même si le contour est déjà affiché — pas besoin de
 le redémarrer.
+
+## Le style « Cocon »
+
+Les styles « Barres » et « Contour lumineux » ne dessinent jamais que sur les quatre bords de
+l'écran — voir *Le principe* plus haut : la superposition est censée encadrer l'app suivie, pas
+la recouvrir. « Cocon » déroge à cette règle : un ruban tressé (trois brins, même principe que le
+mode `cocoon` du lecteur plein écran de Vizuzik — voir
+[Les sept modes de visualisation](modes-de-visualisation.md)) est dessiné centré sur la pochette
+de l'app suivie plutôt que sur les bords.
+
+Le problème, c'est que cette superposition n'a aucun moyen de lire la position réelle de la
+pochette dans l'app suivie — pas d'accès à sa hiérarchie de vues, aucun service d'accessibilité
+branché pour ça. `EdgeGlowView` estime donc cette position par une fraction fixe de la largeur et
+de la hauteur de l'écran (`ART_CENTER_X_FRACTION` / `ART_TOP_FRACTION` / `ART_WIDTH_FRACTION`),
+mesurée une fois sur une capture d'écran de référence de Deezer. Ça place bien le ruban sur les
+appareils et versions de Deezer proches de cette référence, mais dérive sur un écran de
+proportions différentes ou une mise en page Deezer qui aurait changé — et n'a bien sûr aucune
+chance d'être juste pour Spotify ou un autre lecteur suivi.
 
 ## Prérequis et limitations
 
