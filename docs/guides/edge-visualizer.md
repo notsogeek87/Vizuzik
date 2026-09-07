@@ -75,13 +75,26 @@ fusion additive : sur une page vert clair, éclaircir un fond déjà clair ne pr
 
 Le problème de fond, c'est que cette superposition n'a aucun moyen de lire la position réelle de
 la pochette dans l'app suivie — pas d'accès à sa hiérarchie de vues, aucun service
-d'accessibilité branché pour ça. `EdgeGlowView` estime donc cette position par une fraction fixe
-de la largeur et de la hauteur de l'écran (`ART_CENTER_X_FRACTION` / `ART_TOP_FRACTION` /
-`ART_WIDTH_FRACTION`), mesurée sur une capture d'écran de Deezer : un carré de 728 px de côté,
-centré, à 192 px du haut sur un écran de 1248×1823. Ça place bien le ruban sur les appareils et
-versions de Deezer proches de cette référence, mais dérive sur un écran de proportions
-différentes ou une mise en page Deezer qui aurait changé — et n'a bien sûr aucune chance d'être
-juste pour Spotify ou un autre lecteur suivi.
+d'accessibilité branché pour ça. `EdgeGlowView` estime donc cette position par des fractions
+fixes de la taille de l'écran, mesurées sur des captures de Deezer.
+
+Deezer ayant **deux mises en page**, il y a deux jeux de fractions, et la forme de la fenêtre
+suffit à choisir laquelle s'applique — sans rien demander à Deezer. Les deux ont été mesurées sur
+un Z Fold :
+
+| Écran | Mise en page Deezer | Pochette |
+|---|---|---|
+| Plié / portrait (1248×1823) | une colonne | carré de 0,583 de la largeur, centré, bord haut à 0,105 de la hauteur |
+| Déplié / paysage (2448×1575) | deux volets | dans le volet gauche : centré verticalement, centré sur le premier quart de la largeur, dimensionné sur la **hauteur** (0,619) puisque c'est elle qui contraint une mise en page large |
+
+Comme la largeur et la hauteur sont relues à chaque image, plier ou déplier le téléphone
+déplace le ruban avec la pochette, sans que quoi que ce soit ait à en être prévenu. Sur la mise
+en page dépliée, la pochette est très près du bord gauche : le faisceau est alors resserré pour
+tenir dans la place disponible plutôt que de sortir de l'écran.
+
+Un écran ou une version de Deezer éloignés de ces deux références dérivent, et rien ici ne peut
+le corriger sans véritable inspection de la mise en page — sans parler de Spotify ou d'un autre
+lecteur suivi, dont les mises en page sont différentes.
 
 ## Seulement par-dessus l'app de musique
 

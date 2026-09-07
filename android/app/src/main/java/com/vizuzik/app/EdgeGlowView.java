@@ -69,16 +69,27 @@ final class EdgeGlowView extends View {
     // overlay is meant to frame the tracked app, not hide it.
     private static final float BAR_MAX_FRACTION = 0.3f;
 
-    // Where Deezer's own now-playing album art sits, measured off a device screenshot: a square
-    // 728px wide on a 1248x1823 screen, centred horizontally, its top edge 192px down — hence
-    // 0.583 of the width and 0.105 of the height. This view has no way to read another app's
-    // actual view bounds (there is no accessibility hook wired up for that), so "cocoon" — the
-    // one style drawn around a point rather than along the four edges — works from this fixed
-    // estimate. It drifts on a screen shape or a Deezer layout that screenshot doesn't match,
-    // and there is nothing to correct it against short of adding real layout inspection.
-    private static final float ART_CENTER_X_FRACTION = 0.5f;
-    private static final float ART_TOP_FRACTION = 0.105f;
-    private static final float ART_WIDTH_FRACTION = 0.583f;
+    // Where Deezer's own now-playing album art sits. This view has no way to read another app's
+    // actual view bounds — there is no accessibility hook wired up for that — so "cocoon", the
+    // one style drawn around a point rather than along the four edges, works from measurements
+    // taken off screenshots.
+    //
+    // Deezer lays that screen out two ways, and which one is up can be told from this window's
+    // own shape, without asking Deezer anything. Both were measured on a Z Fold:
+    //   folded   1248x1823 — one column, the cover a square 0.583 of the width, top edge 0.105
+    //                        of the height down, centred horizontally
+    //   unfolded 2448x1575 — two panes, the cover moved into the left one: vertically centred,
+    //                        centred on the first quarter of the width, and sized off the
+    //                        *height* (0.619) since height is what constrains a wide layout
+    //
+    // A screen shape or a Deezer version far from either of those drifts, and nothing here can
+    // correct for that short of real layout inspection.
+    private static final float ART_TALL_CENTER_X_FRACTION = 0.5f;
+    private static final float ART_TALL_TOP_FRACTION = 0.105f;
+    private static final float ART_TALL_WIDTH_FRACTION = 0.583f;
+    private static final float ART_WIDE_CENTER_X_FRACTION = 0.25f;
+    private static final float ART_WIDE_CENTER_Y_FRACTION = 0.5f;
+    private static final float ART_WIDE_HEIGHT_FRACTION = 0.619f;
 
     // The cocoon bundle, in multiples of the artwork's half-size. What makes it read as a ribbon
     // of light rather than a few loops is the density: two dozen hairlines packed into a narrow
@@ -544,9 +555,15 @@ final class EdgeGlowView extends View {
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
 
-        float cx = width * ART_CENTER_X_FRACTION;
-        float half = width * ART_WIDTH_FRACTION * 0.5f;
-        float cy = height * ART_TOP_FRACTION + half;
+        // Landscape means Deezer's two-pane layout, portrait its one-column one — see the ART_*
+        // constants. Read fresh every frame, so folding or unfolding the device moves the ribbon
+        // with the cover instead of needing anything to be told about it.
+        boolean wide = width > height;
+        float half = wide
+            ? height * ART_WIDE_HEIGHT_FRACTION * 0.5f
+            : width * ART_TALL_WIDTH_FRACTION * 0.5f;
+        float cx = width * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION);
+        float cy = wide ? height * ART_WIDE_CENTER_Y_FRACTION : height * ART_TALL_TOP_FRACTION + half;
         if (half <= 0) return;
 
         boolean live = lastLevelsAtMs != 0
@@ -560,6 +577,17 @@ final class EdgeGlowView extends View {
         // ribbon stops framing it and starts burying the app around it.
         float band = Math.max(half * 0.08f, Math.min(half * COCOON_BAND * thicknessMul, half * 0.45f));
         float swing = half * COCOON_SWING;
+
+        // How much room there actually is between the cover and the nearest screen edge. On the
+        // unfolded layout the cover sits barely a tenth of the width from the left edge, so
+        // without this the bundle just runs off it and the ribbon reads as cut in half.
+        float room = Math.min(Math.min(cx, width - cx), Math.min(cy, height - cy)) * 0.98f
+            - half * COCOON_INNER;
+        if (room > 0 && band + swing > room) {
+            float squeeze = room / (band + swing);
+            band *= squeeze;
+            swing *= squeeze;
+        }
         float outer = half * COCOON_INNER + band + swing;
 
         drawCocoonHalo(canvas, cx, cy, outer, loud, pulse);
