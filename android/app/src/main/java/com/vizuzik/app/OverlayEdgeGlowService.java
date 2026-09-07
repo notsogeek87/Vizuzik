@@ -304,13 +304,13 @@ public class OverlayEdgeGlowService extends Service
         return null;
     }
 
-    /** Same reasoning as AudioCaptureService: swiping Vizuzik out of recents is the real "stop"
-     *  moment, as opposed to the tracked app merely being what's in front right now. */
-    @Override
-    public void onTaskRemoved(Intent rootIntent) {
-        stopSelf();
-        super.onTaskRemoved(rootIntent);
-    }
+    // No onTaskRemoved() override, deliberately — unlike AudioCaptureService, whose capture only
+    // exists by way of a MediaProjection grant the Activity obtained. This overlay is meant to run
+    // precisely when Vizuzik isn't there: it starts on its own from NowPlayingListenerService the
+    // first time a track plays, with the Activity never launched at all, so having a swipe out of
+    // recents stop it made no sense. It also didn't work — NowPlayingListenerService survives task
+    // removal and keeps publishing, so the very next playback event started the overlay straight
+    // back up. What turns this off is the Edge Visualizer toggle, or playback stopping.
 
     @Override
     public void onDestroy() {

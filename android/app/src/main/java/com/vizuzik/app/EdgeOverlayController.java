@@ -54,9 +54,9 @@ final class EdgeOverlayController implements DeezerMediaBridge.Listener {
 
     /** The service is gone — including when it stopped itself rather than being asked to, which is
      *  why this can't be inferred from requestStop() alone. Re-syncs rather than just clearing the
-     *  flag: this can also arrive *after* a newer start (foreground Vizuzik, then straight back to
-     *  Deezer, destroying the old instance last), and leaving the flag false while the overlay is
-     *  in fact running would make the next stop a no-op and strand it on screen. */
+     *  flag: the destroy can arrive *after* a newer start (foregrounding Vizuzik then going
+     *  straight back to Deezer destroys the old instance last), and leaving the flag false while
+     *  the overlay is in fact running would make the next stop a no-op and strand it on screen. */
     void onServiceStopped() {
         lastStarted = false;
         sync();
