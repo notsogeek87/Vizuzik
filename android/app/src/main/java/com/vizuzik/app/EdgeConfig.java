@@ -127,7 +127,7 @@ final class EdgeConfig {
             prefs.getBoolean(KEY_BOTTOM, true),
             prefs.getBoolean(KEY_LEFT, true),
             prefs.getBoolean(KEY_RIGHT, true),
-            prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, true),
+            prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, false),
             prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS)
         );
     }

@@ -46,7 +46,7 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 
 | Réglage | Effet |
 |---|---|
-| Seulement par-dessus l'app de musique | Masque le contour dès que Deezer/Spotify n'est plus à l'écran. Activé par défaut ; demande l'autorisation « Accès aux données d'utilisation » — voir plus bas. |
+| Masquer hors de l'app de musique | Masque **tout** dès que Deezer/Spotify n'est plus à l'écran, au lieu de basculer sur le style de repli. Désactivé par défaut ; demande l'autorisation « Accès aux données d'utilisation » — voir plus bas. |
 | Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un faisceau tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
 | Hauteur des barres | Jusqu'où les barres montent. N'agit que sur le style « Barres » : le contour est une bordure d'épaisseur fixe, et le cocon se dimensionne sur la pochette. |
 | Hors de l'app de musique | Ce que « Cocon » affiche quand Deezer n'est pas à l'écran : les barres ou le contour. Sans effet sur les deux autres styles. |
@@ -79,7 +79,8 @@ Les styles « Barres » et « Contour lumineux » ne dessinent jamais que sur le
 l'écran — voir *Le principe* plus haut : la superposition est censée encadrer l'app suivie, pas
 la recouvrir. « Cocon » déroge à cette règle : un faisceau d'une vingtaine de brins fins,
 dessiné en carré arrondi (une superellipse, pas un cercle : ce qu'il encadre est une pochette
-carrée) tout autour de la pochette de l'app suivie plutôt que sur les bords. Même idée que le
+carrée — l'exposant vaut 8, ce qui place le coin à 72 % du chemin entre le cercle et le carré et
+colle à l'arrondi de la pochette ; à 3,4, il n'en faisait que 37 % et se lisait comme une bulle) tout autour de la pochette de l'app suivie plutôt que sur les bords. Même idée que le
 mode `cocoon` du lecteur plein écran — voir
 [Les sept modes de visualisation](modes-de-visualisation.md).
 
@@ -134,10 +135,11 @@ autre app — il n'encadrerait rien du tout. Dès que l'app de musique n'est pas
 style bascule donc sur celui choisi dans « Hors de l'app de musique » (barres ou contour), qui
 sont tous deux accrochés aux bords de l'écran et donc aussi justes par-dessus n'importe quoi.
 
-Deux nuances : ça demande la même autorisation d'accès aux données d'utilisation que le réglage
-précédent, et faute de pouvoir établir quelle app est devant, le style n'est pas changé — on ne
-dégrade rien au jugé. Et si « Seulement par-dessus l'app de musique » est activé, la question ne
-se pose pas : la superposition est déjà masquée dans ce cas.
+Deux nuances : ça demande l'autorisation d'accès aux données d'utilisation, et faute de pouvoir
+établir quelle app est devant, le style n'est pas changé — on ne dégrade rien au jugé. Et si
+« Masquer hors de l'app de musique » est activé, la question ne se pose plus : la superposition
+est déjà masquée dans ce cas, ce qui est précisément pourquoi ce réglage est désactivé par
+défaut.
 
 Ce que Vizuzik ne sait pas, en revanche, c'est *quel écran* de Deezer est affiché : rien ne
 distingue sa page de lecture de sa liste de titres depuis une fenêtre de superposition.
@@ -154,11 +156,12 @@ son propre déphasage, l'identité de la somme d'angles transformant le reste en
 multiplications-additions. Le spectre, lui, est échantillonné une fois par image et non une fois
 par brin. La boucle tourne du coup à 30 images/s au lieu de 24.
 
-## Seulement par-dessus l'app de musique
+## Savoir quelle app est à l'écran
 
-Par défaut, la superposition ne s'affiche que lorsque l'app suivie est **réellement à l'écran** :
-sortir de Deezer pour lire un message la fait disparaître, y revenir la ramène. C'est le premier
-réglage du panneau.
+Deux réglages en dépendent : le repli du Cocon (voir plus bas), et « Masquer hors de l'app de
+musique », qui fait disparaître la superposition entière dès qu'on quitte Deezer au lieu de la
+faire basculer sur le style de repli. Ce dernier est **désactivé par défaut** : les deux se
+contredisent, et masquer l'emportait — le repli ne pouvait alors jamais s'afficher.
 
 Une fenêtre de superposition ne voit pas ce qu'il y a en dessous, et la session multimédia ne dit
 rien de l'app affichée — un Deezer en pause en arrière-plan y ressemble trait pour trait à un
@@ -167,11 +170,19 @@ Deezer au premier plan. La seule façon de le savoir sans service d'accessibilit
 (voir `ForegroundApp.java`). Elle est accordée dans un écran système, comme les deux autres
 autorisations spéciales de l'app, et n'est demandée qu'au moment où on active ce réglage.
 
-Tant qu'elle n'est pas accordée, rien ne peut répondre à la question, et le contour **reste
-visible partout** plutôt que de se cacher au jugé : une décoration qui refuse silencieusement
-d'apparaître est un bien pire échec qu'une décoration qui apparaît de trop. Le libellé du réglage
-le dit dans ce cas. Rien d'autre n'est lu de ces statistiques : seulement le nom du dernier
-paquet passé au premier plan, jamais conservé ni envoyé nulle part.
+Tant qu'elle n'est pas accordée, rien ne peut répondre à la question : le contour **reste visible
+partout** et le Cocon ne bascule sur rien, plutôt que de se cacher ou de se dégrader au jugé. Le
+panneau affiche alors un bouton **« Autoriser l'accès aux données d'utilisation »**, et le
+libellé du réglage explique la situation.
+
+Ce bouton existe parce que la première version ne demandait l'autorisation qu'au basculement de
+l'interrupteur : celui-ci ayant une valeur par défaut, quelqu'un d'accord avec elle n'y touchait
+jamais et n'était donc jamais sollicité — les deux fonctionnalités ne faisaient alors rien, en
+silence. Une autorisation dont dépend une fonctionnalité doit pouvoir être accordée là où on
+constate qu'elle manque.
+
+Rien d'autre n'est lu de ces statistiques : seulement le nom du dernier paquet passé au premier
+plan, jamais conservé ni envoyé nulle part.
 
 ## Prérequis et limitations
 

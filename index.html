@@ -248,11 +248,18 @@
              keeps showing everywhere rather than hiding on a guess — see ForegroundApp. -->
         <label class="edge-settings__row edge-settings__row--switch">
           <span>
-            Seulement par-dessus l'app de musique
-            <small id="edge-only-music-app-hint">Masque le visualiseur dès que Deezer n'est plus à l'écran.</small>
+            Masquer hors de l'app de musique
+            <small id="edge-only-music-app-hint">Masque tout dès que Deezer n'est plus à l'écran, au lieu de basculer sur le style de repli.</small>
           </span>
-          <input id="edge-only-music-app" type="checkbox" checked />
+          <input id="edge-only-music-app" type="checkbox" />
         </label>
+
+        <!-- Both this switch and the cocoon's fallback need to know which app is on screen, and
+             nothing but "usage access" can tell an overlay window that. Shown only while the
+             grant is missing: without it neither feature does anything at all. -->
+        <button id="edge-usage-grant" type="button" class="grant-button edge-settings__grant" hidden>
+          Autoriser l'accès aux données d'utilisation
+        </button>
 
         <label class="edge-settings__row">
           <span>Style</span>

@@ -102,12 +102,16 @@ final class EdgeGlowView extends View {
     // The path is a superellipse, not a circle: the thing it frames is a square cover, and a
     // circle around a square leaves gaps at the edge midpoints and crowds the corners.
     private static final int COCOON_STRANDS = 22;
-    private static final int COCOON_SPOKES = 96;
+    private static final int COCOON_SPOKES = 128;
     private static final float COCOON_INNER = 1.045f;
     private static final float COCOON_BAND = 0.20f;
-    private static final float COCOON_SWING = 0.12f;
+    private static final float COCOON_SWING = 0.085f;
     private static final float COCOON_SHEAR = 0.45f;
-    private static final float COCOON_SQUIRCLE = 3.4f;
+    // What it frames is a square cover, so the ribbon has to read as a square with rounded
+    // corners. The exponent is how far round that shape sits between a circle and a true square:
+    // at the corner, 3.4 reached only 37% of the way there and looked like a blob, 8 reaches 72%
+    // and matches the artwork's own corner rounding.
+    private static final float COCOON_SQUIRCLE = 8f;
     private static final float COCOON_LINE = 0.62f;
     private static final int COCOON_SHADOW_ALPHA = 33;
     /** How far the ribbon's colours are pushed away from grey — see buildCocoonSweep(). */

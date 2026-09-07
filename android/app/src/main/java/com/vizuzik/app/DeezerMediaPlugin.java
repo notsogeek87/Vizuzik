@@ -504,7 +504,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("bottom", true),
             data.optBoolean("left", true),
             data.optBoolean("right", true),
-            data.optBoolean("onlyOverMusicApp", true),
+            data.optBoolean("onlyOverMusicApp", false),
             call.getString("cocoonFallback", EdgeConfig.STYLE_BARS)
         );
         call.resolve();

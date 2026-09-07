@@ -1612,3 +1612,12 @@ body[data-platform="tv"][data-mode="cassette"] .artist {
   }
 }
 
+
+/* The one action inside the settings panel that leaves the app: shown only while the "usage
+   access" grant is missing, since without it neither "Masquer hors de l'app de musique" nor the
+   cocoon's fallback style can work at all (see ForegroundApp.java). */
+.edge-settings__grant {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.92rem;
+  padding: 0.7rem 1rem;
+}

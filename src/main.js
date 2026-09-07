@@ -43,6 +43,7 @@ const els = {
   edgeRight: document.getElementById("edge-right"),
   edgeOnlyMusicApp: document.getElementById("edge-only-music-app"),
   edgeOnlyMusicAppHint: document.getElementById("edge-only-music-app-hint"),
+  edgeUsageGrant: document.getElementById("edge-usage-grant"),
   modeToggle: document.getElementById("mode-toggle"),
   modeToast: document.getElementById("mode-toast"),
   title: document.getElementById("title"),
@@ -480,10 +481,14 @@ async function syncUsageAccess() {
 
 function updateUsageAccessHint() {
   if (!els.edgeOnlyMusicAppHint) return;
-  els.edgeOnlyMusicAppHint.textContent =
-    els.edgeOnlyMusicApp.checked && !usageAccessGranted
-      ? "Autorisation « Accès aux données d'utilisation » requise — touchez pour l'accorder, sinon le visualiseur reste visible partout."
-      : "Masque le visualiseur dès que Deezer n'est plus à l'écran.";
+  // The grant is what lets Vizuzik know which app is on screen at all, so it gates this switch
+  // *and* the cocoon's fallback. Offered as its own button rather than only on flipping the
+  // switch: the switch has a default, so someone who agrees with it never touches it and would
+  // never be asked — which is exactly how both features ended up silently doing nothing.
+  els.edgeUsageGrant.hidden = usageAccessGranted;
+  els.edgeOnlyMusicAppHint.textContent = usageAccessGranted
+    ? "Masque tout dès que Deezer n'est plus à l'écran, au lieu de basculer sur le style de repli."
+    : "Sans l'accès aux données d'utilisation, Vizuzik ne sait pas quelle app est à l'écran : ni ce réglage ni le repli du Cocon ne peuvent fonctionner.";
 }
 
 /** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */
@@ -627,7 +632,7 @@ const EDGE_SETTINGS_DEFAULTS = {
   bottom: true,
   left: true,
   right: true,
-  onlyOverMusicApp: true,
+  onlyOverMusicApp: false,
 };
 
 function readEdgeCustomColors() {
@@ -835,13 +840,8 @@ els.edgeOverlayEnabled.addEventListener("change", () => {
   }
   setEdgeOverlayEnabled(els.edgeOverlayEnabled.checked);
 });
-els.edgeOnlyMusicApp.addEventListener("change", () => {
-  updateUsageAccessHint();
-  // Only ever asked for on a deliberate switch-on, never at launch: it is the one setting that
-  // needs a second system screen, and it is optional.
-  if (els.edgeOnlyMusicApp.checked && !usageAccessGranted) {
-    DeezerMedia.requestUsageAccess().catch(() => {});
-  }
+els.edgeUsageGrant.addEventListener("click", () => {
+  DeezerMedia.requestUsageAccess().catch(() => {});
 });
 
 els.edgeColorMode.addEventListener("change", () => {
