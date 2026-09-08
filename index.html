@@ -267,15 +267,17 @@
             <option value="bars">Barres (spectre)</option>
             <option value="glow">Contour lumineux</option>
             <option value="cocoon">Cocon (ruban tressé)</option>
+            <option value="vinyl">Vinyle (disque qui tourne)</option>
           </select>
         </label>
 
-        <!-- Only meaningful for "Cocon": it is drawn around the music app's own album art, so
-             anywhere else it would frame nothing. See activeStyle() in EdgeGlowView. -->
+        <!-- Only meaningful for "Cocon" et "Vinyle" : tous deux sont dessinés par-dessus la
+             pochette de l'app de musique, donc ailleurs ils n'ont rien à afficher. See
+             activeStyle() in EdgeGlowView. -->
         <label class="edge-settings__row">
           <span>
             Hors de l'app de musique
-            <small>Ce que « Cocon » affiche quand Deezer n'est pas à l'écran.</small>
+            <small>Ce que « Cocon » et « Vinyle » affichent quand Deezer n'est pas à l'écran.</small>
           </span>
           <select id="edge-cocoon-fallback">
             <option value="bars">Barres (spectre)</option>

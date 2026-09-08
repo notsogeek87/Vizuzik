@@ -20,6 +20,9 @@ final class EdgeConfig {
     // See EdgeGlowView.drawCocoon() — a woven ribbon centred on Deezer's own album art rather
     // than the four screen edges the other two styles are confined to.
     static final String STYLE_COCOON = "cocoon";
+    // See EdgeGlowView.drawVinyl() — the track's own artwork redrawn as a spinning record over
+    // Deezer's own (static) album art, the same spot "cocoon" is centred on.
+    static final String STYLE_VINYL = "vinyl";
 
     static final String BAND_FULL = "full";
     static final String BAND_BASS = "bass";
@@ -70,8 +73,9 @@ final class EdgeConfig {
         /** Hide the overlay unless the tracked music app is the one on screen — see
          *  ForegroundApp, and note it can only be honoured once "usage access" is granted. */
         final boolean onlyOverMusicApp;
-        /** What "cocoon" falls back to when the music app is not the one on screen: it is drawn
-         *  around where that app's album art sits, so anywhere else it frames nothing. */
+        /** What "cocoon" and "vinyl" fall back to when the music app is not the one on screen:
+         *  both are drawn against where that app's album art sits, so anywhere else there is
+         *  nothing for either of them to be drawn against. */
         final String cocoonFallback;
 
         Snapshot(

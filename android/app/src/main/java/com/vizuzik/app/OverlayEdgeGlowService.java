@@ -33,8 +33,9 @@ import androidx.core.content.ContextCompat;
  * in main.js) while the webview is running, and EdgeOverlayController natively (via
  * NowPlayingListenerService) so the same thing happens even if Vizuzik's own Activity/webview has
  * never launched this session. It listens to the same two bridges DeezerMediaPlugin does —
- * DeezerMediaBridge for the current track's artwork (turned into a glow color via OverlayPalette)
- * and AudioLevelsBridge for the loudness spectrum.
+ * DeezerMediaBridge for the current track's artwork (turned into a glow color via OverlayPalette,
+ * and handed to EdgeGlowView as-is too, for the "vinyl" style) and AudioLevelsBridge for the
+ * loudness spectrum.
  *
  * Never opens the microphone, and never needs to: the levels come from TrackedAudioCapture, the
  * app's single audio source, owned process-wide rather than by this service. That ownership is the
@@ -230,6 +231,10 @@ public class OverlayEdgeGlowService extends Service
     public void onNowPlayingChanged(DeezerMediaBridge.NowPlaying nowPlaying) {
         if (glowView == null || nowPlaying == null) return;
 
+        // Gates "vinyl"'s rotation — set on every update, a track change or a bare play/pause
+        // alike, not only when a new track lands below.
+        glowView.setPlaying(nowPlaying.isPlaying);
+
         // A real event, same two the full-screen player pulses on: a new track landing, or
         // play/pause toggling. Without AudioLevelsBridge running (no "real audio" capture
         // granted), these are the *only* honest impulses the glow is allowed — ambient mode
@@ -243,6 +248,7 @@ public class OverlayEdgeGlowService extends Service
             // must never be able to bring down the whole app.
             try {
                 glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
+                glowView.setAlbumArt(nowPlaying.albumArt);
             } catch (Exception e) {
                 Log.w(TAG, "onNowPlayingChanged", e);
             }

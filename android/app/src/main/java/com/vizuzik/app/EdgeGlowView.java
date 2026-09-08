@@ -1,10 +1,13 @@
 package com.vizuzik.app;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Rect;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
@@ -32,9 +35,11 @@ import android.view.WindowManager;
  * colors (or a fixed custom palette, see EdgeConfig), and a real event (track change, play/pause)
  * is still allowed an honest pulse.
  *
- * Three rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
- * each of the 32 bands on its own; "glow", the border that averages them into one scalar; and
- * "cocoon", the one style that isn't edge-only — see drawCocoon() below for why and how.
+ * Four rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
+ * each of the 32 bands on its own; "glow", the border that averages them into one scalar;
+ * "cocoon", a ribbon woven around Deezer's own album art; and "vinyl", that same artwork redrawn
+ * as a spinning record in the same spot — see drawCocoon() and drawVinyl() below for why and how
+ * those two aren't edge-only like the first two.
  */
 final class EdgeGlowView extends View {
 
@@ -134,6 +139,22 @@ final class EdgeGlowView extends View {
     // dipped inward would crawl across the album art it is supposed to be framing.
     private static final float COCOON_WAVE_MAX = 0.085f + 0.042f + 0.055f;
 
+    // "Vinyl": the same 16s-per-turn rate the web player's own .disc__spin uses, so the overlay
+    // reads as the same object rather than a different speed invented for the native side. A
+    // physical turntable's platter doesn't speed up with the music, so unlike the cocoon's
+    // phases this never reacts to loudness — only to whether the track is actually playing.
+    private static final float VINYL_DEG_PER_SEC = 360f / 16f;
+    private static final int VINYL_GROOVES = 9;
+    // Where the grooves start and how far they reach, as a fraction of the disc's own radius —
+    // clear of the label in the middle and short of the rim, the same band a pressed record's
+    // grooves actually occupy.
+    private static final float VINYL_GROOVE_START = 0.34f;
+    private static final float VINYL_GROOVE_SPAN = 0.60f;
+    // Same 13%-of-diameter label CSS's .disc__label uses, expressed as a fraction of the radius.
+    private static final float VINYL_LABEL_FRACTION = 0.13f;
+    // Same --void CSS variable the web player's own .cover background sits on (#14141f).
+    private static final int VINYL_VOID_COLOR = 0xFF14141F;
+
     // Everything about the ribbon that depends only on where you are around it, computed once at
     // class load: the superellipse radius (three Math.pow calls each), the unit vector, and the
     // sines and cosines of the three lobe frequencies. All of it used to be recomputed for every
@@ -213,6 +234,19 @@ final class EdgeGlowView extends View {
     private float cocoonShear;
     private float cocoonOrbit;
     private float cocoonTwinkle;
+
+    // The vinyl's own rotation, accumulated the same way as the cocoon's phases rather than
+    // derived from the clock — see the field comments above for why. Frozen exactly where it
+    // is, with no ease-out, the instant playback pauses: same as the web player's own
+    // animation-play-state toggle, and how a real deck's platter actually stops.
+    private float vinylAngleDeg;
+    private volatile boolean vinylPlaying = true;
+    // The last artwork handed over for "vinyl" — see setAlbumArt(). Read from the main thread
+    // only (set from DeezerMediaBridge's callback, which also runs on the main thread), so a
+    // plain reference is enough; the shader is rebuilt once per track rather than per frame.
+    private Bitmap vinylBitmap;
+    private BitmapShader vinylShader;
+    private final Matrix vinylMatrix = new Matrix();
 
     // The bars style used to draw whatever the capture last handed over, raw, which flickers:
     // consecutive frames of a real spectrum jump around a lot. These follow it with an
@@ -307,6 +341,28 @@ final class EdgeGlowView extends View {
         fromPalette = currentAutoPalette();
         toPalette = palette != null ? palette : FALLBACK_PALETTE;
         paletteBlendStartMs = SystemClock.elapsedRealtime();
+    }
+
+    /**
+     * The current track's own artwork, for "vinyl" — called once per track change from
+     * OverlayEdgeGlowService, same call site as setPalette() above. The shader wrapping it is
+     * built here rather than per frame, since it never needs to change until the next track
+     * does; drawVinyl() only ever adjusts its matrix.
+     */
+    void setAlbumArt(Bitmap albumArt) {
+        if (albumArt == null || albumArt.isRecycled()) {
+            vinylBitmap = null;
+            vinylShader = null;
+            return;
+        }
+        vinylBitmap = albumArt;
+        vinylShader = new BitmapShader(albumArt, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+    }
+
+    /** Whether the track is actually playing right now — the one thing that gates "vinyl"'s
+     *  rotation, called on every now-playing update rather than only on a track change. */
+    void setPlaying(boolean playing) {
+        vinylPlaying = playing;
     }
 
     /** The capture feeding this view stopped for good — drop straight back to ambient. */
@@ -426,6 +482,7 @@ final class EdgeGlowView extends View {
             ambientPhase += dtMs;
             advanceCocoonPhases(dtMs / 1000f);
             advanceBars(dtMs / 1000f);
+            advanceVinyl(dtMs / 1000f);
             updateSuppression(now);
 
             invalidate();
@@ -455,6 +512,13 @@ final class EdgeGlowView extends View {
         cocoonShear = wrapTwoPi(cocoonShear + dt * (0.42f + drive * 0.7f));
         cocoonOrbit = wrapTwoPi(cocoonOrbit + dt * 0.05f);
         cocoonTwinkle = wrapTwoPi(cocoonTwinkle + dt * 1.7f);
+    }
+
+    /** Turns "vinyl" at its fixed rate while playing; holds still, mid-turn, the moment it isn't
+     *  — see VINYL_DEG_PER_SEC above for why this never speeds up with the music. */
+    private void advanceVinyl(float dt) {
+        if (!vinylPlaying) return;
+        vinylAngleDeg = (vinylAngleDeg + dt * VINYL_DEG_PER_SEC) % 360f;
     }
 
     /** Eases the drawn spectrum towards the captured one and lets the peak caps fall. */
@@ -529,16 +593,16 @@ final class EdgeGlowView extends View {
     }
 
     /**
-     * Which style to actually paint. Only "cocoon" is ever swapped: it is drawn around where the
-     * music app's own album art sits (see the ART_* constants), so anywhere but that app's
-     * now-playing screen it would be framing nothing at all. The other two are tied to the screen
-     * edges and are just as true over anything.
+     * Which style to actually paint. Only "cocoon" and "vinyl" are ever swapped: both are drawn
+     * against where the music app's own album art sits (see the ART_* constants), so anywhere
+     * but that app's now-playing screen either would be drawn against nothing at all. The other
+     * two are tied to the screen edges and are just as true over anything.
      *
      * Left alone when the foreground app cannot be established — the same rule as suppression:
      * nothing is degraded on a guess.
      */
     private String activeStyle() {
-        if (!EdgeConfig.STYLE_COCOON.equals(style)) return style;
+        if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
         if (!foregroundKnown || trackedAppOnScreen) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
@@ -555,6 +619,8 @@ final class EdgeGlowView extends View {
                 drawBars(canvas);
             } else if (EdgeConfig.STYLE_COCOON.equals(active)) {
                 drawCocoon(canvas);
+            } else if (EdgeConfig.STYLE_VINYL.equals(active)) {
+                drawVinyl(canvas);
             } else {
                 drawGlow(canvas);
             }
@@ -800,28 +866,55 @@ final class EdgeGlowView extends View {
      * Reuses the beat/palette/ambient state the other two styles maintain; the geometry, the
      * sweep and the per-point spectrum sampling are what's specific here.
      */
-    private void drawCocoon(Canvas canvas) {
-        int width = getWidth();
-        int height = getHeight();
-        if (width <= 0 || height <= 0) return;
+    /** Screen-space centre and half-size of wherever the music app's own album art sits — shared
+     *  by "cocoon" and "vinyl", the two styles anchored to it rather than to the screen's edges.
+     *  See the ART_* constants above for where the estimate comes from and its limits. */
+    private static final class ArtRect {
+        final float cx;
+        final float cy;
+        final float half;
+        ArtRect(float cx, float cy, float half) {
+            this.cx = cx;
+            this.cy = cy;
+            this.half = half;
+        }
+    }
 
+    private ArtRect artRect() {
         // Measured against the screen, then translated into this view's own coordinates: the
         // window is laid out with NO_LIMITS and into the display cutout, so its size and origin
-        // are not the screen's, and placing the ribbon with getWidth()/getHeight() drifted it
-        // well off the cover. Landscape means Deezer's two-pane layout, portrait its one-column
-        // one — read every frame, so folding the device moves the ribbon with the cover.
-        float screenW = displayWidth > 0 ? displayWidth : width;
-        float screenH = displayHeight > 0 ? displayHeight : height;
+        // are not the screen's, and placing anything with getWidth()/getHeight() drifted it well
+        // off the cover. Landscape means Deezer's two-pane layout, portrait its one-column one —
+        // read every frame, so folding the device moves the anchor with the cover.
+        float screenW = displayWidth > 0 ? displayWidth : getWidth();
+        float screenH = displayHeight > 0 ? displayHeight : getHeight();
         boolean wide = screenW > screenH;
         float half = wide
             ? screenH * ART_WIDE_HEIGHT_FRACTION * 0.5f
             : screenW * ART_TALL_WIDTH_FRACTION * 0.5f;
-        if (half <= 0) return;
+        if (half <= 0) return null;
         getLocationOnScreen(viewLocation);
         float cx = screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
             - viewLocation[0];
         float cy = (wide ? screenH * ART_WIDE_CENTER_Y_FRACTION : screenH * ART_TALL_TOP_FRACTION + half)
             - viewLocation[1];
+        return new ArtRect(cx, cy, half);
+    }
+
+    private void drawCocoon(Canvas canvas) {
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        ArtRect art = artRect();
+        if (art == null) return;
+        float cx = art.cx;
+        float cy = art.cy;
+        float half = art.half;
+        // artRect() already refreshed viewLocation; screenW/screenH are only needed here, for
+        // how much room the bundle has to breathe into before it runs off the nearest edge.
+        float screenW = displayWidth > 0 ? displayWidth : width;
+        float screenH = displayHeight > 0 ? displayHeight : height;
 
         boolean live = lastLevelsAtMs != 0
             && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
@@ -1019,6 +1112,93 @@ final class EdgeGlowView extends View {
         }
     }
 
+    /**
+     * "Vinyl": the track's own artwork, redrawn as a spinning record exactly where the music
+     * app's now-playing screen keeps its album art (the same estimate "cocoon" is drawn against
+     * — see artRect()/the ART_* constants). Deezer's own artwork underneath never moves; painting
+     * a full, opaque circular copy of it on top and turning that copy is what actually makes it
+     * read as spinning, the way a physical record does, rather than a decoration around a still
+     * image.
+     *
+     * Nothing is drawn before the first track's artwork arrives (see setAlbumArt()) — there is no
+     * placeholder shape, since a blank turntable would be a stranger thing to show than nothing.
+     */
+    private void drawVinyl(Canvas canvas) {
+        Bitmap bitmap = vinylBitmap;
+        BitmapShader shader = vinylShader;
+        if (bitmap == null || shader == null || bitmap.isRecycled()) return;
+
+        ArtRect art = artRect();
+        if (art == null) return;
+        float half = art.half;
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setAntiAlias(true);
+        paint.setAlpha(255);
+
+        canvas.save();
+        canvas.translate(art.cx, art.cy);
+        canvas.rotate(vinylAngleDeg);
+        // A small beat-driven lift, same spirit as the web player's own disc scaling up on an
+        // impulse — the one bit of this style that answers the music rather than just turning at
+        // its own fixed rate.
+        float lift = 1f + clamp01(beatEnergy) * 0.02f;
+        canvas.scale(lift, lift);
+
+        // The artwork itself, scaled to cover a circle of radius `half` — the shorter of its two
+        // sides fills the disc exactly, the longer one overflows and is cropped by drawCircle()
+        // never painting past that radius, the same crop "cover" sizing gives a square image.
+        float scale = 2f * half / Math.min(bitmap.getWidth(), bitmap.getHeight());
+        vinylMatrix.setScale(scale, scale);
+        vinylMatrix.postTranslate(-bitmap.getWidth() * scale * 0.5f, -bitmap.getHeight() * scale * 0.5f);
+        shader.setLocalMatrix(vinylMatrix);
+        paint.setShader(shader);
+        canvas.drawCircle(0, 0, half, paint);
+        paint.setShader(null);
+
+        drawVinylGrooves(canvas, half);
+        drawVinylLabel(canvas, half);
+
+        canvas.restore();
+        paint.setAntiAlias(false);
+    }
+
+    /** Faint concentric rings over the artwork, the same repeating-radial-gradient texture the
+     *  web player's .disc__grooves gives its own spinning record. */
+    private void drawVinylGrooves(Canvas canvas, float half) {
+        paint.setStyle(Paint.Style.STROKE);
+        float start = half * VINYL_GROOVE_START;
+        float span = half * VINYL_GROOVE_SPAN;
+        for (int i = 0; i < VINYL_GROOVES; i++) {
+            float radius = start + span * ((i + 1f) / VINYL_GROOVES);
+            paint.setStrokeWidth(Math.max(1f, density * 0.6f));
+            paint.setColor(withAlpha(Color.BLACK, 70));
+            canvas.drawCircle(0, 0, radius, paint);
+            paint.setStrokeWidth(Math.max(0.6f, density * 0.35f));
+            paint.setColor(withAlpha(Color.WHITE, 26));
+            canvas.drawCircle(0, 0, radius - density * 0.8f, paint);
+        }
+    }
+
+    /** The centre label and spindle hole — what turns a circle of artwork into a record rather
+     *  than a coaster. Coloured from the same travelling palette as the rest of the overlay. */
+    private void drawVinylLabel(Canvas canvas, float half) {
+        float labelRadius = half * VINYL_LABEL_FRACTION;
+        int[] colors = {
+            withAlpha(VINYL_VOID_COLOR, 255),
+            withAlpha(VINYL_VOID_COLOR, 255),
+            withAlpha(paletteColorAt(0f), 217),
+            withAlpha(paletteColorAt(1f), 128),
+            withAlpha(paletteColorAt(1f), 0),
+        };
+        float[] stops = { 0f, 0.34f, 0.38f, 0.70f, 0.72f };
+        paint.setStyle(Paint.Style.FILL);
+        paint.setShader(new RadialGradient(0, 0, labelRadius, colors, stops, Shader.TileMode.CLAMP));
+        canvas.drawCircle(0, 0, labelRadius, paint);
+        paint.setShader(null);
+        paint.setColor(withAlpha(Color.BLACK, 200));
+        canvas.drawCircle(0, 0, Math.max(1.5f * density, labelRadius * 0.14f), paint);
+    }
 
     private static float squircle(float angle) {
         double c = Math.abs(Math.cos(angle));
