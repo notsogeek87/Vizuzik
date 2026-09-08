@@ -131,7 +131,20 @@ final class ForegroundApp {
         // latch this exists to correct, only pointing the other way, and it is the worse one:
         // what gets left behind is opaque, and an app underneath an opaque overlay stops
         // receiving touches at all.
+        //
+        // Confirmed live: this branch has no excuse to run forever, and letting it did exactly
+        // that. Leaving Deezer for the home screen is not itself an "app resumed" event the way
+        // opening one is, so UsageStatsManager's own aggregates can keep reporting Deezer as the
+        // more recently used package for a while after someone has plainly moved on — and with no
+        // bound here, recentlyUsedIsTracked() kept agreeing every 1.5s and the disc stayed
+        // spinning over the launcher. The override is a fix for the few seconds right after a
+        // fold, not a standing second opinion, so it lapses with the same window that started it.
         if (overriding) {
+            if (crossCheckUntilMs != 0 && now > crossCheckUntilMs) {
+                overriding = false;
+                crossCheckedAgainst = null;
+                return false;
+            }
             if (now - lastCrossCheckAtMs >= CROSS_CHECK_AGAIN_MS) {
                 lastCrossCheckAtMs = now;
                 overriding = recentlyUsedIsTracked(context, tracked);
