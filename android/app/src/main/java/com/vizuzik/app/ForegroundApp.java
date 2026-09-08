@@ -139,10 +139,19 @@ final class ForegroundApp {
             return overriding;
         }
 
-        // Starting one, on the other hand, is only ever considered just after a display change,
-        // and only once per package: outside that, being somewhere else is simply believed.
+        // Starting one, on the other hand, is only ever considered just after a display change:
+        // outside that window, being somewhere else is simply believed. Inside it, retried at the
+        // same cadence as an already-established override above (CROSS_CHECK_AGAIN_MS) rather than
+        // only once — a single attempt asked too soon, before UsageStatsManager's own aggregates
+        // have caught up with a fold that only just finished, used to cement a false "not the
+        // tracked app" for whatever remained of the session: nothing ever asked again for that
+        // same wrongly-reported package, and nothing resumes to correct it while someone simply
+        // keeps looking at the app they never left. The whole point of falling back to a coarser,
+        // slower source is that it needs a moment to catch up; one shot at it defeated that.
         if (crossCheckUntilMs == 0 || now > crossCheckUntilMs) return false;
-        if (current.equals(crossCheckedAgainst)) return false;
+        if (current.equals(crossCheckedAgainst) && now - lastCrossCheckAtMs < CROSS_CHECK_AGAIN_MS) {
+            return false;
+        }
         crossCheckedAgainst = current;
         lastCrossCheckAtMs = now;
         overriding = recentlyUsedIsTracked(context, tracked);
