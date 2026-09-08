@@ -552,7 +552,7 @@ function updateUsageAccessHint() {
   els.edgeUsageGrant.hidden = usageAccessGranted;
   els.edgeOnlyMusicAppHint.textContent = usageAccessGranted
     ? "Masque tout dès que Deezer n'est plus à l'écran, au lieu de basculer sur le style de repli."
-    : "Sans l'accès aux données d'utilisation, Vizuzik ne sait pas quelle app est à l'écran : ni ce réglage ni le repli du Cocon ne peuvent fonctionner.";
+    : "Sans l'accès aux données d'utilisation, Vizuzik ne sait pas quelle app est à l'écran : ce réglage ne peut pas fonctionner, et « Cocon » et « Vinyle » se rabattent sur le style de repli plutôt que de se poser au jugé sur une autre app.";
 }
 
 /** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */

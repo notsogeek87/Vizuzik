@@ -254,9 +254,10 @@
           <input id="edge-only-music-app" type="checkbox" />
         </label>
 
-        <!-- Both this switch and the cocoon's fallback need to know which app is on screen, and
-             nothing but "usage access" can tell an overlay window that. Shown only while the
-             grant is missing: without it neither feature does anything at all. -->
+        <!-- This switch, and the two styles drawn on the cover, all need to know which app is on
+             screen, and nothing but "usage access" can tell an overlay window that. Shown only
+             while the grant is missing: without it none of them can work — see activeStyle() in
+             EdgeGlowView for why « Cocon » and « Vinyle » refuse to draw rather than guess. -->
         <button id="edge-usage-grant" type="button" class="grant-button edge-settings__grant" hidden>
           Autoriser l'accès aux données d'utilisation
         </button>

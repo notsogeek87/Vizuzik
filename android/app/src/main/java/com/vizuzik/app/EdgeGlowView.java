@@ -671,12 +671,17 @@ final class EdgeGlowView extends View {
      * but that app's now-playing screen either would be drawn against nothing at all. The other
      * two are tied to the screen edges and are just as true over anything.
      *
-     * Left alone when the foreground app cannot be established — the same rule as suppression:
-     * nothing is degraded on a guess.
+     * These two need the music app to be *known* to be in front, not merely not known to be
+     * absent — the opposite of the rule suppression follows, and for a reason. Hiding on a guess
+     * costs a decoration; drawing a record on a guess puts an opaque disc over an app it was
+     * never measured for, hiding that app's own content and, from Android 12, stopping its
+     * touches from being delivered at all. So without an answer they fall back to an edge style,
+     * which is true over anything. That answer needs "usage access", which is what the settings
+     * panel says these two styles are for.
      */
     private String activeStyle() {
         if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
-        if (!foregroundKnown || trackedAppOnScreen) return style;
+        if (foregroundKnown && trackedAppOnScreen) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 

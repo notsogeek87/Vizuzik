@@ -49,10 +49,10 @@ final class ForegroundApp {
     private static String lastKnownPackage;
     private static long lastEventAtMs;
     private static long lastPolledAtMs;
-    /** The package the second opinion was last asked about, and what it said — see
-     *  isTrackedAppInForeground(). */
+    /** The package the second opinion was last asked about, and whether it is currently the one
+     *  answering rather than the event stream — see isTrackedAppInForeground(). */
     private static String crossCheckedAgainst;
-    private static boolean crossCheckSaidTracked;
+    private static boolean overriding;
     private static long lastCrossCheckAtMs;
     /** Until when the event stream counts as suspect — set by invalidate(), zero the rest of the
      *  time, which is when the events are simply believed. */
@@ -90,6 +90,7 @@ final class ForegroundApp {
         String current = currentPackage(context);
         if (current == null || current.equals(tracked)) {
             crossCheckedAgainst = null;
+            overriding = false;
             return true;
         }
 
@@ -104,20 +105,31 @@ final class ForegroundApp {
         // is put to usage statistics — a coarser source, several seconds behind at times, which
         // is exactly why it is not allowed anywhere near the ordinary case.
         long now = SystemClock.elapsedRealtime();
-        if (crossCheckUntilMs == 0 || now > crossCheckUntilMs) return false;
-        boolean sameSituation = current.equals(crossCheckedAgainst);
-        if (!sameSituation || now - lastCrossCheckAtMs >= CROSS_CHECK_AGAIN_MS) {
-            crossCheckedAgainst = current;
-            lastCrossCheckAtMs = now;
-            crossCheckSaidTracked = recentlyUsedIsTracked(context, tracked);
-            // Believed enough to correct the latch itself, not merely to answer this one
-            // question. Shadowing it would only postpone the fault: the package resumed in
-            // passing during the fold is still what the events say once the window above closes,
-            // and nothing resumes again to displace it. Corrected here, the next poll takes the
-            // cheap path, and a real app switch still overwrites it the moment one happens.
-            if (crossCheckSaidTracked) lastKnownPackage = tracked;
+
+        // While the statistics are overruling the events, they are asked again and again. An
+        // override is never written into the latch itself and never simply left standing: the
+        // events cannot correct it — nothing resumes while someone sits in the app they are
+        // already in — so an override kept without re-checking strands the overlay on top of
+        // another app, drawn for a cover that is not there. That is the same fault as the stuck
+        // latch this exists to correct, only pointing the other way, and it is the worse one:
+        // what gets left behind is opaque, and an app underneath an opaque overlay stops
+        // receiving touches at all.
+        if (overriding) {
+            if (now - lastCrossCheckAtMs >= CROSS_CHECK_AGAIN_MS) {
+                lastCrossCheckAtMs = now;
+                overriding = recentlyUsedIsTracked(context, tracked);
+            }
+            return overriding;
         }
-        return crossCheckSaidTracked;
+
+        // Starting one, on the other hand, is only ever considered just after a display change,
+        // and only once per package: outside that, being somewhere else is simply believed.
+        if (crossCheckUntilMs == 0 || now > crossCheckUntilMs) return false;
+        if (current.equals(crossCheckedAgainst)) return false;
+        crossCheckedAgainst = current;
+        lastCrossCheckAtMs = now;
+        overriding = recentlyUsedIsTracked(context, tracked);
+        return overriding;
     }
 
     /**
@@ -134,6 +146,7 @@ final class ForegroundApp {
         lastKnownPackage = null;
         lastPolledAtMs = 0;
         crossCheckedAgainst = null;
+        overriding = false;
         crossCheckUntilMs = SystemClock.elapsedRealtime() + CROSS_CHECK_WINDOW_MS;
     }
 
