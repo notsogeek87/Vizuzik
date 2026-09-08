@@ -71,6 +71,24 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="overlay_visual_effects" />
         </service>
+
+        <!-- Off by default, and separate from every other permission this app asks for: this is
+             the one grant that lets Vizuzik read what is actually drawn on screen (scoped to just
+             deezer.android.app/com.spotify.music — see the accessibility config resource), which
+             is what "Seulement sur l'écran du lecteur" in the settings panel needs and nothing
+             else does. See DeezerPlayerAccessibilityService and NowPlayerScreenState. -->
+        <service
+            android:name=".DeezerPlayerAccessibilityService"
+            android:exported="true"
+            android:label="@string/player_screen_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/player_screen_accessibility_config" />
+        </service>
     </application>
 
     <!-- Declared android:required="false" purely so the Play Store / package installer never

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scoped as tightly as the platform allows: packageNames restricts every event this service
+     is ever handed to the two tracked music apps, and the two window event types are the least
+     that still says "the screen just changed" — nothing here streams individual taps, text, or
+     anything typed. See DeezerPlayerAccessibilityService for what it actually does with that. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="150"
+    android:canRetrieveWindowContent="true"
+    android:packageNames="deezer.android.app,com.spotify.music"
+    android:description="@string/player_screen_service_description" />

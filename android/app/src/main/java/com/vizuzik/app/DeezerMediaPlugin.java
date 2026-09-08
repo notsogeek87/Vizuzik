@@ -481,7 +481,34 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("artOffsetY", config.artOffsetY);
         result.put("artScale", config.artScale);
         result.put("hiddenPackages", String.join(",", config.hiddenPackages));
+        result.put("requirePlayerScreen", config.requirePlayerScreen);
         call.resolve(result);
+    }
+
+    /** Whether the (separate, off-by-default) accessibility grant "Seulement sur l'écran du
+     *  lecteur" needs is currently enabled — see DeezerPlayerAccessibilityService.isEnabled(). */
+    @PluginMethod
+    public void checkPlayerScreenAccess(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", DeezerPlayerAccessibilityService.isEnabled(getContext()));
+        call.resolve(result);
+    }
+
+    /**
+     * Opens system Accessibility settings — the general list, not a deep link to this service's
+     * own row: there is no OEM-reliable way to jump straight to one entry in it, and the general
+     * list is where every accessibility service (including whichever screen reader or switch
+     * access someone already has running) is granted from anyway.
+     */
+    @PluginMethod
+    public void requestPlayerScreenAccess(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(intent)) {
+            call.resolve();
+        } else {
+            call.reject("unavailable");
+        }
     }
 
     /**
@@ -606,7 +633,8 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("right", false),
             data.optBoolean("onlyOverMusicApp", false),
             call.getString("cocoonFallback", EdgeConfig.STYLE_BARS),
-            call.getString("hiddenPackages", "")
+            call.getString("hiddenPackages", ""),
+            data.optBoolean("requirePlayerScreen", false)
         );
         call.resolve();
     }

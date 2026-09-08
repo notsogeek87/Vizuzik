@@ -275,6 +275,21 @@
           </div>
         </div>
 
+        <!-- A second, separate grant from "usage access" above — see
+             DeezerPlayerAccessibilityService for why this one is off by default and asked for on
+             its own: it reads screen content, scoped to just Deezer/Spotify, and nothing here
+             pretends that's the same kind of permission as the other two. -->
+        <label class="edge-settings__row edge-settings__row--switch">
+          <span>
+            Seulement sur l'écran du lecteur
+            <small id="edge-player-screen-hint">Chargement…</small>
+          </span>
+          <input id="edge-require-player-screen" type="checkbox" />
+        </label>
+        <button id="edge-player-screen-grant" type="button" class="grant-button edge-settings__grant" hidden>
+          Autoriser l'accès à l'écran (Accessibilité)
+        </button>
+
         <label class="edge-settings__row">
           <span>Style</span>
           <select id="edge-style">

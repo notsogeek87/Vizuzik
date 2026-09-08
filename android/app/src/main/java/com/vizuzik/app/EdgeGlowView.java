@@ -323,6 +323,10 @@ final class EdgeGlowView extends View {
     // updateSuppression(). Independent of onlyOverMusicApp: that one narrows the overlay down to
     // a single app, this one carves specific apps back out of however wide it is otherwise set.
     private Set<String> hiddenPackages = Collections.emptySet();
+    // Restricts "cocoon"/"vinyl" past "the tracked app is in front" to "and it's showing its own
+    // full-screen player" — see activeStyle() and DeezerPlayerAccessibilityService. Meaningless,
+    // and never acted on, unless that service is actually connected: NowPlayerScreenState.
+    private boolean requirePlayerScreen;
     // This phone's own correction to the modelled album-art anchor — see artRect() and
     // EdgeConfig.writeArtCalibration(). 0/0/1 is "the model, untouched".
     private float artOffsetX;
@@ -398,6 +402,7 @@ final class EdgeGlowView extends View {
         onlyOverMusicApp = config.onlyOverMusicApp;
         cocoonFallback = config.cocoonFallback;
         hiddenPackages = config.hiddenPackages != null ? config.hiddenPackages : Collections.emptySet();
+        requirePlayerScreen = config.requirePlayerScreen;
         // Not applied while the handle is up: the drag in progress *is* the newer value, and the
         // preferences it would be re-read from are only written once that drag is finished.
         if (!calibrating) {
@@ -705,10 +710,19 @@ final class EdgeGlowView extends View {
      * touches from being delivered at all. So without an answer they fall back to an edge style,
      * which is true over anything. That answer needs "usage access", which is what the settings
      * panel says these two styles are for.
+     *
+     * requirePlayerScreen narrows it a step further, past "the tracked app is in front" to "and
+     * it's showing its own full-screen player" — Deezer can be in front while showing search, its
+     * home tab, or a playlist, with a track still playing behind a docked mini-player, and both
+     * of these styles are measured against where the *full* player keeps its cover, not any of
+     * those. Same rule as the app-level check: acted on only once NowPlayerScreenState actually
+     * has an answer (its service connected), never on a guess in either direction.
      */
     private String activeStyle() {
         if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
-        if (foregroundKnown && trackedAppOnScreen) return style;
+        boolean playerScreenKnown = requirePlayerScreen && NowPlayerScreenState.isServiceConnected();
+        boolean onPlayerScreen = !playerScreenKnown || NowPlayerScreenState.isOnPlayerScreen();
+        if (foregroundKnown && trackedAppOnScreen && onPlayerScreen) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 

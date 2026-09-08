@@ -31,6 +31,9 @@ const els = {
   edgeArtReset: document.getElementById("edge-art-reset"),
   edgeHiddenAppsSummary: document.getElementById("edge-hidden-apps-summary"),
   edgeHiddenAppsOpen: document.getElementById("edge-hidden-apps-open"),
+  edgeRequirePlayerScreen: document.getElementById("edge-require-player-screen"),
+  edgePlayerScreenHint: document.getElementById("edge-player-screen-hint"),
+  edgePlayerScreenGrant: document.getElementById("edge-player-screen-grant"),
   appHideSheet: document.getElementById("app-hide-sheet"),
   appHideFilter: document.getElementById("app-hide-filter"),
   appHideList: document.getElementById("app-hide-list"),
@@ -562,6 +565,30 @@ function updateUsageAccessHint() {
   updateHiddenAppsSummary();
 }
 
+// Separate from usageAccessGranted above on purpose: this one gates an accessibility service,
+// a materially more sensitive grant than either "usage access" or "display over other apps", and
+// nothing here treats it as interchangeable with them.
+let playerScreenAccessGranted = false;
+
+async function syncPlayerScreenAccess() {
+  try {
+    const state = await DeezerMedia.checkPlayerScreenAccess();
+    playerScreenAccessGranted = !!(state && state.granted);
+  } catch (err) {
+    // Older native build without the method, or the call failed: leave it unknown.
+    playerScreenAccessGranted = false;
+  }
+  updatePlayerScreenAccessHint();
+}
+
+function updatePlayerScreenAccessHint() {
+  if (!els.edgePlayerScreenHint) return;
+  els.edgePlayerScreenGrant.hidden = playerScreenAccessGranted;
+  els.edgePlayerScreenHint.textContent = playerScreenAccessGranted
+    ? "N'affiche « Cocon »/« Vinyle » que lorsque Deezer montre son propre lecteur plein écran, pas sa recherche, son accueil ou une playlist."
+    : "Nécessite une permission d'accessibilité séparée (elle lit l'écran de Deezer/Spotify, rien d'autre) — sans elle, ce réglage reste sans effet.";
+}
+
 /** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */
 async function syncOverlayPermission() {
   try {
@@ -731,6 +758,7 @@ const EDGE_SETTINGS_DEFAULTS = {
   // has been set, and the panel's own fallback when a fresh install's first getEdgeConfig() call
   // fails outright — either way, GitHub is hidden from without anyone having to find the picker.
   hiddenPackages: "com.github.android",
+  requirePlayerScreen: false,
 };
 
 // The source of truth for "cacher automatiquement" while the panel is open — there is no single
@@ -888,6 +916,7 @@ function readEdgeSettingsFromForm() {
     // Not read from a form field: there is no single control for it, only the picker sheet
     // (see openAppHideSheet()), which keeps edgeHiddenPackages current as it's edited.
     hiddenPackages: edgeHiddenPackages.join(","),
+    requirePlayerScreen: els.edgeRequirePlayerScreen.checked,
   };
 }
 
@@ -919,6 +948,7 @@ function applyEdgeSettingsToForm(config) {
   els.edgeCustomColors.hidden = config.colorMode !== "custom";
   edgeHiddenPackages = (config.hiddenPackages || "").split(",").filter(Boolean);
   updateHiddenAppsSummary();
+  els.edgeRequirePlayerScreen.checked = !!config.requirePlayerScreen;
 }
 
 /**
@@ -1071,6 +1101,7 @@ els.edgeSettingsOpen.addEventListener("click", () => {
   // Fire-and-forget: fills in real app names for the summary row shortly after the sheet opens,
   // without making the sheet wait on a PackageManager query it only sometimes ends up needing.
   ensureInstalledAppsLoaded();
+  syncPlayerScreenAccess();
 });
 els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
 els.edgeSettingsSheet.addEventListener("click", (event) => {
@@ -1148,9 +1179,14 @@ els.edgeColorMode.addEventListener("change", () => {
   els.edgeLeft,
   els.edgeRight,
   els.edgeOnlyMusicApp,
+  els.edgeRequirePlayerScreen,
 ].forEach((el) => {
   el.addEventListener("input", pushEdgeConfig);
   el.addEventListener("change", pushEdgeConfig);
+});
+
+els.edgePlayerScreenGrant.addEventListener("click", () => {
+  DeezerMedia.requestPlayerScreenAccess().catch(() => {});
 });
 
 /* ------------------------------------------------------------------ swipe & tap */

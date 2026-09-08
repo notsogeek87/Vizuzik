@@ -69,6 +69,9 @@ final class EdgeConfig {
     // nested-scroll view that turned out fragile to the touch-occlusion workaround in
     // OverlayEdgeGlowService, on at least one device tested against.
     private static final String DEFAULT_HIDDEN_PACKAGES = "com.github.android";
+    // Off by default: unlike everything else this file stores, honouring it at all depends on a
+    // grant nobody has unless they went looking for it — see DeezerPlayerAccessibilityService.
+    private static final String KEY_REQUIRE_PLAYER_SCREEN = "edgeRequirePlayerScreen";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -104,6 +107,10 @@ final class EdgeConfig {
          *  and honoured under the same rule as that setting: only once "usage access" tells this
          *  view what is actually on screen. Never null; empty when nothing is picked. */
         final Set<String> hiddenPackages;
+        /** Restricts "cocoon"/"vinyl" further still: not just the tracked app in front, but its
+         *  own full-screen player specifically — see DeezerPlayerAccessibilityService. Only ever
+         *  acted on once that service is actually connected; see EdgeGlowView.activeStyle(). */
+        final boolean requirePlayerScreen;
 
         Snapshot(
             String style,
@@ -123,7 +130,8 @@ final class EdgeConfig {
             float artOffsetX,
             float artOffsetY,
             float artScale,
-            Set<String> hiddenPackages
+            Set<String> hiddenPackages,
+            boolean requirePlayerScreen
         ) {
             this.style = style;
             this.intensity = intensity;
@@ -143,6 +151,7 @@ final class EdgeConfig {
             this.artOffsetY = artOffsetY;
             this.artScale = artScale;
             this.hiddenPackages = hiddenPackages;
+            this.requirePlayerScreen = requirePlayerScreen;
         }
     }
 
@@ -175,7 +184,8 @@ final class EdgeConfig {
             prefs.getFloat(KEY_ART_OFFSET_X, 0f),
             prefs.getFloat(KEY_ART_OFFSET_Y, 0f),
             prefs.getFloat(KEY_ART_SCALE, 1f),
-            parsePackages(prefs.getString(KEY_HIDDEN_PACKAGES, DEFAULT_HIDDEN_PACKAGES))
+            parsePackages(prefs.getString(KEY_HIDDEN_PACKAGES, DEFAULT_HIDDEN_PACKAGES)),
+            prefs.getBoolean(KEY_REQUIRE_PLAYER_SCREEN, false)
         );
     }
 
@@ -230,7 +240,8 @@ final class EdgeConfig {
         boolean right,
         boolean onlyOverMusicApp,
         String cocoonFallback,
-        String hiddenPackagesCsv
+        String hiddenPackagesCsv,
+        boolean requirePlayerScreen
     ) {
         prefs(context)
             .edit()
@@ -253,6 +264,7 @@ final class EdgeConfig {
             .putBoolean(KEY_ONLY_OVER_MUSIC_APP, onlyOverMusicApp)
             .putString(KEY_COCOON_FALLBACK, cocoonFallback)
             .putString(KEY_HIDDEN_PACKAGES, hiddenPackagesCsv != null ? hiddenPackagesCsv : "")
+            .putBoolean(KEY_REQUIRE_PLAYER_SCREEN, requirePlayerScreen)
             .apply();
     }
 

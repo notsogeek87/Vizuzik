@@ -4,4 +4,15 @@
     <string name="title_activity_main">Vizuzik</string>
     <string name="package_name">com.vizuzik.app</string>
     <string name="custom_url_scheme">com.vizuzik.app</string>
+
+    <!-- Shown in Réglages > Accessibilité, on the same row Android lists every other
+         accessibility service on — the one place someone decides whether to grant this. -->
+    <string name="player_screen_service_label">Écran du lecteur (Vizuzik)</string>
+    <string name="player_screen_service_description">
+        Utilisé uniquement pour savoir si l\'écran affiché dans Deezer ou Spotify est le lecteur
+        plein écran, plutôt qu\'un autre écran de l\'app (recherche, accueil, une playlist) — pour
+        que le disque de Vizuzik ne s\'affiche que là où il a un sens. Ne lit rien d\'autre :
+        aucune autre app n\'est concernée, et rien de ce qui est lu n\'est conservé ni envoyé
+        où que ce soit.
+    </string>
 </resources>
