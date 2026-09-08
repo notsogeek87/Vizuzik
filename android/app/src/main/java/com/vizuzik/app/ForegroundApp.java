@@ -83,6 +83,23 @@ final class ForegroundApp {
      * no app chosen yet, permission missing, or no usage event ever seen. A decorative overlay
      * that silently refuses to appear is a much worse failure than one that appears too often.
      */
+    /**
+     * The package currently believed to be in front, or null when that isn't known — the raw
+     * answer behind isTrackedAppInForeground(), for anything that needs to check a foreground
+     * app against something other than the one tracked music package (see EdgeConfig's
+     * hiddenPackages: apps Edge Visualizer hides over regardless of onlyOverMusicApp).
+     *
+     * Deliberately without the fold cross-check isTrackedAppInForeground() layers on top: that
+     * machinery exists to correct one specific package (the tracked app) when it is wrongly
+     * believed absent, and generalising it to "whichever package the caller happens to ask about"
+     * would mean re-running usage-statistics queries per package, for a case (a handful of
+     * explicitly hidden apps, checked right after a fold) narrow enough not to be worth it. The
+     * event stream alone is what every other caller already relies on.
+     */
+    static synchronized String currentForegroundPackage(Context context) {
+        return context == null ? null : currentPackage(context);
+    }
+
     static synchronized boolean isTrackedAppInForeground(Context context) {
         if (context == null) return true;
         String tracked = MusicAppPreference.getPackage(context);

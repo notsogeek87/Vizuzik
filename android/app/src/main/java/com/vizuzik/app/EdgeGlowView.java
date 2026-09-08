@@ -20,6 +20,9 @@ import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 
+import java.util.Collections;
+import java.util.Set;
+
 /**
  * Draws a thin, colored glow along the screen edges, breathing with the music underneath — the
  * one visual this view is allowed to show, since OverlayEdgeGlowService adds it as a
@@ -311,6 +314,10 @@ final class EdgeGlowView extends View {
     private boolean edgeRight = true;
     private boolean onlyOverMusicApp = true;
     private String cocoonFallback = EdgeConfig.STYLE_BARS;
+    // Apps to hide over unconditionally — see EdgeConfig.Snapshot.hiddenPackages and
+    // updateSuppression(). Independent of onlyOverMusicApp: that one narrows the overlay down to
+    // a single app, this one carves specific apps back out of however wide it is otherwise set.
+    private Set<String> hiddenPackages = Collections.emptySet();
     // This phone's own correction to the modelled album-art anchor — see artRect() and
     // EdgeConfig.writeArtCalibration(). 0/0/1 is "the model, untouched".
     private float artOffsetX;
@@ -385,6 +392,7 @@ final class EdgeGlowView extends View {
         edgeRight = config.right;
         onlyOverMusicApp = config.onlyOverMusicApp;
         cocoonFallback = config.cocoonFallback;
+        hiddenPackages = config.hiddenPackages != null ? config.hiddenPackages : Collections.emptySet();
         // Not applied while the handle is up: the drag in progress *is* the newer value, and the
         // preferences it would be re-read from are only written once that drag is finished.
         if (!calibrating) {
@@ -639,9 +647,15 @@ final class EdgeGlowView extends View {
             foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
         }
         trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
+        // Only asked when there is a list to check against — most installs pick nothing, and the
+        // question costs the same incremental usage-event query onlyOverMusicApp's already does,
+        // just wasted if there is nothing here for its answer to matter to.
+        boolean explicitlyHidden = foregroundKnown && !hiddenPackages.isEmpty()
+            && hiddenPackages.contains(ForegroundApp.currentForegroundPackage(context));
         // Never while the calibration handle is up: the whole point of that moment is to see
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
-        suppressed = !calibrating && onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
+        suppressed = !calibrating
+            && ((onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen) || explicitlyHidden);
         suppressionResolved = true;
         // Drawing nothing is not the same as not being there. From Android 12 the mere presence
         // of this window over another app costs that app its touches unless the window is faint

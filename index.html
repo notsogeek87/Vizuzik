@@ -262,6 +262,19 @@
           Autoriser l'accès aux données d'utilisation
         </button>
 
+        <!-- Independent of "Masquer hors de l'app de musique" above: that one narrows the overlay
+             down to a single app, this carves specific apps back out of however wide it is
+             otherwise set. Also needs "usage access" — same grant button covers both. -->
+        <div class="edge-settings__row edge-settings__row--stacked">
+          <span>
+            Cacher automatiquement
+            <small id="edge-hidden-apps-summary">Chargement…</small>
+          </span>
+          <div class="edge-settings__buttons">
+            <button id="edge-hidden-apps-open" type="button" class="grant-button">Choisir les apps</button>
+          </div>
+        </div>
+
         <label class="edge-settings__row">
           <span>Style</span>
           <select id="edge-style">
@@ -357,6 +370,29 @@
         </div>
 
         <button id="edge-settings-close" type="button" class="grant-button">Fermer</button>
+      </div>
+    </div>
+
+    <!-- A sheet of its own rather than a section of edge-settings-sheet: the app list can run to
+         a hundred-plus entries, and it needs the sheet's full height and its own scroll rather
+         than adding that length to every other settings row's scroll. -->
+    <div id="app-hide-sheet" class="sheet" hidden>
+      <div class="sheet__panel edge-settings__panel" role="dialog" aria-modal="true" aria-labelledby="app-hide-title">
+        <h2 id="app-hide-title" class="sheet__title">Cacher automatiquement</h2>
+        <p class="app-hide__hint">
+          Vizuzik ne s'affichera jamais par-dessus les apps cochées, quel que soit le réglage «&nbsp;Masquer hors de l'app de musique&nbsp;».
+        </p>
+        <input
+          id="app-hide-filter"
+          type="search"
+          class="app-hide__filter"
+          placeholder="Filtrer…"
+          aria-label="Filtrer la liste des apps"
+        />
+        <div id="app-hide-list" class="app-hide__list" aria-live="polite">
+          <p class="app-hide__loading">Chargement des apps installées…</p>
+        </div>
+        <button id="app-hide-close" type="button" class="grant-button">Fermer</button>
       </div>
     </div>
 

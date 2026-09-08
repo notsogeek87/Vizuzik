@@ -29,6 +29,12 @@ const els = {
   edgeCocoonFallback: document.getElementById("edge-cocoon-fallback"),
   edgeArtCalibrate: document.getElementById("edge-art-calibrate"),
   edgeArtReset: document.getElementById("edge-art-reset"),
+  edgeHiddenAppsSummary: document.getElementById("edge-hidden-apps-summary"),
+  edgeHiddenAppsOpen: document.getElementById("edge-hidden-apps-open"),
+  appHideSheet: document.getElementById("app-hide-sheet"),
+  appHideFilter: document.getElementById("app-hide-filter"),
+  appHideList: document.getElementById("app-hide-list"),
+  appHideClose: document.getElementById("app-hide-close"),
   edgeColorMode: document.getElementById("edge-color-mode"),
   edgeCustomColors: document.getElementById("edge-custom-colors"),
   edgeColor1: document.getElementById("edge-color-1"),
@@ -553,6 +559,7 @@ function updateUsageAccessHint() {
   els.edgeOnlyMusicAppHint.textContent = usageAccessGranted
     ? "Masque tout dès que Deezer n'est plus à l'écran, au lieu de basculer sur le style de repli."
     : "Sans l'accès aux données d'utilisation, Vizuzik ne sait pas quelle app est à l'écran : ce réglage ne peut pas fonctionner, et « Cocon » et « Vinyle » se rabattent sur le style de repli plutôt que de se poser au jugé sur une autre app.";
+  updateHiddenAppsSummary();
 }
 
 /** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */
@@ -720,7 +727,130 @@ const EDGE_SETTINGS_DEFAULTS = {
   left: false,
   right: false,
   onlyOverMusicApp: false,
+  // Mirrors EdgeConfig's own DEFAULT_HIDDEN_PACKAGES: the one native falls back to when nothing
+  // has been set, and the panel's own fallback when a fresh install's first getEdgeConfig() call
+  // fails outright — either way, GitHub is hidden from without anyone having to find the picker.
+  hiddenPackages: "com.github.android",
 };
+
+// The source of truth for "cacher automatiquement" while the panel is open — there is no single
+// form field for it, only the picker sheet's checkboxes, which read and write this array
+// directly. Package names only; labels live in installedAppsByPackage below, filled in lazily
+// since they cost a PackageManager query neither loadEdgeConfig() nor the summary text always
+// need to pay for.
+let edgeHiddenPackages = [];
+// null until the first successful listInstalledApps() call — distinct from "loaded, zero apps
+// found" — so ensureInstalledAppsLoaded() knows whether to fetch or just re-render.
+let installedApps = null;
+let installedAppsByPackage = new Map();
+
+/** What "Cacher automatiquement"'s settings row shows without opening the picker — real labels
+ *  where they're already known (post-first-open), package names otherwise, since a name someone
+ *  can at least recognise beats no summary at all. */
+function updateHiddenAppsSummary() {
+  if (!els.edgeHiddenAppsSummary) return;
+  // Same grant as "Masquer hors de l'app de musique": without it, nothing here can be honoured
+  // either, and the row says so instead of listing apps that currently do nothing.
+  if (!usageAccessGranted) {
+    els.edgeHiddenAppsSummary.textContent = "Nécessite l'accès aux données d'utilisation (ci-dessus).";
+    return;
+  }
+  if (edgeHiddenPackages.length === 0) {
+    els.edgeHiddenAppsSummary.textContent = "Aucune — Vizuzik peut s'afficher partout.";
+    return;
+  }
+  const names = edgeHiddenPackages.map((pkg) => installedAppsByPackage.get(pkg) || pkg);
+  els.edgeHiddenAppsSummary.textContent =
+    names.length <= 3 ? names.join(", ") : `${names.length} apps choisies`;
+}
+
+/** Fetches the installed-apps list once and caches it — the picker sheet re-renders from the
+ *  cache on every later open/filter, no repeat native call. */
+async function ensureInstalledAppsLoaded() {
+  if (installedApps) return installedApps;
+  try {
+    const result = await DeezerMedia.listInstalledApps();
+    installedApps = (result && result.apps) || [];
+    installedAppsByPackage = new Map(installedApps.map((app) => [app.packageName, app.label]));
+    updateHiddenAppsSummary();
+  } catch (err) {
+    // Older native build without the picker, or the call failed: an empty list still lets the
+    // sheet render (see renderAppHideList()), just with nothing to check besides GitHub's own
+    // package name shown as-is.
+    installedApps = [];
+  }
+  return installedApps;
+}
+
+function renderAppHideList(filterText) {
+  const filter = (filterText || "").trim().toLowerCase();
+  const apps = installedApps || [];
+  const filtered = filter
+    ? apps.filter(
+        (app) =>
+          app.label.toLowerCase().includes(filter) || app.packageName.toLowerCase().includes(filter)
+      )
+    : apps;
+
+  if (filtered.length === 0) {
+    els.appHideList.innerHTML = '<p class="app-hide__empty">Aucune app ne correspond.</p>';
+    return;
+  }
+
+  const rows = filtered.map((app) => {
+    const checked = edgeHiddenPackages.includes(app.packageName) ? "checked" : "";
+    // Package name carried on the row itself (a data attribute, not a closure) since the whole
+    // list is rebuilt as one innerHTML write — cheaper than one listener per row for what can be
+    // a couple hundred entries, and simpler than diffing.
+    return `<label class="app-hide__row">
+      <input type="checkbox" data-package="${app.packageName}" ${checked} />
+      <span>${app.label}</span>
+    </label>`;
+  });
+  els.appHideList.innerHTML = rows.join("");
+}
+
+els.appHideList.addEventListener("change", (event) => {
+  const packageName = event.target.dataset.package;
+  if (!packageName) return;
+  if (event.target.checked) {
+    if (!edgeHiddenPackages.includes(packageName)) edgeHiddenPackages.push(packageName);
+  } else {
+    edgeHiddenPackages = edgeHiddenPackages.filter((pkg) => pkg !== packageName);
+  }
+  updateHiddenAppsSummary();
+  pushEdgeConfig();
+});
+
+els.appHideFilter.addEventListener("input", () => renderAppHideList(els.appHideFilter.value));
+
+let appHideCloseTimer = null;
+
+async function openAppHideSheet() {
+  clearTimeout(appHideCloseTimer);
+  els.appHideFilter.value = "";
+  els.appHideList.innerHTML = '<p class="app-hide__loading">Chargement des apps installées…</p>';
+  els.appHideSheet.hidden = false;
+  requestAnimationFrame(() => {
+    els.appHideSheet.classList.add("is-open");
+    focusForRemote(els.appHideFilter);
+  });
+  await ensureInstalledAppsLoaded();
+  renderAppHideList("");
+}
+
+function closeAppHideSheet() {
+  els.appHideSheet.classList.remove("is-open");
+  appHideCloseTimer = setTimeout(() => {
+    els.appHideSheet.hidden = true;
+  }, 260);
+}
+
+els.edgeHiddenAppsOpen.addEventListener("click", openAppHideSheet);
+els.appHideClose.addEventListener("click", closeAppHideSheet);
+els.appHideSheet.addEventListener("click", (event) => {
+  if (event.target === els.appHideSheet) closeAppHideSheet();
+});
 
 function readEdgeCustomColors() {
   try {
@@ -755,6 +885,9 @@ function readEdgeSettingsFromForm() {
     left: els.edgeLeft.checked,
     right: els.edgeRight.checked,
     onlyOverMusicApp: els.edgeOnlyMusicApp.checked,
+    // Not read from a form field: there is no single control for it, only the picker sheet
+    // (see openAppHideSheet()), which keeps edgeHiddenPackages current as it's edited.
+    hiddenPackages: edgeHiddenPackages.join(","),
   };
 }
 
@@ -784,6 +917,8 @@ function applyEdgeSettingsToForm(config) {
   els.edgeRight.checked = config.right;
   els.edgeOnlyMusicApp.checked = config.onlyOverMusicApp;
   els.edgeCustomColors.hidden = config.colorMode !== "custom";
+  edgeHiddenPackages = (config.hiddenPackages || "").split(",").filter(Boolean);
+  updateHiddenAppsSummary();
 }
 
 /**
@@ -933,6 +1068,9 @@ els.edgeSettingsOpen.addEventListener("click", () => {
   loadEdgeConfig()
     .then(syncUsageAccess)
     .then(openEdgeSettingsSheet);
+  // Fire-and-forget: fills in real app names for the summary row shortly after the sheet opens,
+  // without making the sheet wait on a PackageManager query it only sometimes ends up needing.
+  ensureInstalledAppsLoaded();
 });
 els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
 els.edgeSettingsSheet.addEventListener("click", (event) => {

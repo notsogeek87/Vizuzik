@@ -4,6 +4,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 /**
  * Edge Visualizer settings, mirrored here (same "vizuzik" SharedPreferences file as
  * MusicAppPreference) so that OverlayEdgeGlowService — a background Service with no access to
@@ -58,6 +62,13 @@ final class EdgeConfig {
     private static final String KEY_ART_OFFSET_X = "edgeArtOffsetX";
     private static final String KEY_ART_OFFSET_Y = "edgeArtOffsetY";
     private static final String KEY_ART_SCALE = "edgeArtScale";
+    private static final String KEY_HIDDEN_PACKAGES = "edgeHiddenPackages";
+    // The one app hidden out of the box, without anyone having to find the picker first — see
+    // DeezerMediaPlugin.listInstalledApps() for how they add more. GitHub's own app routinely
+    // shows a page (a release, a long README) with a collapsing header — exactly the kind of
+    // nested-scroll view that turned out fragile to the touch-occlusion workaround in
+    // OverlayEdgeGlowService, on at least one device tested against.
+    private static final String DEFAULT_HIDDEN_PACKAGES = "com.github.android";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -89,6 +100,10 @@ final class EdgeConfig {
         final float artOffsetX;
         final float artOffsetY;
         final float artScale;
+        /** Apps to hide over unconditionally, by package name — independent of onlyOverMusicApp,
+         *  and honoured under the same rule as that setting: only once "usage access" tells this
+         *  view what is actually on screen. Never null; empty when nothing is picked. */
+        final Set<String> hiddenPackages;
 
         Snapshot(
             String style,
@@ -107,7 +122,8 @@ final class EdgeConfig {
             String cocoonFallback,
             float artOffsetX,
             float artOffsetY,
-            float artScale
+            float artScale,
+            Set<String> hiddenPackages
         ) {
             this.style = style;
             this.intensity = intensity;
@@ -126,6 +142,7 @@ final class EdgeConfig {
             this.artOffsetX = artOffsetX;
             this.artOffsetY = artOffsetY;
             this.artScale = artScale;
+            this.hiddenPackages = hiddenPackages;
         }
     }
 
@@ -157,8 +174,22 @@ final class EdgeConfig {
             prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS),
             prefs.getFloat(KEY_ART_OFFSET_X, 0f),
             prefs.getFloat(KEY_ART_OFFSET_Y, 0f),
-            prefs.getFloat(KEY_ART_SCALE, 1f)
+            prefs.getFloat(KEY_ART_SCALE, 1f),
+            parsePackages(prefs.getString(KEY_HIDDEN_PACKAGES, DEFAULT_HIDDEN_PACKAGES))
         );
+    }
+
+    /** "com.github.android,com.other.app" -> {"com.github.android", "com.other.app"}; blank
+     *  entries dropped, order kept (LinkedHashSet) since it is all the settings panel has to show
+     *  a stable list back from. */
+    private static Set<String> parsePackages(String csv) {
+        if (csv == null || csv.isEmpty()) return Collections.emptySet();
+        Set<String> packages = new LinkedHashSet<>();
+        for (String part : csv.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) packages.add(trimmed);
+        }
+        return packages;
     }
 
     /**
@@ -198,7 +229,8 @@ final class EdgeConfig {
         boolean left,
         boolean right,
         boolean onlyOverMusicApp,
-        String cocoonFallback
+        String cocoonFallback,
+        String hiddenPackagesCsv
     ) {
         prefs(context)
             .edit()
@@ -220,6 +252,7 @@ final class EdgeConfig {
             .putBoolean(KEY_RIGHT, right)
             .putBoolean(KEY_ONLY_OVER_MUSIC_APP, onlyOverMusicApp)
             .putString(KEY_COCOON_FALLBACK, cocoonFallback)
+            .putString(KEY_HIDDEN_PACKAGES, hiddenPackagesCsv != null ? hiddenPackagesCsv : "")
             .apply();
     }
 

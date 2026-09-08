@@ -17,6 +17,7 @@ import android.os.Build;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
 import android.util.Base64;
+import android.util.Log;
 
 import androidx.core.app.NotificationManagerCompat;
 
@@ -38,6 +39,8 @@ import java.util.Set;
     permissions = { @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "microphone") }
 )
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
+
+    private static final String TAG = "DeezerMediaPlugin";
 
     @Override
     protected void handleOnStart() {
@@ -477,6 +480,46 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("artOffsetX", config.artOffsetX);
         result.put("artOffsetY", config.artOffsetY);
         result.put("artScale", config.artScale);
+        result.put("hiddenPackages", String.join(",", config.hiddenPackages));
+        call.resolve(result);
+    }
+
+    /**
+     * The installed, launchable apps — what the settings panel's "cacher automatiquement" picker
+     * is built from, so someone can add to the one app (GitHub) hidden by default without typing
+     * a package name. Vizuzik itself is left out: hiding Edge Visualizer over Edge Visualizer is
+     * not a choice worth offering. Sorted by label, one entry per package even where several of
+     * its activities carry a launcher icon.
+     */
+    @PluginMethod
+    public void listInstalledApps(PluginCall call) {
+        JSArray apps = new JSArray();
+        try {
+            android.content.pm.PackageManager pm = getContext().getPackageManager();
+            Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+            java.util.List<android.content.pm.ResolveInfo> resolved = pm.queryIntentActivities(launcher, 0);
+            String self = getContext().getPackageName();
+            java.util.Map<String, String> labelForPackage = new java.util.LinkedHashMap<>();
+            for (android.content.pm.ResolveInfo info : resolved) {
+                String packageName = info.activityInfo.packageName;
+                if (self.equals(packageName) || labelForPackage.containsKey(packageName)) continue;
+                labelForPackage.put(packageName, info.loadLabel(pm).toString());
+            }
+            java.util.List<java.util.Map.Entry<String, String>> sorted =
+                new java.util.ArrayList<>(labelForPackage.entrySet());
+            sorted.sort((a, b) -> a.getValue().compareToIgnoreCase(b.getValue()));
+            for (java.util.Map.Entry<String, String> entry : sorted) {
+                JSObject app = new JSObject();
+                app.put("packageName", entry.getKey());
+                app.put("label", entry.getValue());
+                apps.put(app);
+            }
+        } catch (Exception e) {
+            // An empty picker is a much smaller failure than a crashed settings panel.
+            Log.w(TAG, "listInstalledApps", e);
+        }
+        JSObject result = new JSObject();
+        result.put("apps", apps);
         call.resolve(result);
     }
 
@@ -562,7 +605,8 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("left", false),
             data.optBoolean("right", false),
             data.optBoolean("onlyOverMusicApp", false),
-            call.getString("cocoonFallback", EdgeConfig.STYLE_BARS)
+            call.getString("cocoonFallback", EdgeConfig.STYLE_BARS),
+            call.getString("hiddenPackages", "")
         );
         call.resolve();
     }

@@ -611,6 +611,65 @@ body[data-mode="cassette"] .mode-toggle .icon-cassette {
   margin: 0;
 }
 
+.app-hide__hint {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: rgba(247, 248, 252, 0.55);
+  margin: 0 0 14px;
+}
+
+.app-hide__filter {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  margin-bottom: 10px;
+}
+
+.app-hide__loading {
+  font-size: 0.85rem;
+  color: rgba(247, 248, 252, 0.55);
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+/* Each row is its own <label> so tapping the name toggles the checkbox — the checkbox alone is a
+   small target, the row is a comfortable one. */
+.app-hide__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 2px;
+  font-size: 0.88rem;
+  color: rgba(247, 248, 252, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.app-hide__row input[type="checkbox"] {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  accent-color: rgb(var(--c2));
+}
+
+.app-hide__row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-hide__empty {
+  font-size: 0.85rem;
+  color: rgba(247, 248, 252, 0.55);
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
 .edge-settings__colors {
   display: flex;
   gap: 10px;
