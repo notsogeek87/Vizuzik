@@ -45,6 +45,27 @@ final class OverlayDiagnostics {
      *  completely silent — which is exactly the failure that would look like "nothing changed". */
     static volatile String windowError = "";
     static volatile boolean serviceRunning;
+    /** Whether the window currently consumes touches in its own area. Only the small, opaque
+     *  vinyl window does — see OverlayEdgeGlowService.onWindowBoundsWanted() for why that costs
+     *  nothing that alpha 1 was not already costing. */
+    static volatile boolean windowTouchable;
+
+    // --- Written by EdgeGlowView: what the system actually did, not what was asked for ---
+
+    /**
+     * The view's own measured size and position on screen.
+     *
+     * Everything in the group above is an echo: fields this app set on a LayoutParams and then
+     * read back off the same object, which will agree with itself whether or not WindowManager
+     * ever acted on them. "Opacité du vinyle 1.00" proves only that 1.00 was asked for. These four
+     * are measured after layout, by the view, from the window the system actually gave it — so a
+     * resize that was requested and silently ignored reads here as the old full-screen size, and
+     * one that really happened reads as the record's own square.
+     */
+    static volatile int viewWidth;
+    static volatile int viewHeight;
+    static volatile int viewLeft;
+    static volatile int viewTop;
 
     // --- Written by EdgeGlowView, once per tick ---
 
@@ -55,6 +76,11 @@ final class OverlayDiagnostics {
     static volatile boolean trackedAppOnScreen;
     static volatile String foregroundPackage = "";
     static volatile boolean viewVisible;
+    /** The two settings that decide when these styles are allowed at all. "Le disque est visible
+     *  hors lecture" has two completely different causes — the restriction is off, or it is on and
+     *  the scan says yes anyway — and nothing in this panel could tell them apart. */
+    static volatile boolean requirePlayerScreen;
+    static volatile boolean onlyOverMusicApp;
 
     // --- Written by DeezerPlayerAccessibilityService, once per scan it is allowed to run ---
 
@@ -111,6 +137,11 @@ final class OverlayDiagnostics {
     static volatile int vinylWindowHeight;
     static volatile int vinylWindowX;
     static volatile int vinylWindowY;
+    static volatile boolean vinylWindowTouchable;
+    static volatile int vinylViewWidth;
+    static volatile int vinylViewHeight;
+    static volatile int vinylViewLeft;
+    static volatile int vinylViewTop;
     private static volatile long lastVinylAtMs;
 
     static long msSinceVinyl() {
@@ -125,6 +156,11 @@ final class OverlayDiagnostics {
         vinylWindowHeight = windowHeight;
         vinylWindowX = windowX;
         vinylWindowY = windowY;
+        vinylWindowTouchable = windowTouchable;
+        vinylViewWidth = viewWidth;
+        vinylViewHeight = viewHeight;
+        vinylViewLeft = viewLeft;
+        vinylViewTop = viewTop;
         lastVinylAtMs = SystemClock.elapsedRealtime();
     }
 

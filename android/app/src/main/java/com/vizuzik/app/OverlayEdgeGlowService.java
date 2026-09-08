@@ -276,14 +276,29 @@ public class OverlayEdgeGlowService extends Service
             // Safe here specifically because the window no longer covers anything but the record
             // itself — see the long comment on updateWindowBounds() for the trade this is.
             params.alpha = 1f;
+            // ...and it stops being NOT_TOUCHABLE at the same time, which costs nothing it was not
+            // already costing. The Android 12 rule is about touches that pass *through* an
+            // obscuring window: at alpha 1 this window was already having the taps underneath it
+            // dropped by the system, NOT_TOUCHABLE or not. Consuming them instead is the same
+            // outcome for the same area — but it takes the window out of the "obscures someone
+            // else's touch" case entirely, which is the one thing that could still be capping how
+            // opaque the platform is willing to let it be. Only the record's own square is
+            // affected; NOT_TOUCH_MODAL leaves every pixel outside it exactly as it was.
+            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
         } else {
             params.width = WindowManager.LayoutParams.MATCH_PARENT;
             params.height = WindowManager.LayoutParams.MATCH_PARENT;
             params.x = 0;
             params.y = 0;
             params.alpha = touchSafeAlpha;
+            // Back to letting everything through: full screen is far too much of the phone to
+            // consume, which is what the alpha cap exists to avoid in the first place.
+            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         }
         OverlayDiagnostics.windowMode = small ? "small" : "full";
+        OverlayDiagnostics.windowTouchable =
+            (params.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
         OverlayDiagnostics.windowAlphaWanted = params.alpha;
         OverlayDiagnostics.windowX = params.x;
         OverlayDiagnostics.windowY = params.y;

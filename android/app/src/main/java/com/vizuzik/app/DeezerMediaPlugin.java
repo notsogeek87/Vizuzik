@@ -562,6 +562,16 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("vinylWindowX", OverlayDiagnostics.vinylWindowX);
         result.put("vinylWindowY", OverlayDiagnostics.vinylWindowY);
         result.put("msSinceVinyl", OverlayDiagnostics.msSinceVinyl());
+        result.put("windowTouchable", OverlayDiagnostics.windowTouchable);
+        result.put("vinylWindowTouchable", OverlayDiagnostics.vinylWindowTouchable);
+        result.put("viewWidth", OverlayDiagnostics.viewWidth);
+        result.put("viewHeight", OverlayDiagnostics.viewHeight);
+        result.put("vinylViewWidth", OverlayDiagnostics.vinylViewWidth);
+        result.put("vinylViewHeight", OverlayDiagnostics.vinylViewHeight);
+        result.put("vinylViewLeft", OverlayDiagnostics.vinylViewLeft);
+        result.put("vinylViewTop", OverlayDiagnostics.vinylViewTop);
+        result.put("requirePlayerScreenSetting", OverlayDiagnostics.requirePlayerScreen);
+        result.put("onlyOverMusicAppSetting", OverlayDiagnostics.onlyOverMusicApp);
         call.resolve(result);
     }
 

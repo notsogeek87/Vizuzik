@@ -1178,6 +1178,9 @@ final class EdgeGlowView extends View {
     /** The package updateSuppression() last saw in front, kept only so publishDiagnostics() has
      *  something to report — nothing decides anything on it. */
     private String lastForegroundPackage = "";
+    /** Scratch for publishDiagnostics()' own getLocationOnScreen() — never viewLocation, which
+     *  refreshOrigin() rewrites for the drawing code's benefit. */
+    private final int[] diagnosticLocation = new int[2];
 
     /** Hands the settings panel what this view actually concluded this frame — see
      *  OverlayDiagnostics for why any of this is readable from outside at all. Plain field writes,
@@ -1186,8 +1189,18 @@ final class EdgeGlowView extends View {
         String active = activeStyle();
         OverlayDiagnostics.styleSelected = style;
         OverlayDiagnostics.styleActive = active;
+        // Measured, not echoed — see the field comments in OverlayDiagnostics. A separate array
+        // from viewLocation on purpose: refreshOrigin() deliberately zeroes that one when the view
+        // fills the display, which is the very distinction being reported here.
+        getLocationOnScreen(diagnosticLocation);
+        OverlayDiagnostics.viewWidth = getWidth();
+        OverlayDiagnostics.viewHeight = getHeight();
+        OverlayDiagnostics.viewLeft = diagnosticLocation[0];
+        OverlayDiagnostics.viewTop = diagnosticLocation[1];
+        OverlayDiagnostics.requirePlayerScreen = requirePlayerScreen;
+        OverlayDiagnostics.onlyOverMusicApp = onlyOverMusicApp;
         // Kept for after the fact — see OverlayDiagnostics.latchVinyl() for why the live values are
-        // never the ones anyone gets to read.
+        // never the ones anyone gets to read. Last, so it copies everything set above.
         if (EdgeConfig.STYLE_VINYL.equals(active) && !suppressed) OverlayDiagnostics.latchVinyl();
         OverlayDiagnostics.suppressed = suppressed;
         OverlayDiagnostics.foregroundKnown = foregroundKnown;

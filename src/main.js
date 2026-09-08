@@ -1051,7 +1051,31 @@ const DIAGNOSTIC_ROWS = [
         : `il y a ${Math.round(d.msSinceVinyl / 1000)}s · ${d.vinylWindowMode} ` +
           `${d.vinylWindowWidth}×${d.vinylWindowHeight} @${d.vinylWindowX},${d.vinylWindowY}`,
   ],
-  ["vinyle-alpha", "Opacité du vinyle", (d) => (d.msSinceVinyl < 0 ? "—" : fmt(d.vinylWindowAlpha))],
+  [
+    "vinyle-alpha",
+    "Opacité du vinyle",
+    (d) =>
+      d.msSinceVinyl < 0
+        ? "—"
+        : `${fmt(d.vinylWindowAlpha)} ${d.vinylWindowTouchable ? "tactile" : "non tactile"}`,
+  ],
+  // Measured by the view after layout, not echoed back off the params this app set — the one line
+  // that can tell a resize that really happened from one that was asked for and ignored.
+  [
+    "vinyle-vue",
+    "Vue mesurée (vinyle)",
+    (d) =>
+      d.msSinceVinyl < 0
+        ? "—"
+        : `${d.vinylViewWidth}×${d.vinylViewHeight} @${d.vinylViewLeft},${d.vinylViewTop}`,
+  ],
+  [
+    "reglages",
+    "Restrictions",
+    (d) =>
+      `${d.onlyOverMusicAppSetting ? "hors musique: masqué" : "hors musique: repli"} · ` +
+      `${d.requirePlayerScreenSetting ? "lecteur seulement: ON" : "lecteur seulement: OFF"}`,
+  ],
   [
     "avant",
     "App à l'écran",
