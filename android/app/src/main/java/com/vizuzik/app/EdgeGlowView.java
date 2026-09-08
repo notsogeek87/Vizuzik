@@ -764,11 +764,13 @@ final class EdgeGlowView extends View {
      * not showing it" — an average can sit fairly still while the individual bands swing a lot —
      * and stayed the default because it shows what the capture delivers most directly.
      *
-     * What it draws is no longer raw, though: the levels are eased (see advanceBars()), the row
-     * is stroked through a gradient running along the edge so it sweeps the album's three accents
-     * instead of being one flat colour, each bar is a rounded cap rather than a bare rectangle,
-     * and a peak cap floats above each one and falls — the detail that shows how hard a band was
-     * hit after the bar itself has dropped away.
+     * What it draws is no longer raw, though: the levels are eased (see advanceBars()), the band
+     * order along each row/column is mirrored so bass sits in the middle and treble at both ends
+     * (see mirroredBandIndex()) rather than piling the loudest band at one fixed end of every
+     * edge, the row is stroked through a gradient running along the edge so it sweeps the album's
+     * three accents instead of being one flat colour, each bar is a rounded cap rather than a
+     * bare rectangle, and a peak cap floats above each one and falls — the detail that shows how
+     * hard a band was hit after the bar itself has dropped away.
      */
     private void drawBars(Canvas canvas) {
         int width = getWidth();
@@ -840,6 +842,22 @@ final class EdgeGlowView extends View {
         return clamp255((int) ((70 + value * 125f + pulse * 35f) * brightnessMul));
     }
 
+    /**
+     * Maps a slot along a row/column (0..n-1) onto a band within [from, from+n), bass in the
+     * middle and treble at both ends — the same mirroring src/visualizer.js's _mirroredBand()
+     * uses for its own "bars" style. Walking the spectrum in raw order instead put band 0 (bass,
+     * reliably the loudest band in real music) at a fixed end — slot 0, the left of every row and
+     * the top of every column — so that end was always the tallest, on every edge, on every
+     * track: a structural lean, not a coincidence. Mirroring it spreads the same energy evenly
+     * across both halves of each edge instead of piling it on one side.
+     */
+    private static int mirroredBandIndex(int i, int n, int from) {
+        if (n <= 1) return from;
+        float mid = (n - 1) * 0.5f;
+        float d = Math.abs(i - mid) / mid;
+        return from + Math.round(d * (n - 1));
+    }
+
     /** One row of bars along a horizontal edge, growing inward from it. */
     private void drawBarRow(Canvas canvas, float[] levels, int from, int to, int width, int height,
                             boolean fromTop, float pulse) {
@@ -849,7 +867,8 @@ final class EdgeGlowView extends View {
         float radius = barWidth * 0.5f;
         paint.setShader(barSweep(0, 0, width, 0));
         for (int i = 0; i < n; i++) {
-            float value = levels[from + i];
+            int band = mirroredBandIndex(i, n, from);
+            float value = levels[band];
             float length = barLength(value, height);
             float left = i * slot + (slot - barWidth) * 0.5f;
             paint.setAlpha(barAlpha(value, pulse));
@@ -860,7 +879,7 @@ final class EdgeGlowView extends View {
                 fromTop ? length : height + radius,
                 radius, radius, paint
             );
-            float peak = barPeaks[from + i];
+            float peak = barPeaks[band];
             if (peak > value + 0.02f) {
                 float peakAt = barLength(peak, height);
                 paint.setAlpha(clamp255((int) ((150 + pulse * 60f) * brightnessMul)));
@@ -884,7 +903,8 @@ final class EdgeGlowView extends View {
         float radius = barWidth * 0.5f;
         paint.setShader(barSweep(0, 0, 0, height));
         for (int i = 0; i < n; i++) {
-            float value = levels[from + i];
+            int band = mirroredBandIndex(i, n, from);
+            float value = levels[band];
             float length = barLength(value, width);
             float top = i * slot + (slot - barWidth) * 0.5f;
             paint.setAlpha(barAlpha(value, pulse));
@@ -895,7 +915,7 @@ final class EdgeGlowView extends View {
                 top + barWidth,
                 radius, radius, paint
             );
-            float peak = barPeaks[from + i];
+            float peak = barPeaks[band];
             if (peak > value + 0.02f) {
                 float peakAt = barLength(peak, width);
                 paint.setAlpha(clamp255((int) ((150 + pulse * 60f) * brightnessMul)));
