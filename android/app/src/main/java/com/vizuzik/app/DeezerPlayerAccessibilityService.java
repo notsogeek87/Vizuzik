@@ -69,6 +69,12 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     // the promoted card's own centre sat 23% of the screen's width off-centre, comfortably outside
     // this tolerance, while an actually-centred cover sits inside it by construction.
     private static final float MAX_ARTWORK_CENTER_OFFSET_FRACTION = 0.12f;
+    // ...but "centred" is only true of the one-column layout. Unfolded, Deezer lays the player out
+    // in two panes with the cover in the left one — EdgeGlowView's own model puts it at a quarter
+    // of the width (ART_WIDE_CENTER_X_FRACTION), which is 0.25 off-centre and so twice outside the
+    // tolerance above. Testing against the middle alone would have answered "not the player" for
+    // every single screen of an unfolded Fold, which is the one device this was written for.
+    private static final float WIDE_ARTWORK_CENTER_X_FRACTION = 0.25f;
 
     private long lastCheckAtMs;
 
@@ -133,7 +139,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             Rect window = new Rect();
             root.getBoundsInScreen(window);
             if (window.width() <= 0 || window.height() <= 0) return false;
-            Scan scan = new Scan(window.width(), window.height(), window.centerX());
+            Scan scan = new Scan(window.width(), window.height(), window.left);
             scan.walk(root, 0);
             // What the walk actually saw, thresholds aside — a heuristic that is merely mis-tuned
             // (a cover at 30% against a 32% floor) and one looking at a tree with no SeekBar and no
@@ -158,7 +164,9 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     private static final class Scan {
         final int windowWidth;
         final int windowHeight;
-        final int windowCenterX;
+        /** Where the cover is allowed to sit: the middle always, plus the left pane's own centre
+         *  when the window is wide enough to be the two-pane layout. */
+        final int[] artworkCenterXs;
         int nodesVisited;
         boolean hasWideSeekBar;
         boolean hasLargeArtwork;
@@ -167,10 +175,23 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         float tallestImageFraction = -1f;
         float tallestImageOffsetFraction = -1f;
 
-        Scan(int windowWidth, int windowHeight, int windowCenterX) {
+        Scan(int windowWidth, int windowHeight, int windowLeft) {
             this.windowWidth = windowWidth;
             this.windowHeight = windowHeight;
-            this.windowCenterX = windowCenterX;
+            int middle = windowLeft + windowWidth / 2;
+            this.artworkCenterXs = windowWidth > windowHeight
+                ? new int[] { middle, windowLeft + Math.round(windowWidth * WIDE_ARTWORK_CENTER_X_FRACTION) }
+                : new int[] { middle };
+        }
+
+        /** How far the given centre sits from the nearest allowed one, as a fraction of the
+         *  window's width. */
+        float centerOffsetFraction(int centerX) {
+            float best = Float.MAX_VALUE;
+            for (int allowed : artworkCenterXs) {
+                best = Math.min(best, Math.abs(centerX - allowed) / (float) windowWidth);
+            }
+            return best;
         }
 
         /**
@@ -211,14 +232,13 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                     }
                     if (name.contains("Image")) {
                         float heightFraction = bounds.height() / (float) windowHeight;
+                        float offsetFraction = centerOffsetFraction(bounds.centerX());
                         if (heightFraction > tallestImageFraction) {
                             tallestImageFraction = heightFraction;
-                            tallestImageOffsetFraction =
-                                Math.abs(bounds.centerX() - windowCenterX) / (float) windowWidth;
+                            tallestImageOffsetFraction = offsetFraction;
                         }
                         if (heightFraction >= MIN_ARTWORK_HEIGHT_FRACTION
-                            && Math.abs(bounds.centerX() - windowCenterX)
-                                <= windowWidth * MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
+                            && offsetFraction <= MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
                             hasLargeArtwork = true;
                         }
                     }
