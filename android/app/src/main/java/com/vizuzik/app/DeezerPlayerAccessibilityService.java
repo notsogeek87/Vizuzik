@@ -52,6 +52,16 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     // this the player screen and a browse screen with music still going underneath a mini-player
     // were indistinguishable, which was the whole "still shows the disc" report.
     private static final float MIN_SEEKBAR_WIDTH_FRACTION = 0.55f;
+    // ...but that 0.55 was measured off a one-column *portrait* screenshot, where the scrubber
+    // runs close to the full window width. Confirmed wrong on a real landscape scan (diagnostics
+    // read "barre 0.45✗ · pochette 0.60 décalée 0.00✓" — the artwork check passed, the seekbar
+    // one alone failed): Deezer keeps its player in a centred column there rather than spreading
+    // it across the whole width, the same reason the artwork centring got its own wide tolerance
+    // below (WIDE_ARTWORK_CENTER_X_FRACTION). Set with real margin under that 0.45 rather than
+    // exactly on it, on the same "if it's still wrong, the fix belongs here" basis as everything
+    // else in this heuristic — this is still paired with the artwork check below, which a docked
+    // mini-player's own smaller cover keeps failing regardless of how loose this one is.
+    private static final float WIDE_MIN_SEEKBAR_WIDTH_FRACTION = 0.38f;
     // An image has to cover a real fraction of the window's height to count as the player's own
     // full-size cover art rather than a list thumbnail or a mini-player's small icon.
     //
@@ -167,6 +177,10 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         /** Where the cover is allowed to sit: the middle always, plus the left pane's own centre
          *  when the window is wide enough to be the two-pane layout. */
         final int[] artworkCenterXs;
+        /** MIN_SEEKBAR_WIDTH_FRACTION, or the looser WIDE_ one for a landscape window — see there
+         *  for why the portrait-measured threshold doesn't hold once the player sits in a
+         *  centred column rather than spanning the screen. */
+        final float minSeekBarWidthFraction;
         int nodesVisited;
         boolean hasWideSeekBar;
         boolean hasLargeArtwork;
@@ -179,9 +193,11 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             this.windowWidth = windowWidth;
             this.windowHeight = windowHeight;
             int middle = windowLeft + windowWidth / 2;
-            this.artworkCenterXs = windowWidth > windowHeight
+            boolean wide = windowWidth > windowHeight;
+            this.artworkCenterXs = wide
                 ? new int[] { middle, windowLeft + Math.round(windowWidth * WIDE_ARTWORK_CENTER_X_FRACTION) }
                 : new int[] { middle };
+            this.minSeekBarWidthFraction = wide ? WIDE_MIN_SEEKBAR_WIDTH_FRACTION : MIN_SEEKBAR_WIDTH_FRACTION;
         }
 
         /** How far the given centre sits from the nearest allowed one, as a fraction of the
@@ -228,7 +244,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                     if (isScrubber(node, name)) {
                         float widthFraction = bounds.width() / (float) windowWidth;
                         if (widthFraction > widestSeekBarFraction) widestSeekBarFraction = widthFraction;
-                        if (widthFraction >= MIN_SEEKBAR_WIDTH_FRACTION) hasWideSeekBar = true;
+                        if (widthFraction >= minSeekBarWidthFraction) hasWideSeekBar = true;
                     }
                     if (name.contains("Image")) {
                         float heightFraction = bounds.height() / (float) windowHeight;
