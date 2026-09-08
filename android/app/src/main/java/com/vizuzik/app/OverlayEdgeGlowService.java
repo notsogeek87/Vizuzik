@@ -198,14 +198,22 @@ public class OverlayEdgeGlowService extends Service
         );
         params.gravity = Gravity.TOP | Gravity.START;
         // From Android 12, the system *drops* the touches underneath a TYPE_APPLICATION_OVERLAY
-        // window belonging to another app unless that window's opacity is at or below a threshold
-        // (0.8 by default) — and FLAG_NOT_TOUCHABLE does not exempt it, whatever it happens to be
-        // drawing at the time. So the flag above was never the whole promise: without this cap,
-        // scrolling in the app underneath simply stops working while the overlay is up, which is
-        // not a trade any visualiser is worth. The threshold is asked for rather than assumed,
-        // since a device is free to set its own; brightness is the panel's to make up.
+        // window belonging to another app unless that window's opacity stays at or under a
+        // threshold (0.8 by default) — and FLAG_NOT_TOUCHABLE does not exempt it, whatever it
+        // happens to be drawing at the time. So the flag above was never the whole promise:
+        // without this cap, scrolling in the app underneath simply stops working while the
+        // overlay is up, which is not a trade any visualiser is worth. The threshold is asked for
+        // rather than assumed, since a device is free to set its own; brightness is the panel's
+        // to make up.
+        //
+        // Landed a hair under the threshold rather than exactly on it: Google's own write-up of
+        // this feature calls the boundary itself passable ("at or below"), but that promise held
+        // even less on a device that turned out to police overlays more strictly than stock
+        // Android does — sitting exactly on a line a device is free to enforce as excluded is a
+        // needless way to find out the hard way. Reported on a Z Fold, where nothing this narrow
+        // was worth risking for two percent of brightness.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.alpha = maxObscuringOpacityForTouch();
+            params.alpha = Math.max(0f, maxObscuringOpacityForTouch() - 0.02f);
         }
         // Without this the window is laid out in the "default" cutout mode, which keeps it clear
         // of the notch and the status bar in portrait — so the bars stopped at the top of the app
