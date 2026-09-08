@@ -35,7 +35,10 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
      *  playlist) can be enormous without being deep, and the expensive case is exactly the one
      *  with no match at all — every browse screen — since nothing short-circuits that walk early. */
     private static final int MAX_DEPTH = 40;
-    private static final int MAX_NODES = 400;
+    // Raised from 400 once the diagnostics could say how far a walk actually got: a budget that
+    // stops the walk before it reaches the scrubber answers "not the player" for the same reason
+    // an empty screen does, and 400 is not much of a margin over a Compose player's own tree.
+    private static final int MAX_NODES = 1500;
     // How often onAccessibilityEvent() is actually allowed to walk the tree. typeWindowContentChanged
     // is in the config alongside typeWindowStateChanged because a single-Activity app's own
     // in-app navigation (Deezer's search/home/player are very likely destinations in one
@@ -112,6 +115,21 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             return false;
         }
         try {
+            // The window that is *active* is not necessarily the app the event came from. Deezer
+            // goes on firing content-changed events from behind — a progress bar ticking, a list
+            // settling — while something else entirely is on screen, and getRootInActiveWindow()
+            // answers with whatever is in front, which for these purposes was Vizuzik's own
+            // webview. That is how the first reading off a device came back "23 nœuds, aucune
+            // barre, une pochette parfaitement centrée": a real answer about the wrong window.
+            CharSequence packageName = root.getPackageName();
+            String scanned = packageName != null ? packageName.toString() : "";
+            OverlayDiagnostics.scanPackage = scanned;
+            if (!MusicApps.isKnownPackage(scanned)) {
+                // Not the music app in front, so its player screen is definitionally not showing.
+                OverlayDiagnostics.markScan();
+                OverlayDiagnostics.scanNodesVisited = 0;
+                return false;
+            }
             Rect window = new Rect();
             root.getBoundsInScreen(window);
             if (window.width() <= 0 || window.height() <= 0) return false;
@@ -128,6 +146,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             OverlayDiagnostics.scanWidestSeekBarFraction = scan.widestSeekBarFraction;
             OverlayDiagnostics.scanTallestImageFraction = scan.tallestImageFraction;
             OverlayDiagnostics.scanTallestImageOffsetFraction = scan.tallestImageOffsetFraction;
+            OverlayDiagnostics.scanBudgetExhausted = scan.nodesVisited >= MAX_NODES;
             return scan.hasWideSeekBar && scan.hasLargeArtwork;
         } finally {
             root.recycle();
@@ -154,6 +173,26 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             this.windowCenterX = windowCenterX;
         }
 
+        /**
+         * Whether a node is a playback scrubber, asked three ways rather than by class name alone.
+         *
+         * The class name alone was wrong, and the diagnostics said so outright: the widest thing
+         * matching "SeekBar" on a real scan was *nothing at all*, not something merely too narrow.
+         * A Compose slider does not have to report itself as android.widget.SeekBar — what it does
+         * carry is range semantics (a current value between a minimum and a maximum) and, when it
+         * can be dragged, the "set progress" action. Those are what a scrubber actually is;
+         * the class name is just the most fragile way of noticing one.
+         */
+        private static boolean isScrubber(AccessibilityNodeInfo node, String className) {
+            if (className.contains("SeekBar") || className.contains("Slider")
+                || className.contains("ProgressBar")) {
+                return true;
+            }
+            if (node.getRangeInfo() != null) return true;
+            return node.getActionList().contains(
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS);
+        }
+
         void walk(AccessibilityNodeInfo node, int depth) {
             if (node == null || depth > MAX_DEPTH) return;
             if (hasWideSeekBar && hasLargeArtwork) return; // both found — nothing left to learn
@@ -165,7 +204,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                 if (!name.isEmpty()) {
                     Rect bounds = new Rect();
                     node.getBoundsInScreen(bounds);
-                    if (name.contains("SeekBar")) {
+                    if (isScrubber(node, name)) {
                         float widthFraction = bounds.width() / (float) windowWidth;
                         if (widthFraction > widestSeekBarFraction) widestSeekBarFraction = widthFraction;
                         if (widthFraction >= MIN_SEEKBAR_WIDTH_FRACTION) hasWideSeekBar = true;

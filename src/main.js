@@ -1036,10 +1036,22 @@ const DIAGNOSTIC_ROWS = [
     "Fenêtre",
     (d) => `${d.windowMode} ${d.windowWidth}×${d.windowHeight} @${d.windowX},${d.windowY}`,
   ],
-  // The one line the whole "le disque est transparent" question turns on: 1.00 means the window is
-  // genuinely opaque and anything still see-through is what's being painted, not the window.
   ["alpha", "Opacité fenêtre", (d) => `${fmt(d.windowAlphaApplied)} (max tactile ${fmt(d.touchOpacityMax)})`],
   ["erreur", "Erreur fenêtre", (d) => d.windowError || "—"],
+  // The two lines the whole "le disque est transparent" question turns on — and the only ones that
+  // describe the moment that matters, since by the time anyone reads this panel the overlay has
+  // long since stopped and fallen back to bars. 1.00 means the record's own window really was
+  // opaque, and anything still see-through is what's being painted into it, not the window.
+  [
+    "vinyle",
+    "Dernier vinyle",
+    (d) =>
+      d.msSinceVinyl < 0
+        ? "jamais affiché"
+        : `il y a ${Math.round(d.msSinceVinyl / 1000)}s · ${d.vinylWindowMode} ` +
+          `${d.vinylWindowWidth}×${d.vinylWindowHeight} @${d.vinylWindowX},${d.vinylWindowY}`,
+  ],
+  ["vinyle-alpha", "Opacité du vinyle", (d) => (d.msSinceVinyl < 0 ? "—" : fmt(d.vinylWindowAlpha))],
   [
     "avant",
     "App à l'écran",
@@ -1062,7 +1074,8 @@ const DIAGNOSTIC_ROWS = [
     (d) =>
       d.scanCount === 0
         ? "—"
-        : `${d.scanNodesVisited} nœuds · barre ${fmt(d.scanWidestSeekBarFraction)}${d.scanSawWideSeekBar ? "✓" : "✗"}` +
+        : `${d.scanPackage || "?"} · ${d.scanNodesVisited} nœuds${d.scanBudgetExhausted ? " (budget atteint)" : ""}` +
+          ` · barre ${fmt(d.scanWidestSeekBarFraction)}${d.scanSawWideSeekBar ? "✓" : "✗"}` +
           ` · pochette ${fmt(d.scanTallestImageFraction)} décalée ${fmt(d.scanTallestImageOffsetFraction)}${d.scanSawLargeArtwork ? "✓" : "✗"}`,
   ],
 ];

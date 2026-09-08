@@ -553,6 +553,15 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("scanWidestSeekBarFraction", OverlayDiagnostics.scanWidestSeekBarFraction);
         result.put("scanTallestImageFraction", OverlayDiagnostics.scanTallestImageFraction);
         result.put("scanTallestImageOffsetFraction", OverlayDiagnostics.scanTallestImageOffsetFraction);
+        result.put("scanPackage", OverlayDiagnostics.scanPackage);
+        result.put("scanBudgetExhausted", OverlayDiagnostics.scanBudgetExhausted);
+        result.put("vinylWindowMode", OverlayDiagnostics.vinylWindowMode);
+        result.put("vinylWindowAlpha", OverlayDiagnostics.vinylWindowAlpha);
+        result.put("vinylWindowWidth", OverlayDiagnostics.vinylWindowWidth);
+        result.put("vinylWindowHeight", OverlayDiagnostics.vinylWindowHeight);
+        result.put("vinylWindowX", OverlayDiagnostics.vinylWindowX);
+        result.put("vinylWindowY", OverlayDiagnostics.vinylWindowY);
+        result.put("msSinceVinyl", OverlayDiagnostics.msSinceVinyl());
         call.resolve(result);
     }
 

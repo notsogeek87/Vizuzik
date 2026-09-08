@@ -71,6 +71,13 @@ final class OverlayDiagnostics {
     static volatile float scanWidestSeekBarFraction;
     static volatile float scanTallestImageFraction;
     static volatile float scanTallestImageOffsetFraction;
+    /** Which app's window the last scan actually walked. The first real reading off a device said
+     *  "23 nœuds" — a tree far too small to be Deezer's player — which is how it came out that a
+     *  scan can be handed Vizuzik's own window instead of the one the event came from. */
+    static volatile String scanPackage = "";
+    /** Whether the walk ran out of its node budget before finishing. A walk that stopped early and
+     *  a walk that finished and found nothing answer "no" identically. */
+    static volatile boolean scanBudgetExhausted;
     private static volatile long lastScanAtMs;
 
     /** Milliseconds since the last scan, or -1 if there has never been one. */
@@ -82,6 +89,43 @@ final class OverlayDiagnostics {
     static void markScan() {
         scanCount++;
         lastScanAtMs = SystemClock.elapsedRealtime();
+    }
+
+    // --- Latched: the last moment "vinyl" was really the style being drawn ---
+
+    /**
+     * Everything above describes right now — and right now, whenever anyone can read it, Vizuzik
+     * itself is in the foreground, which is exactly when the overlay service is stopped and the
+     * style has fallen back to bars. The first reading off a device said "Service surcouche:
+     * arrêté / vinyl → bars", which is correct and completely useless: the state worth seeing only
+     * exists while the phone is showing Deezer and nobody is looking at this panel.
+     *
+     * So it is kept. These are copies of the window's state taken at the last tick where "vinyl"
+     * was genuinely what was being drawn, and they survive the overlay stopping — which makes
+     * "was the record's window actually opaque?" answerable after the fact, from the settings
+     * screen, which is the only place it can ever be asked from.
+     */
+    static volatile String vinylWindowMode = "";
+    static volatile float vinylWindowAlpha = Float.NaN;
+    static volatile int vinylWindowWidth;
+    static volatile int vinylWindowHeight;
+    static volatile int vinylWindowX;
+    static volatile int vinylWindowY;
+    private static volatile long lastVinylAtMs;
+
+    static long msSinceVinyl() {
+        long at = lastVinylAtMs;
+        return at == 0 ? -1 : SystemClock.elapsedRealtime() - at;
+    }
+
+    static void latchVinyl() {
+        vinylWindowMode = windowMode;
+        vinylWindowAlpha = windowAlphaApplied;
+        vinylWindowWidth = windowWidth;
+        vinylWindowHeight = windowHeight;
+        vinylWindowX = windowX;
+        vinylWindowY = windowY;
+        lastVinylAtMs = SystemClock.elapsedRealtime();
     }
 
     private OverlayDiagnostics() {}

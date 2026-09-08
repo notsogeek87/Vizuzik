@@ -1183,8 +1183,12 @@ final class EdgeGlowView extends View {
      *  OverlayDiagnostics for why any of this is readable from outside at all. Plain field writes,
      *  no allocation, cheap enough to sit in the frame tick. */
     private void publishDiagnostics() {
+        String active = activeStyle();
         OverlayDiagnostics.styleSelected = style;
-        OverlayDiagnostics.styleActive = activeStyle();
+        OverlayDiagnostics.styleActive = active;
+        // Kept for after the fact — see OverlayDiagnostics.latchVinyl() for why the live values are
+        // never the ones anyone gets to read.
+        if (EdgeConfig.STYLE_VINYL.equals(active) && !suppressed) OverlayDiagnostics.latchVinyl();
         OverlayDiagnostics.suppressed = suppressed;
         OverlayDiagnostics.foregroundKnown = foregroundKnown;
         OverlayDiagnostics.trackedAppOnScreen = trackedAppOnScreen;
