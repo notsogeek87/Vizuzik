@@ -476,15 +476,13 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("onlyOverMusicApp", config.onlyOverMusicApp);
         result.put("cocoonFallback", config.cocoonFallback);
         // Read-only here: setEdgeConfig() deliberately cannot write these back, so a slider moved
-        // after a calibration can never throw it away. See EdgeConfig.writeArtCalibration(). One
-        // pair of fields per layout — see EdgeConfig.Snapshot for why folded and unfolded each
-        // keep their own.
-        result.put("artOffsetXTall", config.artOffsetXTall);
-        result.put("artOffsetYTall", config.artOffsetYTall);
-        result.put("artScaleTall", config.artScaleTall);
-        result.put("artOffsetXWide", config.artOffsetXWide);
-        result.put("artOffsetYWide", config.artOffsetYWide);
-        result.put("artScaleWide", config.artScaleWide);
+        // after a calibration can never throw it away. See EdgeConfig.writeArtCalibration(). Just
+        // this exact screen size's own triple — see EdgeConfig.Snapshot.artCalibrations for why
+        // every screen size the phone can be in keeps its own, rather than one shared value.
+        float[] calibration = config.artCalibrations.get(EdgeConfig.currentLayoutKey(getContext()));
+        result.put("artOffsetX", calibration != null ? calibration[0] : 0f);
+        result.put("artOffsetY", calibration != null ? calibration[1] : 0f);
+        result.put("artScale", calibration != null ? calibration[2] : 1f);
         result.put("hiddenPackages", String.join(",", config.hiddenPackages));
         result.put("requirePlayerScreen", config.requirePlayerScreen);
         call.resolve(result);
@@ -677,8 +675,9 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         }
     }
 
-    /** Back to the modelled position, both layouts at once — the way out of a calibration dragged
-     *  somewhere silly. */
+    /** Back to the modelled position, for whichever exact screen size Vizuzik is running on right
+     *  now — see EdgeConfig.resetArtCalibration(). The way out of a calibration dragged somewhere
+     *  silly, without disturbing whatever was separately calibrated at any other screen size. */
     @PluginMethod
     public void resetArtCalibration(PluginCall call) {
         EdgeConfig.resetArtCalibration(getContext());

@@ -21,6 +21,8 @@ import android.view.View;
 import android.view.WindowManager;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -328,19 +330,13 @@ final class EdgeGlowView extends View {
     // and never acted on, unless that service is actually connected: NowPlayerScreenState.
     private boolean requirePlayerScreen;
     // This phone's own correction to the modelled album-art anchor — see artRect() and
-    // EdgeConfig.writeArtCalibration(). 0/0/1 is "the model, untouched". Kept as two separate
-    // triples, one per layout the model itself distinguishes (see the ART_TALL_*/ART_WIDE_*
-    // comment above), because a correction measured folded and one measured unfolded are answers
-    // to two different questions — ART_TALL_* and ART_WIDE_* don't even share a centre fraction —
-    // and a single shared value could only ever be right in whichever layout it was last dragged
-    // in. currentOffsetX()/currentOffsetY()/currentScale() below pick the pair that matches
-    // whatever the phone is actually doing right now.
-    private float artOffsetXTall;
-    private float artOffsetYTall;
-    private float artScaleTall = 1f;
-    private float artOffsetXWide;
-    private float artOffsetYWide;
-    private float artScaleWide = 1f;
+    // EdgeConfig.writeArtCalibration(). Keyed by EdgeConfig.formatLayoutKey() — the screen's exact
+    // current width x height — rather than by a fixed number of named layouts: a Fold's closed
+    // and open configurations can share an aspect ratio (both read as "landscape" to artRect()'s
+    // own wide/tall test) while being physically nothing alike, and a correction dragged into
+    // place in one is not a correction for the other. A missing entry means "the model,
+    // untouched" (0/0/1) — see calibrationFor() and currentLayoutKey().
+    private Map<String, float[]> artCalibrations = new HashMap<>();
     private boolean calibrating;
 
     // Whether the tracked app is currently something other than what's on screen, so this window
@@ -413,14 +409,12 @@ final class EdgeGlowView extends View {
         hiddenPackages = config.hiddenPackages != null ? config.hiddenPackages : Collections.emptySet();
         requirePlayerScreen = config.requirePlayerScreen;
         // Not applied while the handle is up: the drag in progress *is* the newer value, and the
-        // preferences it would be re-read from are only written once that drag is finished.
+        // preferences it would be re-read from are only written once that drag is finished. A
+        // fresh copy, never the Snapshot's own map: a drag mutates entries in place (see
+        // calibrationFor()), and the Snapshot handed to every other listener of the same
+        // SharedPreferences change must not see edits that haven't been written back yet.
         if (!calibrating) {
-            artOffsetXTall = config.artOffsetXTall;
-            artOffsetYTall = config.artOffsetYTall;
-            artScaleTall = config.artScaleTall > 0 ? config.artScaleTall : 1f;
-            artOffsetXWide = config.artOffsetXWide;
-            artOffsetYWide = config.artOffsetYWide;
-            artScaleWide = config.artScaleWide > 0 ? config.artScaleWide : 1f;
+            artCalibrations = new HashMap<>(config.artCalibrations);
         }
         // Answer again on the next tick rather than keep a verdict reached under the old setting
         // — the grant included, since this is also the path a freshly granted one arrives by.
@@ -1058,11 +1052,14 @@ final class EdgeGlowView extends View {
             : Math.min(screenW * ART_TALL_MAX_WIDTH_FRACTION, screenH * ART_TALL_MAX_HEIGHT_FRACTION);
         if (side <= 0) return null;
 
-        // Each layout's own correction — see the field comment on artOffsetXTall for why folded
-        // and unfolded can't share one.
-        float offsetX = wide ? artOffsetXWide : artOffsetXTall;
-        float offsetY = wide ? artOffsetYWide : artOffsetYTall;
-        float scale = wide ? artScaleWide : artScaleTall;
+        // This exact screen size's own correction — see the field comment on artCalibrations for
+        // why it's keyed this finely rather than just by wide/tall. Read-only lookup: unlike
+        // calibrationFor(), never creates an entry, so merely rendering never plants a stray
+        // default calibration for every size the phone happens to pass through.
+        float[] calibration = artCalibrations.get(EdgeConfig.formatLayoutKey(screenW, screenH));
+        float offsetX = calibration != null ? calibration[0] : 0f;
+        float offsetY = calibration != null ? calibration[1] : 0f;
+        float scale = calibration != null ? calibration[2] : 1f;
 
         float screenCx = screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
             + offsetX * screenW;
@@ -1104,79 +1101,74 @@ final class EdgeGlowView extends View {
     /**
      * Moves the anchor so that it lands on a point the user picked on screen, and remembers that
      * as an offset from the modelled position rather than as an absolute one — so the correction
-     * still means something after a rotation or a resolution change. It does *not* survive a fold,
-     * on purpose: folding swaps which of the two ART_TALL_*/ART_WIDE_* models is even in use, so
-     * this always corrects whichever one currently applies (see currentlyWide()) and leaves the
-     * other layout's own calibration exactly as it was.
+     * still means something after the same screen size recurs later (a rotation back, a fold
+     * back). It does *not* survive a fold or a rotation *while it's happening*, on purpose: those
+     * change the screen's exact size, which is what the calibration is keyed by (see
+     * artCalibrations and currentLayoutKey()), so this always corrects whichever size is on
+     * screen right now and leaves every other size's own calibration exactly as it was.
      */
     void setArtCalibrationFromScreenCentre(float screenCx, float screenCy) {
         float screenW = displayWidth > 0 ? displayWidth : getWidth();
         float screenH = displayHeight > 0 ? displayHeight : getHeight();
         if (screenW <= 0 || screenH <= 0) return;
-        float savedX = currentOffsetX();
-        float savedY = currentOffsetY();
-        setCurrentOffset(0f, 0f);
+        float[] entry = calibrationFor(currentLayoutKey());
+        float savedX = entry[0];
+        float savedY = entry[1];
+        entry[0] = 0f;
+        entry[1] = 0f;
         ArtRect modelled = artRect();
-        setCurrentOffset(savedX, savedY);
+        entry[0] = savedX;
+        entry[1] = savedY;
         if (modelled == null) return;
-        setCurrentOffset(
-            clampOffset((screenCx - modelled.screenCx) / screenW),
-            clampOffset((screenCy - modelled.screenCy) / screenH)
-        );
+        entry[0] = clampOffset((screenCx - modelled.screenCx) / screenW);
+        entry[1] = clampOffset((screenCy - modelled.screenCy) / screenH);
     }
 
     /** Grows or shrinks the anchor about its own centre, for a cover the model sized wrong — only
-     *  ever the layout currently on screen, same as setArtCalibrationFromScreenCentre() above. */
+     *  ever the exact screen size currently on screen, same as setArtCalibrationFromScreenCentre()
+     *  above. */
     void nudgeArtScale(float factor) {
-        float scale = Math.max(ART_SCALE_MIN, Math.min(ART_SCALE_MAX, currentScale() * factor));
-        if (currentlyWide()) artScaleWide = scale; else artScaleTall = scale;
+        float[] entry = calibrationFor(currentLayoutKey());
+        entry[2] = Math.max(ART_SCALE_MIN, Math.min(ART_SCALE_MAX, entry[2] * factor));
     }
 
-    /** Whether the layout currently on screen is the wide (unfolded/landscape) one artRect()
-     *  would use, or the tall (folded/portrait) one — same test artRect() itself makes. Exposed
-     *  so OverlayEdgeGlowService knows which of the two stored calibrations a finished drag
-     *  belongs to. */
-    boolean currentlyWide() {
+    /** EdgeConfig.formatLayoutKey() for the screen size currently on screen — same width/height
+     *  artRect() itself reads. Exposed so OverlayEdgeGlowService knows which stored calibration a
+     *  finished drag belongs to. */
+    String currentLayoutKey() {
         float screenW = displayWidth > 0 ? displayWidth : getWidth();
         float screenH = displayHeight > 0 ? displayHeight : getHeight();
-        return screenW > screenH;
+        return EdgeConfig.formatLayoutKey(screenW, screenH);
     }
 
-    private float currentOffsetX() {
-        return currentlyWide() ? artOffsetXWide : artOffsetXTall;
-    }
-
-    private float currentOffsetY() {
-        return currentlyWide() ? artOffsetYWide : artOffsetYTall;
-    }
-
-    private float currentScale() {
-        return currentlyWide() ? artScaleWide : artScaleTall;
-    }
-
-    private void setCurrentOffset(float x, float y) {
-        if (currentlyWide()) {
-            artOffsetXWide = x;
-            artOffsetYWide = y;
-        } else {
-            artOffsetXTall = x;
-            artOffsetYTall = y;
+    /** The stored calibration for one screen size, creating a fresh 0/0/1 entry in artCalibrations
+     *  if this is the first correction ever made at that size. Only ever called while an actual
+     *  drag/nudge is in progress — artRect()'s own per-frame lookup stays read-only (see there) so
+     *  merely rendering never plants a stray entry for every size the phone passes through. The
+     *  returned array is live: mutating it in place is how a drag is recorded, with nothing
+     *  written back to EdgeConfig until OverlayEdgeGlowService.finishCalibration() reads it. */
+    private float[] calibrationFor(String layoutKey) {
+        float[] entry = artCalibrations.get(layoutKey);
+        if (entry == null) {
+            entry = new float[] { 0f, 0f, 1f };
+            artCalibrations.put(layoutKey, entry);
         }
+        return entry;
     }
 
-    /** The calibration for whichever layout is currently on screen — see currentlyWide(). What
-     *  OverlayEdgeGlowService.finishCalibration() writes back to EdgeConfig, one layout at a
+    /** The calibration for whichever screen size is currently on screen — see currentLayoutKey().
+     *  What OverlayEdgeGlowService.finishCalibration() writes back to EdgeConfig, one size at a
      *  time, once a drag ends. */
     float artOffsetX() {
-        return currentOffsetX();
+        return calibrationFor(currentLayoutKey())[0];
     }
 
     float artOffsetY() {
-        return currentOffsetY();
+        return calibrationFor(currentLayoutKey())[1];
     }
 
     float artScale() {
-        return currentScale();
+        return calibrationFor(currentLayoutKey())[2];
     }
 
     /** Draws the anchor as a frame while the calibration handle is up, so the target is visible
