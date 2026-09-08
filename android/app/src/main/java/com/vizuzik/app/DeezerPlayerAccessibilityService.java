@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Rect;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
@@ -28,12 +30,36 @@ import android.view.accessibility.AccessibilityNodeInfo;
 public final class DeezerPlayerAccessibilityService extends AccessibilityService {
 
     private static final String TAG = "DeezerPlayerA11y";
-    /** A pathological view tree must never turn one accessibility event into an unbounded walk on
-     *  the main thread — real screens are nowhere near this deep. */
+    /** A pathological view tree must never turn one walk into an unbounded one — real screens are
+     *  nowhere near either limit. Nodes, not just depth: a long flat list (search results, a
+     *  playlist) can be enormous without being deep, and the expensive case is exactly the one
+     *  with no match at all — every browse screen — since nothing short-circuits that walk early. */
     private static final int MAX_DEPTH = 40;
+    private static final int MAX_NODES = 400;
+    // How often onAccessibilityEvent() is actually allowed to walk the tree. typeWindowContentChanged
+    // is in the config alongside typeWindowStateChanged because a single-Activity app's own
+    // in-app navigation (Deezer's search/home/player are very likely destinations in one
+    // Compose/Fragment host, not separate Activities) may never fire a window-state change at
+    // all — but content-changed fires on every scroll frame and list update too, and querying the
+    // node tree is a cross-process call into Deezer's own window. Walking it unthrottled is what
+    // made Deezer itself stutter; this bounds the rate without dropping the event type outright.
+    private static final long MIN_CHECK_INTERVAL_MS = 400;
+    // A scrubber has to span most of the window's width to count — a docked mini-player's own
+    // progress line is very often *also* a real SeekBar widget (just styled thin), and without
+    // this the player screen and a browse screen with music still going underneath a mini-player
+    // were indistinguishable, which was the whole "still shows the disc" report.
+    private static final float MIN_SEEKBAR_WIDTH_FRACTION = 0.55f;
+    // An image has to cover a real fraction of the window's height to count as the player's own
+    // full-size cover art rather than a list thumbnail or a mini-player's small icon.
+    private static final float MIN_ARTWORK_HEIGHT_FRACTION = 0.22f;
+
+    private long lastCheckAtMs;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastCheckAtMs < MIN_CHECK_INTERVAL_MS) return;
+        lastCheckAtMs = now;
         try {
             NowPlayerScreenState.setOnPlayerScreen(looksLikeNowPlayingScreen());
         } catch (Exception e) {
@@ -46,42 +72,78 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     /**
      * Whether the window currently on screen, in one of the tracked apps, looks like their
      * full-screen "now playing" player rather than a browse screen — a heuristic, not a lookup by
-     * resource ID. This app's own view IDs are private to it and change across versions, but a
-     * player screen and a browse screen differ in a way that holds across most music apps' UI
-     * regardless of naming: the player carries a scrubbable SeekBar for the track's position, and
-     * a browse screen — even one with a mini-player docked at the bottom — essentially never
-     * does, since scrubbing from a list would be a strange thing to offer there.
+     * resource ID, since this app's own view IDs are private to it and change across versions.
+     * Requires *both* a wide scrubber and a large piece of artwork together: either alone can
+     * belong to a docked mini-player too (see the two MIN_* fractions above for why), but a
+     * browse screen showing both at once — full-width scrubber, large cover — essentially never
+     * happens.
      *
      * Written without the ability to inspect Deezer's actual layout on a real device — if it
-     * turns out wrong in practice (the player not detected, or a browse screen wrongly read as
-     * one), the fix belongs here, in what counts as "looks like the player", not in anything else
-     * this rests on.
+     * still turns out wrong in practice, the fix belongs here, in what counts as "looks like the
+     * player", not in anything else this rests on.
      */
     private boolean looksLikeNowPlayingScreen() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return false;
         try {
-            return containsSeekBar(root, 0);
+            Rect window = new Rect();
+            root.getBoundsInScreen(window);
+            if (window.width() <= 0 || window.height() <= 0) return false;
+            Scan scan = new Scan(window.width(), window.height());
+            scan.walk(root, 0);
+            return scan.hasWideSeekBar && scan.hasLargeArtwork;
         } finally {
             root.recycle();
         }
     }
 
-    private boolean containsSeekBar(AccessibilityNodeInfo node, int depth) {
-        if (node == null || depth > MAX_DEPTH) return false;
-        CharSequence className = node.getClassName();
-        if (className != null && className.toString().contains("SeekBar")) return true;
-        int count = node.getChildCount();
-        for (int i = 0; i < count; i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (child == null) continue;
-            try {
-                if (containsSeekBar(child, depth + 1)) return true;
-            } finally {
-                child.recycle();
+    /** One walk's findings and its own node budget — a plain object rather than instance fields,
+     *  since nothing here should ever depend on only one walk running at a time. */
+    private static final class Scan {
+        final int windowWidth;
+        final int windowHeight;
+        int nodesVisited;
+        boolean hasWideSeekBar;
+        boolean hasLargeArtwork;
+
+        Scan(int windowWidth, int windowHeight) {
+            this.windowWidth = windowWidth;
+            this.windowHeight = windowHeight;
+        }
+
+        void walk(AccessibilityNodeInfo node, int depth) {
+            if (node == null || depth > MAX_DEPTH) return;
+            if (hasWideSeekBar && hasLargeArtwork) return; // both found — nothing left to learn
+            if (++nodesVisited > MAX_NODES) return;
+
+            if (node.isVisibleToUser()) {
+                CharSequence className = node.getClassName();
+                String name = className != null ? className.toString() : "";
+                if (!name.isEmpty()) {
+                    Rect bounds = new Rect();
+                    node.getBoundsInScreen(bounds);
+                    if (!hasWideSeekBar && name.contains("SeekBar")
+                        && bounds.width() >= windowWidth * MIN_SEEKBAR_WIDTH_FRACTION) {
+                        hasWideSeekBar = true;
+                    }
+                    if (!hasLargeArtwork && name.contains("Image")
+                        && bounds.height() >= windowHeight * MIN_ARTWORK_HEIGHT_FRACTION) {
+                        hasLargeArtwork = true;
+                    }
+                }
+            }
+
+            int count = node.getChildCount();
+            for (int i = 0; i < count && !(hasWideSeekBar && hasLargeArtwork); i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                if (child == null) continue;
+                try {
+                    walk(child, depth + 1);
+                } finally {
+                    child.recycle();
+                }
             }
         }
-        return false;
     }
 
     @Override

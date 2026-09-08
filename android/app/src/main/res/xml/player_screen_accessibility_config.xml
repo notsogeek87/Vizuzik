@@ -3,10 +3,15 @@
      is ever handed to the two tracked music apps, and the two window event types are the least
      that still says "the screen just changed" — nothing here streams individual taps, text, or
      anything typed. See DeezerPlayerAccessibilityService for what it actually does with that. -->
+<!-- notificationTimeout coalesces a burst of events (a scroll fling, a list update) into one
+     delivery before this service even sees it — the system's own throttle, ahead of the service's
+     own MIN_CHECK_INTERVAL_MS on top of it. Two layers because either alone left Deezer visibly
+     stuttering: the system's coalescing bounds how often an event arrives, not how expensive the
+     walk this service runs on it is. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:notificationTimeout="150"
+    android:notificationTimeout="300"
     android:canRetrieveWindowContent="true"
     android:packageNames="deezer.android.app,com.spotify.music"
     android:description="@string/player_screen_service_description" />
