@@ -25,8 +25,10 @@ final class OverlayDiagnostics {
 
     // --- Written by OverlayEdgeGlowService, on every window change it asks WindowManager for ---
 
-    /** What the last window layout asked for: "full" (whole screen, capped alpha) or "small" (just
-     *  the record, opaque). See EdgeGlowView.updateWindowBounds() for why those are the two. */
+    /** What the last window layout asked for: "full" (whole screen) or "small" (just the record) —
+     *  both at the same capped alpha. See EdgeGlowView.updateWindowBounds() for why those are the
+     *  two, and OverlayEdgeGlowService.touchSafeAlpha for why "small" doesn't get to be any more
+     *  opaque than "full" is. */
     static volatile String windowMode = "?";
     /** The alpha the service *asked* for, and the one actually on the view's params afterwards —
      *  kept apart because the whole "still translucent" question is precisely whether those two
@@ -45,9 +47,9 @@ final class OverlayDiagnostics {
      *  completely silent — which is exactly the failure that would look like "nothing changed". */
     static volatile String windowError = "";
     static volatile boolean serviceRunning;
-    /** Whether the window currently consumes touches in its own area. Only the small, opaque
-     *  vinyl window does — see OverlayEdgeGlowService.onWindowBoundsWanted() for why that costs
-     *  nothing that alpha 1 was not already costing. */
+    /** Whether the window currently consumes touches in its own area. Always false: the small
+     *  vinyl window used to briefly try this, and it also meant Deezer's own left/right
+     *  skip-track swipe over the cover never reached Deezer — see onWindowBoundsWanted(). */
     static volatile boolean windowTouchable;
 
     // --- Written by EdgeGlowView: what the system actually did, not what was asked for ---

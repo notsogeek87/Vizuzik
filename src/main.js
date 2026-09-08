@@ -1040,8 +1040,11 @@ const DIAGNOSTIC_ROWS = [
   ["erreur", "Erreur fenêtre", (d) => d.windowError || "—"],
   // The two lines the whole "le disque est transparent" question turns on — and the only ones that
   // describe the moment that matters, since by the time anyone reads this panel the overlay has
-  // long since stopped and fallen back to bars. 1.00 means the record's own window really was
-  // opaque, and anything still see-through is what's being painted into it, not the window.
+  // long since stopped and fallen back to bars. The window's own alpha stays at the same
+  // touch-safe cap as every other style (see OverlayEdgeGlowService.touchSafeAlpha) — Deezer's
+  // left/right skip-track swipe is performed right over the cover, so the record can't afford to
+  // go any more opaque than that — and anything more see-through than that reading is what's
+  // being painted into the window, not the window itself.
   [
     "vinyle",
     "Dernier vinyle",

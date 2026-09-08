@@ -261,8 +261,10 @@ public class OverlayEdgeGlowService extends Service
 
     /**
      * Answers EdgeGlowView.WindowBoundsListener — see updateWindowBounds() there for why "vinyl"
-     * alone asks for something different: a small, fully opaque window sized to just the record,
-     * everything else the same full-screen, touch-safe-alpha window as always.
+     * alone asks for something different: a small window sized to just the record, everything
+     * else the same full-screen window as always. Both stay at the same touch-safe alpha and
+     * NOT_TOUCHABLE — see touchSafeAlpha for why "small" cannot afford to go any more opaque than
+     * that despite covering so much less of the screen.
      */
     private void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf) {
         if (glowView == null || windowManager == null) return;
@@ -273,29 +275,23 @@ public class OverlayEdgeGlowService extends Service
             params.height = size;
             params.x = Math.round(screenCx - outerHalf);
             params.y = Math.round(screenCy - outerHalf);
-            // Safe here specifically because the window no longer covers anything but the record
-            // itself — see the long comment on updateWindowBounds() for the trade this is.
-            params.alpha = 1f;
-            // ...and it stops being NOT_TOUCHABLE at the same time, which costs nothing it was not
-            // already costing. The Android 12 rule is about touches that pass *through* an
-            // obscuring window: at alpha 1 this window was already having the taps underneath it
-            // dropped by the system, NOT_TOUCHABLE or not. Consuming them instead is the same
-            // outcome for the same area — but it takes the window out of the "obscures someone
-            // else's touch" case entirely, which is the one thing that could still be capping how
-            // opaque the platform is willing to let it be. Only the record's own square is
-            // affected; NOT_TOUCH_MODAL leaves every pixel outside it exactly as it was.
-            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
         } else {
             params.width = WindowManager.LayoutParams.MATCH_PARENT;
             params.height = WindowManager.LayoutParams.MATCH_PARENT;
             params.x = 0;
             params.y = 0;
-            params.alpha = touchSafeAlpha;
-            // Back to letting everything through: full screen is far too much of the phone to
-            // consume, which is what the alpha cap exists to avoid in the first place.
-            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         }
+        // Same cap either way, and NOT_TOUCHABLE is never touched: a previous version made the
+        // small window fully opaque and had it consume touches itself instead of passing them
+        // through, on the theory that a window that opaque was already having its touches dropped
+        // by the platform, flag or no flag — true for a tap, but a swipe (Deezer's own
+        // left/right skip gesture, performed right over the cover the record sits on) needs a
+        // down-move-up sequence to actually reach the app underneath, and a window that consumes
+        // the down event kills the gesture just as dead as one the platform drops it under. Both
+        // read identically to Deezer: nothing arrives. Staying under the threshold, record
+        // included, is the only way that gesture is delivered at all — the record reads very
+        // slightly translucent for it, the same couple of percent every other style already pays.
+        params.alpha = touchSafeAlpha;
         OverlayDiagnostics.windowMode = small ? "small" : "full";
         OverlayDiagnostics.windowTouchable =
             (params.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
@@ -317,9 +313,11 @@ public class OverlayEdgeGlowService extends Service
     /**
      * Re-lays-out the overlay window, remove-and-re-add rather than updateViewLayout().
      *
-     * updateViewLayout() alone left the window at whatever alpha it was first added with —
-     * the record sampled at roughly the touch-safe alpha, never the full opacity "small" asks for,
-     * even once its width/height/position had visibly taken effect. Re-adding goes through
+     * updateViewLayout() alone left the window at whatever alpha it was first added with, even
+     * once its width/height/position had visibly taken effect — a stale value that happened to
+     * read the same as the wanted one while "small" and "full" both asked for touchSafeAlpha, but
+     * not safe to rely on now that either side could in principle ask for something else again.
+     * Re-adding goes through
      * addOverlayView()'s own, already-proven path instead (ArtCalibrationPuck's window is never
      * anything but freshly added, and it has never shown this problem), at the cost of a one-frame
      * flicker on a transition that already isn't a quiet moment: a track changing, or the tracked

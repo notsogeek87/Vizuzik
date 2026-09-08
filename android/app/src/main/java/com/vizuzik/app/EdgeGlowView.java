@@ -1137,8 +1137,10 @@ final class EdgeGlowView extends View {
          * service itself caps it to — what every other style needs.
          *
          * small=true: the window should shrink to a square of side 2*outerHalf centred on
-         * (screenCx, screenCy), at full opacity — see VINYL_WINDOW_MARGIN for why that square has
-         * to be bigger than the record it holds.
+         * (screenCx, screenCy), still at that same touch-safe alpha — see VINYL_WINDOW_MARGIN for
+         * why that square has to be bigger than the record it holds, and OverlayEdgeGlowService's
+         * touchSafeAlpha for why the shrink doesn't buy this window any more opacity than the
+         * others: it still sits over the exact spot Deezer's own skip-track swipe is performed.
          */
         void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf);
     }
@@ -1159,19 +1161,19 @@ final class EdgeGlowView extends View {
 
     /**
      * The one place "vinyl" and every other style actually disagree about what this window
-     * should be. Bars/glow paint along the four screen edges — they need the whole screen, and
-     * FLAG_NOT_TOUCHABLE plus the touch-safe alpha cap (see OverlayEdgeGlowService) is what lets
-     * the app underneath go on working. "Vinyl" needs the opposite: it is meant to look like a
-     * physical object sitting on the cover, and the same alpha cap that keeps everywhere else
-     * touchable is exactly what makes it read as a ghost of itself rather than a record — because
-     * that alpha applies to the whole window, uniformly, however opaque the pixels drawn inside
-     * it are.
+     * should be. Bars/glow paint along the four screen edges — a large area, but one Deezer
+     * doesn't put much of its own touch handling in. "Vinyl" sits squarely on the cover, exactly
+     * where Deezer's own left/right swipe (skip to the previous/next track) is performed, so it
+     * is the one style that cannot trade any touch pass-through away, however small the window —
+     * a swiped finger doesn't care that the window under it only covers the record.
      *
      * Shrinking the window down to just the disc, for as long as vinyl is actually what's being
-     * drawn, resolves both at once: full opacity is safe there because the trade — the record's
-     * own small, mostly decorative area stops receiving touches, precisely where it is opaque —
-     * is one this app is willing to make, while the alpha cap still protects the entire rest of
-     * the screen, including the music app's own transport controls, exactly as before.
+     * drawn, still helps: it keeps every screen pixel *outside* the record exactly as touchable
+     * as it always was, rather than the touch-safe alpha cap sitting over the whole screen for no
+     * reason while this style is active. What it does not buy is a different alpha for the disc
+     * itself — that stays capped at touchSafeAlpha in OverlayEdgeGlowService, same as everywhere
+     * else, so the swipe still reaches Deezer. The disc reads as very slightly translucent for it,
+     * which is the one trade this app is willing to make over a gesture Deezer users rely on.
      */
     private void updateWindowBounds() {
         if (windowBoundsListener == null) return;
