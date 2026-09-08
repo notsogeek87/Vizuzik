@@ -643,6 +643,13 @@ final class EdgeGlowView extends View {
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
         suppressed = !calibrating && onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
         suppressionResolved = true;
+        // Drawing nothing is not the same as not being there. From Android 12 the mere presence
+        // of this window over another app costs that app its touches unless the window is faint
+        // enough (see addOverlayView) or its root view is actually INVISIBLE — an empty display
+        // list is neither. While there is nothing to show, this window steps out of the way
+        // properly rather than hovering, unfelt but not unnoticed, over whatever is underneath.
+        int wanted = suppressed ? INVISIBLE : VISIBLE;
+        if (getVisibility() != wanted) setVisibility(wanted);
     }
 
     /** Reads the screen's real size, which is what the cocoon is positioned against. */

@@ -197,6 +197,16 @@ public class OverlayEdgeGlowService extends Service
             PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
+        // From Android 12, the system *drops* the touches underneath a TYPE_APPLICATION_OVERLAY
+        // window belonging to another app unless that window's opacity is at or below a threshold
+        // (0.8 by default) — and FLAG_NOT_TOUCHABLE does not exempt it, whatever it happens to be
+        // drawing at the time. So the flag above was never the whole promise: without this cap,
+        // scrolling in the app underneath simply stops working while the overlay is up, which is
+        // not a trade any visualiser is worth. The threshold is asked for rather than assumed,
+        // since a device is free to set its own; brightness is the panel's to make up.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.alpha = maxObscuringOpacityForTouch();
+        }
         // Without this the window is laid out in the "default" cutout mode, which keeps it clear
         // of the notch and the status bar in portrait — so the bars stopped at the top of the app
         // rather than the top of the phone, with a band of nothing above them. FLAG_LAYOUT_NO_LIMITS
@@ -289,6 +299,22 @@ public class OverlayEdgeGlowService extends Service
         } catch (Exception e) {
             Log.w(TAG, "calibration toast", e);
         }
+    }
+
+    /** The opacity this window has to stay at or below for the app underneath to keep receiving
+     *  touches — see addOverlayView(). Capped at the platform default as well as the device's own
+     *  answer, so a device that raised the limit cannot talk this window into obscuring anything. */
+    private float maxObscuringOpacityForTouch() {
+        try {
+            android.hardware.input.InputManager input =
+                (android.hardware.input.InputManager) getSystemService(INPUT_SERVICE);
+            if (input != null) {
+                return Math.min(0.8f, input.getMaximumObscuringOpacityForTouch());
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "maxObscuringOpacityForTouch", e);
+        }
+        return 0.8f;
     }
 
     /** Keeps the handle wholly on screen: it is the only thing that can be dragged, so letting it
