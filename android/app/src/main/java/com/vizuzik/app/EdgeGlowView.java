@@ -341,6 +341,18 @@ final class EdgeGlowView extends View {
     private final Rect displayBounds = new Rect();
 
     private boolean suppressed;
+    /**
+     * Whether that verdict has actually been reached yet, as opposed to merely defaulting to
+     * "not hidden".
+     *
+     * Adding this window makes the framework measure, lay out and *draw* it within the same
+     * message, while the tick loop that answers "is the music app in front?" only runs in the
+     * next one. That first frame therefore went out under the field defaults — and since a track
+     * change can pass through a pause, which stops the overlay and starts it again, the record
+     * flashed over whatever app happened to be in front before the first check took it away.
+     * Nothing is painted until there is a real answer; it arrives one frame later.
+     */
+    private boolean suppressionResolved;
     // Whether the tracked app was found to be the one on screen, and whether that could be
     // established at all — the two are different answers and are acted on differently.
     private boolean foregroundKnown;
@@ -630,6 +642,7 @@ final class EdgeGlowView extends View {
         // Never while the calibration handle is up: the whole point of that moment is to see
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
         suppressed = !calibrating && onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
+        suppressionResolved = true;
     }
 
     /** Reads the screen's real size, which is what the cocoon is positioned against. */
@@ -672,8 +685,9 @@ final class EdgeGlowView extends View {
         try {
             // Drawing nothing empties this window's display list, so the overlay disappears
             // without the service having to be torn down and rebuilt every time someone glances
-            // at another app.
-            if (suppressed) return;
+            // at another app. Also how the first frame stays blank until the question has been
+            // put at all — see suppressionResolved.
+            if (suppressed || !suppressionResolved) return;
             String active = activeStyle();
             if (EdgeConfig.STYLE_BARS.equals(active)) {
                 drawBars(canvas);

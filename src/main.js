@@ -577,14 +577,37 @@ async function syncOverlayPermission() {
  * moments Vizuzik *isn't* what's on screen, since its own full-screen player already shows
  * everything the overlay would.
  */
+// Mirrors PAUSE_GRACE_MS in EdgeOverlayController: a track change is not a clean handover, and a
+// pause reported between two tracks would otherwise tear the overlay window down and build
+// another one a moment later — blinking the effect out and back, and painting briefly over
+// whatever app is in front on the way in. Every other condition below is a deliberate act and is
+// still acted on at once.
+const EDGE_PAUSE_GRACE_MS = 1500;
+let edgePausedSinceMs = 0;
+let edgePauseTimer = null;
+
 function syncEdgeOverlay() {
-  const shouldRun =
+  // Everything except playback itself, which is the only condition here that flickers.
+  const allowed =
     edgeOverlayEnabled &&
     overlaySupported &&
     overlayPermissionGranted &&
-    isPlaying &&
     !els.player.hidden &&
     document.visibilityState !== "visible";
+  const shouldRun = allowed && isPlaying;
+
+  // Timed from when the gap started, not from this call, so a stream of updates during it cannot
+  // keep pushing the decision away for ever.
+  const now = Date.now();
+  if (isPlaying) edgePausedSinceMs = 0;
+  else if (edgePausedSinceMs === 0) edgePausedSinceMs = now;
+
+  clearTimeout(edgePauseTimer);
+  if (edgeOverlayRunning && allowed && !isPlaying && now - edgePausedSinceMs < EDGE_PAUSE_GRACE_MS) {
+    edgePauseTimer = setTimeout(syncEdgeOverlay, EDGE_PAUSE_GRACE_MS - (now - edgePausedSinceMs));
+    return;
+  }
+
   if (shouldRun === edgeOverlayRunning) return;
   edgeOverlayRunning = shouldRun;
   if (shouldRun) {

@@ -2,6 +2,7 @@ package com.vizuzik.app;
 
 import android.content.Context;
 import android.os.Build;
+import android.os.SystemClock;
 import android.provider.Settings;
 
 /**
@@ -34,8 +35,24 @@ final class EdgeOverlayController implements DeezerMediaBridge.Listener {
         return INSTANCE;
     }
 
+    /**
+     * How long playback is allowed to look stopped before the overlay is taken down for it.
+     *
+     * A track change is not a clean handover: players routinely report a pause, or a moment of
+     * nothing at all, between one track and the next. Acted on immediately, that tears the
+     * overlay window down and builds another one a moment later — the effect blinks out and back
+     * on every track change, and on the way back in it briefly paints over whatever app is in
+     * front. Every other condition here is a deliberate act (a setting, a permission, opening
+     * Vizuzik) and is still acted on at once; only this one waits to see if it meant it.
+     */
+    private static final long PAUSE_GRACE_MS = 1_500;
+
     private Context appContext;
     private boolean lastStarted;
+    /** When playback was first seen to have stopped, or 0 while it is running. */
+    private long pausedSinceMs;
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable recheck = this::sync;
 
     private EdgeOverlayController() {}
 
@@ -71,17 +88,34 @@ final class EdgeOverlayController implements DeezerMediaBridge.Listener {
         boolean isPlaying = nowPlaying != null && nowPlaying.isPlaying;
         boolean overlaySupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
 
-        boolean shouldRun = EdgeOverlayPreference.isEnabled(appContext)
+        // Everything except playback itself: those are all deliberate acts, and none of them
+        // flickers the way a track change does.
+        boolean allowed = EdgeOverlayPreference.isEnabled(appContext)
             && overlaySupported
             && Settings.canDrawOverlays(appContext)
-            && isPlaying
             && !MainActivity.isForeground();
+        boolean shouldRun = allowed && isPlaying;
 
         // Never stopped out from under the album-art calibration handle. That handle is put up
         // from Vizuzik's own settings panel — i.e. exactly when Vizuzik is in the foreground,
         // which is normally this class's cue that there is nothing worth drawing over — and it is
         // a short, explicit thing the user is in the middle of.
         if (!shouldRun && OverlayEdgeGlowService.isCalibrating()) return;
+
+        // A gap in playback where nothing else has changed is given a moment to turn out to be a
+        // track change rather than a stop — see PAUSE_GRACE_MS. Anything that resumes within it
+        // finds the overlay still up, and never has to be built again from nothing. Measured from
+        // when the gap started, not from this call, so that a stream of updates during it cannot
+        // keep pushing the decision away for ever.
+        long now = SystemClock.elapsedRealtime();
+        if (isPlaying) pausedSinceMs = 0;
+        else if (pausedSinceMs == 0) pausedSinceMs = now;
+
+        handler.removeCallbacks(recheck);
+        if (lastStarted && allowed && !isPlaying && now - pausedSinceMs < PAUSE_GRACE_MS) {
+            handler.postDelayed(recheck, PAUSE_GRACE_MS - (now - pausedSinceMs));
+            return;
+        }
 
         if (shouldRun == lastStarted) return;
         if (shouldRun) {
