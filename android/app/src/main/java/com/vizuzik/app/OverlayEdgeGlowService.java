@@ -238,7 +238,45 @@ public class OverlayEdgeGlowService extends Service
             return false;
         }
         glowView = view;
+        touchSafeAlpha = params.alpha;
+        view.setWindowBoundsListener(this::onWindowBoundsWanted);
         return true;
+    }
+
+    /** The alpha addOverlayView() capped the window at, kept rather than recomputed so the two
+     *  places that set params.alpha (full screen at startup, shrunk-back-to-full-screen here)
+     *  can never drift apart from each other. */
+    private float touchSafeAlpha = 1f;
+
+    /**
+     * Answers EdgeGlowView.WindowBoundsListener — see updateWindowBounds() there for why "vinyl"
+     * alone asks for something different: a small, fully opaque window sized to just the record,
+     * everything else the same full-screen, touch-safe-alpha window as always.
+     */
+    private void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf) {
+        if (glowView == null || windowManager == null) return;
+        WindowManager.LayoutParams params = (WindowManager.LayoutParams) glowView.getLayoutParams();
+        if (small) {
+            int size = Math.max(1, Math.round(outerHalf * 2f));
+            params.width = size;
+            params.height = size;
+            params.x = Math.round(screenCx - outerHalf);
+            params.y = Math.round(screenCy - outerHalf);
+            // Safe here specifically because the window no longer covers anything but the record
+            // itself — see the long comment on updateWindowBounds() for the trade this is.
+            params.alpha = 1f;
+        } else {
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.x = 0;
+            params.y = 0;
+            params.alpha = touchSafeAlpha;
+        }
+        try {
+            windowManager.updateViewLayout(glowView, params);
+        } catch (Exception e) {
+            Log.w(TAG, "onWindowBoundsWanted", e);
+        }
     }
 
     /**

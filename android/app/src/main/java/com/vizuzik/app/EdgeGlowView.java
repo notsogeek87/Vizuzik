@@ -174,6 +174,11 @@ final class EdgeGlowView extends View {
     private static final int VINYL_VOID_COLOR = 0xFF14141F;
     /** How far past the record's own edge its shadow reaches, as a multiple of the radius. */
     private static final float VINYL_SHADOW_REACH = 1.09f;
+    // How much bigger than the record's own radius the shrunk window has to be, as a multiple —
+    // it has to hold the shadow (VINYL_SHADOW_REACH), the beat-driven lift in drawVinyl() (up to
+    // 2%), and the rim's own stroke width, with a little left over rather than clipping any of
+    // them exactly at the edge.
+    private static final float VINYL_WINDOW_MARGIN = 1.18f;
 
     // Everything about the ribbon that depends only on where you are around it, computed once at
     // class load: the superellipse radius (three Math.pow calls each), the unit vector, and the
@@ -553,6 +558,7 @@ final class EdgeGlowView extends View {
             advanceBars(dtMs / 1000f);
             advanceVinyl(dtMs / 1000f);
             updateSuppression(now);
+            updateWindowBounds();
 
             invalidate();
         } catch (Exception e) {
@@ -1077,6 +1083,80 @@ final class EdgeGlowView extends View {
      *  whichever style is selected — including the two that aren't drawn against the cover. */
     void setCalibrating(boolean calibrating) {
         this.calibrating = calibrating;
+    }
+
+    /**
+     * Where OverlayEdgeGlowService learns that "vinyl" needs a different window than everything
+     * else — see the field comment on windowBoundsListener for why.
+     */
+    interface WindowBoundsListener {
+        /**
+         * small=false: the window should cover the whole screen, at whatever touch-safe alpha the
+         * service itself caps it to — what every other style needs.
+         *
+         * small=true: the window should shrink to a square of side 2*outerHalf centred on
+         * (screenCx, screenCy), at full opacity — see VINYL_WINDOW_MARGIN for why that square has
+         * to be bigger than the record it holds.
+         */
+        void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf);
+    }
+
+    private WindowBoundsListener windowBoundsListener;
+    // The bounds last reported to that listener, so a tick that changes nothing about them never
+    // asks WindowManager to redo a layout it already has — a resize this view cannot see land
+    // (unlike a draw, which just shows up on the next frame) is worth asking for only when it
+    // would actually move something.
+    private boolean lastWantedSmall;
+    private float lastWantedCx = Float.NaN;
+    private float lastWantedCy = Float.NaN;
+    private float lastWantedHalf = Float.NaN;
+
+    void setWindowBoundsListener(WindowBoundsListener listener) {
+        windowBoundsListener = listener;
+    }
+
+    /**
+     * The one place "vinyl" and every other style actually disagree about what this window
+     * should be. Bars/glow paint along the four screen edges — they need the whole screen, and
+     * FLAG_NOT_TOUCHABLE plus the touch-safe alpha cap (see OverlayEdgeGlowService) is what lets
+     * the app underneath go on working. "Vinyl" needs the opposite: it is meant to look like a
+     * physical object sitting on the cover, and the same alpha cap that keeps everywhere else
+     * touchable is exactly what makes it read as a ghost of itself rather than a record — because
+     * that alpha applies to the whole window, uniformly, however opaque the pixels drawn inside
+     * it are.
+     *
+     * Shrinking the window down to just the disc, for as long as vinyl is actually what's being
+     * drawn, resolves both at once: full opacity is safe there because the trade — the record's
+     * own small, mostly decorative area stops receiving touches, precisely where it is opaque —
+     * is one this app is willing to make, while the alpha cap still protects the entire rest of
+     * the screen, including the music app's own transport controls, exactly as before.
+     */
+    private void updateWindowBounds() {
+        if (windowBoundsListener == null) return;
+        ArtRect art = calibrating || suppressed || !EdgeConfig.STYLE_VINYL.equals(activeStyle())
+            ? null
+            : artRect();
+        boolean small = art != null;
+        float cx = small ? art.screenCx : 0f;
+        float cy = small ? art.screenCy : 0f;
+        float half = small ? art.half * VINYL_WINDOW_MARGIN : 0f;
+
+        boolean unchanged = small == lastWantedSmall
+            && (!small || (closeEnough(cx, lastWantedCx) && closeEnough(cy, lastWantedCy)
+                && closeEnough(half, lastWantedHalf)));
+        if (unchanged) return;
+
+        lastWantedSmall = small;
+        lastWantedCx = cx;
+        lastWantedCy = cy;
+        lastWantedHalf = half;
+        windowBoundsListener.onWindowBoundsWanted(small, cx, cy, half);
+    }
+
+    /** A couple of pixels of slack: this runs every tick, and re-laying out the window over a
+     *  sub-pixel jitter in the modelled position would cost far more than it would ever show. */
+    private static boolean closeEnough(float a, float b) {
+        return Math.abs(a - b) < 2f;
     }
 
     private static float clampOffset(float value) {
