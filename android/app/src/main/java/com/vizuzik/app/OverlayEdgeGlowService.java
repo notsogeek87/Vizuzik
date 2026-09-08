@@ -508,8 +508,10 @@ public class OverlayEdgeGlowService extends Service
         calibrationPuck = null;
         if (glowView == null) return;
         glowView.setCalibrating(false);
+        // Only the layout that was actually on screen during this drag — see
+        // EdgeConfig.writeArtCalibration() for why the other one is never touched.
         EdgeConfig.writeArtCalibration(
-            this, glowView.artOffsetX(), glowView.artOffsetY(), glowView.artScale()
+            this, glowView.currentlyWide(), glowView.artOffsetX(), glowView.artOffsetY(), glowView.artScale()
         );
     }
 

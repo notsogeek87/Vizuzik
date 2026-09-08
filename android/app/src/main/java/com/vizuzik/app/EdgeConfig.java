@@ -57,11 +57,22 @@ final class EdgeConfig {
     private static final String KEY_ONLY_OVER_MUSIC_APP = "edgeOnlyOverMusicApp";
     private static final String KEY_BAR_SIZE = "edgeBarSize";
     private static final String KEY_COCOON_FALLBACK = "edgeCocoonFallback";
-    // Deliberately outside write()'s reach — see writeArtCalibration() for why these three are
-    // the only settings the panel is not allowed to overwrite.
-    private static final String KEY_ART_OFFSET_X = "edgeArtOffsetX";
-    private static final String KEY_ART_OFFSET_Y = "edgeArtOffsetY";
-    private static final String KEY_ART_SCALE = "edgeArtScale";
+    // Deliberately outside write()'s reach — see writeArtCalibration() for why these are the
+    // only settings the panel is not allowed to overwrite. One triple per layout the model in
+    // EdgeGlowView.artRect() distinguishes (folded/portrait "tall", unfolded/landscape "wide") —
+    // see the field comment on EdgeGlowView.artOffsetXTall for why a correction measured in one
+    // cannot simply be reused in the other.
+    private static final String KEY_ART_OFFSET_X_TALL = "edgeArtOffsetXTall";
+    private static final String KEY_ART_OFFSET_Y_TALL = "edgeArtOffsetYTall";
+    private static final String KEY_ART_SCALE_TALL = "edgeArtScaleTall";
+    private static final String KEY_ART_OFFSET_X_WIDE = "edgeArtOffsetXWide";
+    private static final String KEY_ART_OFFSET_Y_WIDE = "edgeArtOffsetYWide";
+    private static final String KEY_ART_SCALE_WIDE = "edgeArtScaleWide";
+    // Where the single, unsplit calibration used to live, before it became one triple per layout
+    // — see migrateArtCalibration().
+    private static final String KEY_ART_OFFSET_X_LEGACY = "edgeArtOffsetX";
+    private static final String KEY_ART_OFFSET_Y_LEGACY = "edgeArtOffsetY";
+    private static final String KEY_ART_SCALE_LEGACY = "edgeArtScale";
     private static final String KEY_HIDDEN_PACKAGES = "edgeHiddenPackages";
     // The one app hidden out of the box, without anyone having to find the picker first — see
     // DeezerMediaPlugin.listInstalledApps() for how they add more. GitHub's own app routinely
@@ -99,10 +110,15 @@ final class EdgeConfig {
         /** Where the album art really sits on *this* phone, as a correction to the layout model
          *  EdgeGlowView.artRect() estimates — see writeArtCalibration(). Offsets are fractions of
          *  the screen's width/height so they survive a resolution change; scale multiplies the
-         *  estimated size. 0/0/1 means "the estimate, untouched". */
-        final float artOffsetX;
-        final float artOffsetY;
-        final float artScale;
+         *  estimated size. 0/0/1 means "the estimate, untouched". One triple per layout the model
+         *  distinguishes — "Tall" folded/portrait, "Wide" unfolded/landscape — since they don't
+         *  even share a centre fraction and a correction for one says nothing about the other. */
+        final float artOffsetXTall;
+        final float artOffsetYTall;
+        final float artScaleTall;
+        final float artOffsetXWide;
+        final float artOffsetYWide;
+        final float artScaleWide;
         /** Apps to hide over unconditionally, by package name — independent of onlyOverMusicApp,
          *  and honoured under the same rule as that setting: only once "usage access" tells this
          *  view what is actually on screen. Never null; empty when nothing is picked. */
@@ -127,9 +143,12 @@ final class EdgeConfig {
             boolean right,
             boolean onlyOverMusicApp,
             String cocoonFallback,
-            float artOffsetX,
-            float artOffsetY,
-            float artScale,
+            float artOffsetXTall,
+            float artOffsetYTall,
+            float artScaleTall,
+            float artOffsetXWide,
+            float artOffsetYWide,
+            float artScaleWide,
             Set<String> hiddenPackages,
             boolean requirePlayerScreen
         ) {
@@ -147,9 +166,12 @@ final class EdgeConfig {
             this.right = right;
             this.onlyOverMusicApp = onlyOverMusicApp;
             this.cocoonFallback = cocoonFallback;
-            this.artOffsetX = artOffsetX;
-            this.artOffsetY = artOffsetY;
-            this.artScale = artScale;
+            this.artOffsetXTall = artOffsetXTall;
+            this.artOffsetYTall = artOffsetYTall;
+            this.artScaleTall = artScaleTall;
+            this.artOffsetXWide = artOffsetXWide;
+            this.artOffsetYWide = artOffsetYWide;
+            this.artScaleWide = artScaleWide;
             this.hiddenPackages = hiddenPackages;
             this.requirePlayerScreen = requirePlayerScreen;
         }
@@ -158,6 +180,7 @@ final class EdgeConfig {
     static Snapshot read(Context context) {
         SharedPreferences prefs = prefs(context);
         migrateStyle(prefs);
+        migrateArtCalibration(prefs);
         String colorMode = prefs.getString(KEY_COLOR_MODE, COLOR_AUTO);
         int[][] customPalette = COLOR_CUSTOM.equals(colorMode)
             ? parseColors(prefs.getString(KEY_CUSTOM_COLORS, null))
@@ -181,9 +204,12 @@ final class EdgeConfig {
             prefs.getBoolean(KEY_RIGHT, false),
             prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, false),
             prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS),
-            prefs.getFloat(KEY_ART_OFFSET_X, 0f),
-            prefs.getFloat(KEY_ART_OFFSET_Y, 0f),
-            prefs.getFloat(KEY_ART_SCALE, 1f),
+            prefs.getFloat(KEY_ART_OFFSET_X_TALL, 0f),
+            prefs.getFloat(KEY_ART_OFFSET_Y_TALL, 0f),
+            prefs.getFloat(KEY_ART_SCALE_TALL, 1f),
+            prefs.getFloat(KEY_ART_OFFSET_X_WIDE, 0f),
+            prefs.getFloat(KEY_ART_OFFSET_Y_WIDE, 0f),
+            prefs.getFloat(KEY_ART_SCALE_WIDE, 1f),
             parsePackages(prefs.getString(KEY_HIDDEN_PACKAGES, DEFAULT_HIDDEN_PACKAGES)),
             prefs.getBoolean(KEY_REQUIRE_PLAYER_SCREEN, false)
         );
@@ -207,14 +233,64 @@ final class EdgeConfig {
      * calibration handle onto it (see ArtCalibrationPuck). Kept out of write() above on purpose:
      * that one mirrors the whole settings panel in one go, and the panel has no idea what the
      * calibration currently is — a slider moved after a calibration would silently throw it away.
-     * These three keys therefore only ever change from here.
+     * These keys therefore only ever change from here.
+     *
+     * @param wide which of the two stored triples to overwrite — the layout that was actually on
+     *     screen for this drag (see EdgeGlowView.currentlyWide()), never both: recalibrating
+     *     folded must never disturb whatever was separately measured unfolded.
      */
-    static void writeArtCalibration(Context context, float offsetX, float offsetY, float scale) {
+    static void writeArtCalibration(Context context, boolean wide, float offsetX, float offsetY, float scale) {
+        SharedPreferences.Editor editor = prefs(context).edit();
+        if (wide) {
+            editor.putFloat(KEY_ART_OFFSET_X_WIDE, offsetX)
+                .putFloat(KEY_ART_OFFSET_Y_WIDE, offsetY)
+                .putFloat(KEY_ART_SCALE_WIDE, scale);
+        } else {
+            editor.putFloat(KEY_ART_OFFSET_X_TALL, offsetX)
+                .putFloat(KEY_ART_OFFSET_Y_TALL, offsetY)
+                .putFloat(KEY_ART_SCALE_TALL, scale);
+        }
+        editor.apply();
+    }
+
+    /** Back to the modelled position for *both* layouts at once — the settings panel's "Réinitialiser"
+     *  button, which has no way to know which layout the phone is even in right now, unlike a
+     *  calibration drag (see writeArtCalibration()) which always happens in one specific layout. */
+    static void resetArtCalibration(Context context) {
         prefs(context)
             .edit()
-            .putFloat(KEY_ART_OFFSET_X, offsetX)
-            .putFloat(KEY_ART_OFFSET_Y, offsetY)
-            .putFloat(KEY_ART_SCALE, scale)
+            .putFloat(KEY_ART_OFFSET_X_TALL, 0f)
+            .putFloat(KEY_ART_OFFSET_Y_TALL, 0f)
+            .putFloat(KEY_ART_SCALE_TALL, 1f)
+            .putFloat(KEY_ART_OFFSET_X_WIDE, 0f)
+            .putFloat(KEY_ART_OFFSET_Y_WIDE, 0f)
+            .putFloat(KEY_ART_SCALE_WIDE, 1f)
+            .apply();
+    }
+
+    /**
+     * An install from before the calibration was split one-per-layout carries a single flat
+     * correction under the legacy keys, measured in whichever layout the phone happened to be in
+     * at the time — there is no way to tell which after the fact. Seeding both new buckets from
+     * it, once, keeps that calibration in effect exactly as before until either layout is
+     * recalibrated on its own; discarding it outright would have thrown away a correction someone
+     * actually dragged into place for no better reason than a storage format change.
+     */
+    private static void migrateArtCalibration(SharedPreferences prefs) {
+        if (!prefs.contains(KEY_ART_OFFSET_X_LEGACY)) return;
+        float offsetX = prefs.getFloat(KEY_ART_OFFSET_X_LEGACY, 0f);
+        float offsetY = prefs.getFloat(KEY_ART_OFFSET_Y_LEGACY, 0f);
+        float scale = prefs.getFloat(KEY_ART_SCALE_LEGACY, 1f);
+        prefs.edit()
+            .putFloat(KEY_ART_OFFSET_X_TALL, offsetX)
+            .putFloat(KEY_ART_OFFSET_Y_TALL, offsetY)
+            .putFloat(KEY_ART_SCALE_TALL, scale)
+            .putFloat(KEY_ART_OFFSET_X_WIDE, offsetX)
+            .putFloat(KEY_ART_OFFSET_Y_WIDE, offsetY)
+            .putFloat(KEY_ART_SCALE_WIDE, scale)
+            .remove(KEY_ART_OFFSET_X_LEGACY)
+            .remove(KEY_ART_OFFSET_Y_LEGACY)
+            .remove(KEY_ART_SCALE_LEGACY)
             .apply();
     }
 
