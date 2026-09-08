@@ -322,10 +322,14 @@ final class EdgeGlowView extends View {
     // should paint nothing. Re-evaluated on a slow timer rather than per frame: answering it
     // costs a query to UsageStatsManager (see ForegroundApp), and a second of lag when leaving
     // the music app is not worth paying for it 24 times a second.
-    private static final long FOREGROUND_CHECK_MS = 1_000;
-    /** How long the tracked app has to stay missing before that is acted on — see
-     *  updateSuppression(). */
-    private static final long TRACKED_APP_GRACE_MS = 2_500;
+    // Leaving the music app has to be answered quickly: the styles drawn on its cover drop to
+    // their fallback the moment it goes, and a switch that trails a second behind the app it is
+    // reacting to reads as the overlay being stuck rather than as it following. Three times a
+    // second costs one cheap incremental query of the usage-event stream (see ForegroundApp).
+    private static final long FOREGROUND_CHECK_MS = 300;
+    /** The screen's size, and the "usage access" grant: neither changes on the scale above. */
+    private static final long DISPLAY_CHECK_MS = 1_000;
+    private static final long USAGE_ACCESS_CHECK_MS = 5_000;
     // The real display, and where this window sits on it. The cocoon is placed against the
     // *screen*, not against this view: the window is laid out with NO_LIMITS and into the display
     // cutout, so its own width/height and origin do not reliably correspond to the screen the
@@ -342,9 +346,8 @@ final class EdgeGlowView extends View {
     private boolean foregroundKnown;
     private boolean trackedAppOnScreen = true;
     private long lastForegroundCheckAtMs;
-    /** When the tracked app was first found to be gone, or 0 while it is there — the start of the
-     *  grace period above. */
-    private long trackedAppMissingSinceMs;
+    private long lastDisplayCheckAtMs;
+    private long lastUsageAccessCheckAtMs;
 
     EdgeGlowView(Context context) {
         super(context);
@@ -377,8 +380,10 @@ final class EdgeGlowView extends View {
             artOffsetY = config.artOffsetY;
             artScale = config.artScale > 0 ? config.artScale : 1f;
         }
-        // Answer again on the next tick rather than keep a verdict reached under the old setting.
+        // Answer again on the next tick rather than keep a verdict reached under the old setting
+        // — the grant included, since this is also the path a freshly granted one arrives by.
         lastForegroundCheckAtMs = 0;
+        lastUsageAccessCheckAtMs = 0;
     }
 
     void setPalette(int[][] palette) {
@@ -607,20 +612,21 @@ final class EdgeGlowView extends View {
      * over an app it needn't have.
      */
     private void updateSuppression(long now) {
+        // The screen's own size only changes on a fold or a rotation, and the "usage access"
+        // grant almost never — neither is worth asking about at the rate the question "is the
+        // music app still in front?" has to be asked to answer it promptly.
+        if (now - lastDisplayCheckAtMs >= DISPLAY_CHECK_MS) {
+            lastDisplayCheckAtMs = now;
+            refreshDisplaySize();
+        }
         if (lastForegroundCheckAtMs != 0 && now - lastForegroundCheckAtMs < FOREGROUND_CHECK_MS) return;
         lastForegroundCheckAtMs = now;
-        refreshDisplaySize();
         Context context = getContext();
-        foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
-        boolean seenNow = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
-        // A grace period before believing the music app has gone. Leaving it is worth reacting to
-        // within a second, but a fold or a rotation churns through activities for a moment, and a
-        // single bad sample in that churn used to be enough to drop "vinyl" to its fallback style
-        // — which then looked like the setting itself had changed.
-        if (seenNow) trackedAppMissingSinceMs = 0;
-        else if (trackedAppMissingSinceMs == 0) trackedAppMissingSinceMs = now;
-        trackedAppOnScreen = seenNow
-            || now - trackedAppMissingSinceMs < TRACKED_APP_GRACE_MS;
+        if (lastUsageAccessCheckAtMs == 0 || now - lastUsageAccessCheckAtMs >= USAGE_ACCESS_CHECK_MS) {
+            lastUsageAccessCheckAtMs = now;
+            foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
+        }
+        trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
         // Never while the calibration handle is up: the whole point of that moment is to see
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
         suppressed = !calibrating && onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;

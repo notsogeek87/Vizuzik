@@ -29,12 +29,19 @@ import android.util.Log;
 final class ForegroundApp {
 
     private static final String TAG = "ForegroundApp";
-    /** Cheap enough at this rate, and a second of lag leaving Deezer is not worth more. */
-    private static final long POLL_INTERVAL_MS = 900;
+    // Each poll is one incremental query for events newer than the last one seen — normally none
+    // at all — so this can be asked often, and it has to be: leaving the music app drops the
+    // styles drawn on its cover back to their fallback, and that has to happen with the app
+    // switch rather than a beat behind it.
+    private static final long POLL_INTERVAL_MS = 300;
     private static final long FIRST_LOOKBACK_MS = 24 * 60 * 60 * 1000L;
     /** How far back the second opinion looks — long enough to have recorded the app someone is
      *  sitting in, short enough that yesterday's session says nothing about right now. */
     private static final long CROSS_CHECK_MS = 60 * 1000L;
+    /** How often it is asked again while it is the one overruling the event stream. */
+    private static final long CROSS_CHECK_AGAIN_MS = 1_500;
+    /** How long after a fold (or any display change) the event stream is treated as suspect. */
+    private static final long CROSS_CHECK_WINDOW_MS = 15_000;
     /** Same constant as the deprecated MOVE_TO_FOREGROUND (1); javac inlines it, so naming the
      *  newer one here costs nothing on older releases. */
     private static final int EVENT_RESUMED = UsageEvents.Event.ACTIVITY_RESUMED;
@@ -42,6 +49,14 @@ final class ForegroundApp {
     private static String lastKnownPackage;
     private static long lastEventAtMs;
     private static long lastPolledAtMs;
+    /** The package the second opinion was last asked about, and what it said — see
+     *  isTrackedAppInForeground(). */
+    private static String crossCheckedAgainst;
+    private static boolean crossCheckSaidTracked;
+    private static long lastCrossCheckAtMs;
+    /** Until when the event stream counts as suspect — set by invalidate(), zero the rest of the
+     *  time, which is when the events are simply believed. */
+    private static long crossCheckUntilMs;
 
     /** Whether the "usage access" special permission is currently granted to Vizuzik. */
     static boolean hasUsageAccess(Context context) {
@@ -68,16 +83,41 @@ final class ForegroundApp {
      * no app chosen yet, permission missing, or no usage event ever seen. A decorative overlay
      * that silently refuses to appear is a much worse failure than one that appears too often.
      */
-    static boolean isTrackedAppInForeground(Context context) {
+    static synchronized boolean isTrackedAppInForeground(Context context) {
         if (context == null) return true;
         String tracked = MusicAppPreference.getPackage(context);
         if (tracked == null) return true;
         String current = currentPackage(context);
-        if (current == null || current.equals(tracked)) return true;
-        // A verdict of "something else is in front" is the only one that costs anything — it
-        // hides the overlay, or drops the styles drawn on the cover down to their fallback — so
-        // it is worth a second opinion before being acted on. See recentlyUsedIsTracked().
-        return recentlyUsedIsTracked(context, tracked);
+        if (current == null || current.equals(tracked)) {
+            crossCheckedAgainst = null;
+            return true;
+        }
+
+        // Something else is in front, says the event stream — and the event stream is believed,
+        // immediately, because that is what makes the overlay let go of an app the moment someone
+        // leaves it rather than a beat later.
+        //
+        // Except just after a fold. There, and only there, the events are known to lie: every app
+        // moves to another display, and the burst that follows can end on a system package being
+        // resumed after the music app, which then stays the answer for as long as nobody switches
+        // apps again. So for a few seconds after such a change, and never otherwise, the verdict
+        // is put to usage statistics — a coarser source, several seconds behind at times, which
+        // is exactly why it is not allowed anywhere near the ordinary case.
+        long now = SystemClock.elapsedRealtime();
+        if (crossCheckUntilMs == 0 || now > crossCheckUntilMs) return false;
+        boolean sameSituation = current.equals(crossCheckedAgainst);
+        if (!sameSituation || now - lastCrossCheckAtMs >= CROSS_CHECK_AGAIN_MS) {
+            crossCheckedAgainst = current;
+            lastCrossCheckAtMs = now;
+            crossCheckSaidTracked = recentlyUsedIsTracked(context, tracked);
+            // Believed enough to correct the latch itself, not merely to answer this one
+            // question. Shadowing it would only postpone the fault: the package resumed in
+            // passing during the fold is still what the events say once the window above closes,
+            // and nothing resumes again to displace it. Corrected here, the next poll takes the
+            // cheap path, and a real app switch still overwrites it the moment one happens.
+            if (crossCheckSaidTracked) lastKnownPackage = tracked;
+        }
+        return crossCheckSaidTracked;
     }
 
     /**
@@ -93,6 +133,8 @@ final class ForegroundApp {
     static synchronized void invalidate() {
         lastKnownPackage = null;
         lastPolledAtMs = 0;
+        crossCheckedAgainst = null;
+        crossCheckUntilMs = SystemClock.elapsedRealtime() + CROSS_CHECK_WINDOW_MS;
     }
 
     private static synchronized String currentPackage(Context context) {
