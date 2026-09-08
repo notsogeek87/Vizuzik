@@ -49,9 +49,13 @@ final class ArtCalibrationPuck extends View {
      *  be left with a stray window sitting on top of their music app. */
     static final long IDLE_TIMEOUT_MS = 120_000;
 
-    private static final float WIDTH_DP = 232f;
-    private static final float HEIGHT_DP = 64f;
+    private static final float WIDTH_DP = 236f;
+    private static final float HEIGHT_DP = 88f;
+    /** The caption band across the top, in the same dp as the rest — taps there do nothing, so a
+     *  finger landing on the words never resizes anything by surprise. */
+    private static final float CAPTION_DP = 28f;
     private static final float SCALE_STEP = 1.06f;
+    private static final String CAPTION = "Centrez sur la pochette";
 
     private final Listener listener;
     private final float density;
@@ -78,6 +82,10 @@ final class ArtCalibrationPuck extends View {
 
     int heightPx() {
         return Math.round(HEIGHT_DP * density);
+    }
+
+    private float captionPx() {
+        return CAPTION_DP * density;
     }
 
     long idleForMs(long nowMs) {
@@ -111,12 +119,22 @@ final class ArtCalibrationPuck extends View {
             paint.setColor(0x66FFFFFF);
             canvas.drawRoundRect(pill, radius, radius, paint);
 
-            float third = w / 3f;
+            // What this thing is, said on the handle itself: by now the music app is what's on
+            // screen, so anything Vizuzik could have explained in its own settings panel went
+            // with it.
+            float caption = captionPx();
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.WHITE);
             paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTextSize(h * 0.42f);
-            float baseline = h * 0.5f - (paint.descent() + paint.ascent()) * 0.5f;
+            paint.setColor(0xCCFFFFFF);
+            paint.setTextSize(caption * 0.46f);
+            canvas.drawText(CAPTION, w * 0.5f, caption * 0.72f, paint);
+
+            float third = w / 3f;
+            float rowTop = caption;
+            float rowMid = rowTop + (h - rowTop) * 0.5f;
+            paint.setColor(Color.WHITE);
+            paint.setTextSize((h - rowTop) * 0.46f);
+            float baseline = rowMid - (paint.descent() + paint.ascent()) * 0.5f;
             // Three zones, in the order the hand expects them: smaller, move, bigger — with the
             // tick folded into the middle as a long press would be less discoverable.
             canvas.drawText("−", third * 0.5f, baseline, paint);
@@ -126,8 +144,8 @@ final class ArtCalibrationPuck extends View {
             paint.setStrokeWidth(Math.max(1f, density * 0.8f));
             paint.setStyle(Paint.Style.STROKE);
             paint.setColor(0x33FFFFFF);
-            canvas.drawLine(third, h * 0.24f, third, h * 0.76f, paint);
-            canvas.drawLine(third * 2f, h * 0.24f, third * 2f, h * 0.76f, paint);
+            canvas.drawLine(third, rowTop + (h - rowTop) * 0.22f, third, h - (h - rowTop) * 0.22f, paint);
+            canvas.drawLine(third * 2f, rowTop + (h - rowTop) * 0.22f, third * 2f, h - (h - rowTop) * 0.22f, paint);
         } catch (Exception e) {
             // Same rule as EdgeGlowView: this runs on the app's one main thread, and a decorative
             // handle must never be the thing that takes the whole app down.
@@ -168,7 +186,9 @@ final class ArtCalibrationPuck extends View {
                     return true;
                 }
                 case MotionEvent.ACTION_UP: {
-                    if (!dragging) {
+                    // A tap only counts on the row of buttons: the caption above them is there to
+                    // be read, and a finger resting on the words must not resize anything.
+                    if (!dragging && event.getY() >= captionPx()) {
                         float third = getWidth() / 3f;
                         float x = event.getX();
                         if (x < third) listener.onScaleNudged(1f / SCALE_STEP);

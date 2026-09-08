@@ -735,11 +735,17 @@ function readEdgeSettingsFromForm() {
   };
 }
 
+/** Selects a value only when the <select> actually offers it. Assigning an unknown one leaves the
+ *  control showing nothing at all, and nothing at all is what the next push would write back. */
+function setSelectValue(select, value) {
+  if (Array.from(select.options).some((option) => option.value === value)) select.value = value;
+}
+
 function applyEdgeSettingsToForm(config) {
-  els.edgeStyle.value = config.style;
-  els.edgeBand.value = config.band;
-  els.edgeCocoonFallback.value = config.cocoonFallback;
-  els.edgeColorMode.value = config.colorMode;
+  setSelectValue(els.edgeStyle, config.style);
+  setSelectValue(els.edgeBand, config.band);
+  setSelectValue(els.edgeCocoonFallback, config.cocoonFallback);
+  setSelectValue(els.edgeColorMode, config.colorMode);
   const colors = (config.customColors || EDGE_DEFAULT_COLORS).split(",");
   if (colors[0]) els.edgeColor1.value = colors[0];
   if (colors[1]) els.edgeColor2.value = colors[1];
@@ -757,8 +763,17 @@ function applyEdgeSettingsToForm(config) {
   els.edgeCustomColors.hidden = config.colorMode !== "custom";
 }
 
+/**
+ * Whether the panel currently holds the real native settings. setEdgeConfig() writes every field
+ * at once, so a panel that never managed to read them would push its own defaults over a working
+ * configuration the moment anything was touched — which is how a chosen style could come back as
+ * "Barres" after a fold, the reload having raced the plugin.
+ */
+let edgeSettingsLoaded = false;
+
 /** Reads the form and pushes it to native — called on every settings-panel edit. */
 function pushEdgeConfig() {
+  if (!edgeSettingsLoaded) return;
   const values = readEdgeSettingsFromForm();
   els.edgeCustomColors.hidden = values.colorMode !== "custom";
   rememberEdgeCustomColors(values.customColors);
@@ -769,15 +784,22 @@ function pushEdgeConfig() {
  *  (the actual source of truth for what the overlay renders), the color swatches from
  *  localStorage (native only stores them as parsed RGB, not the original hex strings). */
 async function loadEdgeConfig() {
-  let native = {};
+  let native = null;
   try {
     native = await DeezerMedia.getEdgeConfig();
   } catch (err) {
-    // Older native build, or the plugin call failed: fall back to defaults below.
+    // Older native build, or the plugin call failed — for instance the webview reloading after a
+    // fold, before the plugin is up. Handled below by leaving the panel alone rather than by
+    // showing defaults: what is native is the truth, and defaults on screen become defaults
+    // written back the moment anything is touched.
   }
+  edgeSettingsLoaded = native != null;
+  // Never inert in silence: with nothing read, edits are refused rather than written over the
+  // real configuration, and that has to be visible or the panel just looks broken.
+  if (!edgeSettingsLoaded) showToast("Réglages illisibles pour l'instant — rouvrez le panneau", 3200);
   applyEdgeSettingsToForm({
     ...EDGE_SETTINGS_DEFAULTS,
-    ...native,
+    ...(native || {}),
     customColors: readEdgeCustomColors(),
   });
   // Not part of EdgeConfig: the on/off state lives in EdgeOverlayPreference and is tracked here
@@ -910,8 +932,9 @@ els.edgeUsageGrant.addEventListener("click", () => {
 
 /* Where the album art sits can only be estimated from the screen's shape (there is no way to read
    another app's layout from here — see ArtCalibrationPuck.java), so this is how someone corrects
-   that estimate on their own phone. The panel is closed on the way out: the handle appears over
-   whatever is in front, and what needs to be in front is the music app, not this. */
+   that estimate on their own phone. The native side brings the music app up itself and explains
+   the rest on the handle: what has to be on screen for any of this to mean anything is Deezer's
+   own cover, not this panel. */
 els.edgeArtCalibrate.addEventListener("click", async () => {
   try {
     const result = await DeezerMedia.startArtCalibration();
@@ -920,7 +943,11 @@ els.edgeArtCalibrate.addEventListener("click", async () => {
       return;
     }
     closeEdgeSettingsSheet();
-    showToast("Ouvrez Deezer, glissez la pastille sur la pochette, puis ✓", 5000);
+    // Only worth saying when the music app couldn't be brought up: otherwise it is already on
+    // screen with the handle on top of it, and this toast went with Vizuzik.
+    if (result && result.launched === false) {
+      showToast("Ouvrez votre app de musique : le repère y attend", 4000);
+    }
   } catch (err) {
     // Either the overlay grant is missing (the native side rejects with "permission" rather than
     // sending anyone off to Deezer to look for a handle that can't be shown), or this is an older

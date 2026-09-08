@@ -53,6 +53,15 @@ public class OverlayEdgeGlowService extends Service
     static final String ACTION_CALIBRATE_ART = "com.vizuzik.app.CALIBRATE_ART";
     private static final long CALIBRATION_WATCH_MS = 10_000;
 
+    /** Read by EdgeOverlayController, which would otherwise stop this service out from under a
+     *  calibration in progress — that is exactly the moment Vizuzik itself is in the foreground,
+     *  which is normally its cue that there is nothing worth drawing over. */
+    private static volatile boolean calibrating;
+
+    static boolean isCalibrating() {
+        return calibrating;
+    }
+
     private WindowManager windowManager;
     private NotificationManager notificationManager;
     private EdgeGlowView glowView;
@@ -239,11 +248,11 @@ public class OverlayEdgeGlowService extends Service
         });
 
         // Placed on the anchor it is about to correct, so the first thing it does is show where
-        // Vizuzik currently thinks the cover is. Middle of the screen if the view cannot answer
-        // yet — somewhere reachable, never the top-left corner.
+        // Vizuzik currently thinks the cover is. Middle of the screen if the anchor cannot be
+        // worked out at all — somewhere reachable, never the top-left corner.
         boolean placed = glowView.readArtAnchor(anchor);
-        float centreX = placed ? anchor[0] : glowView.getWidth() * 0.5f;
-        float centreY = placed ? anchor[1] : glowView.getHeight() * 0.5f;
+        float centreX = placed ? anchor[0] : glowView.displayWidthPx() * 0.5f;
+        float centreY = placed ? anchor[1] : glowView.displayHeightPx() * 0.5f;
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             puck.widthPx(),
             puck.heightPx(),
@@ -256,8 +265,8 @@ public class OverlayEdgeGlowService extends Service
             PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
-        params.x = Math.round(centreX - puck.widthPx() * 0.5f);
-        params.y = Math.round(centreY - puck.heightPx() * 0.5f);
+        params.x = clampPuckX(Math.round(centreX - puck.widthPx() * 0.5f), puck.widthPx());
+        params.y = clampPuckY(Math.round(centreY - puck.heightPx() * 0.5f), puck.heightPx());
         try {
             windowManager.addView(puck, params);
         } catch (Exception e) {
@@ -265,9 +274,35 @@ public class OverlayEdgeGlowService extends Service
             return;
         }
         calibrationPuck = puck;
+        calibrating = true;
         puck.markTouched(android.os.SystemClock.elapsedRealtime());
         glowView.setCalibrating(true);
         calibrationHandler.postDelayed(calibrationWatchdog, CALIBRATION_WATCH_MS);
+        // Said out here rather than in Vizuzik's own settings panel: by the time this matters the
+        // music app is what's on screen, and an in-app toast would have gone with it.
+        try {
+            android.widget.Toast.makeText(
+                this,
+                "Placez la pastille au centre de la pochette, puis ✓",
+                android.widget.Toast.LENGTH_LONG
+            ).show();
+        } catch (Exception e) {
+            Log.w(TAG, "calibration toast", e);
+        }
+    }
+
+    /** Keeps the handle wholly on screen: it is the only thing that can be dragged, so letting it
+     *  be dragged (or placed) past an edge would make it unreachable. */
+    private int clampPuckX(int x, int width) {
+        float screen = glowView != null ? glowView.displayWidthPx() : 0f;
+        if (screen <= 0) return Math.max(0, x);
+        return Math.max(0, Math.min(Math.round(screen) - width, x));
+    }
+
+    private int clampPuckY(int y, int height) {
+        float screen = glowView != null ? glowView.displayHeightPx() : 0f;
+        if (screen <= 0) return Math.max(0, y);
+        return Math.max(0, Math.min(Math.round(screen) - height, y));
     }
 
     /** Ends calibration on its own if the handle has been left untouched — see IDLE_TIMEOUT_MS. */
@@ -289,10 +324,17 @@ public class OverlayEdgeGlowService extends Service
         try {
             WindowManager.LayoutParams params =
                 (WindowManager.LayoutParams) calibrationPuck.getLayoutParams();
-            params.x = Math.round(screenCentreX - calibrationPuck.getWidth() * 0.5f);
-            params.y = Math.round(screenCentreY - calibrationPuck.getHeight() * 0.5f);
+            int width = calibrationPuck.getWidth();
+            int height = calibrationPuck.getHeight();
+            params.x = clampPuckX(Math.round(screenCentreX - width * 0.5f), width);
+            params.y = clampPuckY(Math.round(screenCentreY - height * 0.5f), height);
             windowManager.updateViewLayout(calibrationPuck, params);
-            glowView.setArtCalibrationFromScreenCentre(screenCentreX, screenCentreY);
+            // From where the handle actually ended up, not from where the finger asked it to go,
+            // so a drag stopped by the screen's edge leaves the anchor exactly under the handle.
+            glowView.setArtCalibrationFromScreenCentre(
+                params.x + width * 0.5f,
+                params.y + height * 0.5f
+            );
         } catch (Exception e) {
             Log.w(TAG, "moveCalibrationPuck", e);
         }
@@ -300,6 +342,7 @@ public class OverlayEdgeGlowService extends Service
 
     /** Takes the handle away and writes down where it was left. */
     private void finishCalibration() {
+        calibrating = false;
         calibrationHandler.removeCallbacks(calibrationWatchdog);
         if (calibrationPuck != null && windowManager != null) {
             try {
@@ -328,6 +371,10 @@ public class OverlayEdgeGlowService extends Service
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        // Whatever was believed about which app is in front does not survive a fold: every app
+        // moves to another display, and the burst of activity that follows can leave a system
+        // package as the last one resumed — see ForegroundApp.invalidate().
+        ForegroundApp.invalidate();
         if (glowView == null || windowManager == null) return;
         try {
             windowManager.updateViewLayout(glowView, glowView.getLayoutParams());

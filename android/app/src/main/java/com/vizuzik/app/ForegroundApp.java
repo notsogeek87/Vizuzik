@@ -32,6 +32,9 @@ final class ForegroundApp {
     /** Cheap enough at this rate, and a second of lag leaving Deezer is not worth more. */
     private static final long POLL_INTERVAL_MS = 900;
     private static final long FIRST_LOOKBACK_MS = 24 * 60 * 60 * 1000L;
+    /** How far back the second opinion looks — long enough to have recorded the app someone is
+     *  sitting in, short enough that yesterday's session says nothing about right now. */
+    private static final long CROSS_CHECK_MS = 60 * 1000L;
     /** Same constant as the deprecated MOVE_TO_FOREGROUND (1); javac inlines it, so naming the
      *  newer one here costs nothing on older releases. */
     private static final int EVENT_RESUMED = UsageEvents.Event.ACTIVITY_RESUMED;
@@ -70,7 +73,26 @@ final class ForegroundApp {
         String tracked = MusicAppPreference.getPackage(context);
         if (tracked == null) return true;
         String current = currentPackage(context);
-        return current == null || current.equals(tracked);
+        if (current == null || current.equals(tracked)) return true;
+        // A verdict of "something else is in front" is the only one that costs anything — it
+        // hides the overlay, or drops the styles drawn on the cover down to their fallback — so
+        // it is worth a second opinion before being acted on. See recentlyUsedIsTracked().
+        return recentlyUsedIsTracked(context, tracked);
+    }
+
+    /**
+     * Forgets which app was last seen in front, so the next question is answered from fresh
+     * events rather than from a latch.
+     *
+     * Folding a phone like a Z Fold moves every app to another display, and the burst of activity
+     * that follows can end on a system package being resumed *after* the music app — which is
+     * then what this class believes is in front, for good, since nothing resumes again while
+     * someone simply keeps watching the app they were already in. That left the overlay drawing
+     * its fallback style over a perfectly foregrounded Deezer.
+     */
+    static synchronized void invalidate() {
+        lastKnownPackage = null;
+        lastPolledAtMs = 0;
     }
 
     private static synchronized String currentPackage(Context context) {
@@ -79,6 +101,35 @@ final class ForegroundApp {
         lastPolledAtMs = now;
         poll(context);
         return lastKnownPackage;
+    }
+
+    /**
+     * Whether usage *statistics* — as opposed to the event stream above — still make the tracked
+     * app the most recently used one. The two sources fail in different ways: events are precise
+     * but can be latched onto a package that was resumed in passing, statistics are coarse but
+     * aggregate. Only their agreement is allowed to hide anything; where they disagree this
+     * returns true, i.e. "can't be sure", which the caller reads as "carry on drawing".
+     */
+    private static boolean recentlyUsedIsTracked(Context context, String tracked) {
+        try {
+            UsageStatsManager usage =
+                (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+            if (usage == null) return false;
+            long now = System.currentTimeMillis();
+            java.util.List<android.app.usage.UsageStats> stats =
+                usage.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - CROSS_CHECK_MS, now);
+            if (stats == null || stats.isEmpty()) return false;
+            android.app.usage.UsageStats mostRecent = null;
+            for (android.app.usage.UsageStats candidate : stats) {
+                if (mostRecent == null || candidate.getLastTimeUsed() > mostRecent.getLastTimeUsed()) {
+                    mostRecent = candidate;
+                }
+            }
+            return mostRecent != null && tracked.equals(mostRecent.getPackageName());
+        } catch (Exception e) {
+            Log.w(TAG, "recentlyUsedIsTracked", e);
+            return false;
+        }
     }
 
     private static void poll(Context context) {

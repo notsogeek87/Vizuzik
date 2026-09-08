@@ -481,10 +481,14 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Puts the album-art calibration handle on screen, so the overlay can be told where this
-     * particular phone's music app actually keeps its cover — see ArtCalibrationPuck. Resolves
-     * with whether the handle could be asked for at all; the web layer uses that to say something
-     * honest rather than send the user off to Deezer looking for a handle that never appeared.
+     * Puts the album-art calibration handle on screen and brings up the music app it is meant to
+     * be lined up against — see ArtCalibrationPuck. Doing both from here is the point: the anchor
+     * describes where *Deezer* keeps its cover, so leaving the handle sitting on top of Vizuzik's
+     * own screen gives someone nothing to align it with.
+     *
+     * The order matters. The handle is asked for while Vizuzik is still the app in front, since a
+     * foreground service started from the background can be refused outright; the music app is
+     * only brought up once that has gone through.
      */
     @PluginMethod
     public void startArtCalibration(PluginCall call) {
@@ -498,7 +502,27 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         boolean started = OverlayEdgeGlowService.requestArtCalibration(getContext());
         JSObject result = new JSObject();
         result.put("started", started);
+        result.put("launched", started && openTrackedMusicApp());
         call.resolve(result);
+    }
+
+    /** Brings up whichever app is currently being tracked (see MusicAppPreference), defaulting to
+     *  Deezer for an install where nothing has been chosen yet. */
+    private boolean openTrackedMusicApp() {
+        try {
+            String packageName = MusicAppPreference.getPackage(getContext());
+            if (packageName == null) packageName = MusicApps.DEEZER_PACKAGE;
+            Intent intent = getContext().getPackageManager().getLaunchIntentForPackage(packageName);
+            if (intent == null) return false;
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            return true;
+        } catch (Exception e) {
+            // Not installed any more, or the launch was refused: the handle is already up, so the
+            // user can still get there themselves, and the panel says so. Never worth failing the
+            // whole call over.
+            return false;
+        }
     }
 
     /** Back to the modelled position — the way out of a calibration dragged somewhere silly. */

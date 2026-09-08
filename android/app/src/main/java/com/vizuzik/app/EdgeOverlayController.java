@@ -77,6 +77,12 @@ final class EdgeOverlayController implements DeezerMediaBridge.Listener {
             && isPlaying
             && !MainActivity.isForeground();
 
+        // Never stopped out from under the album-art calibration handle. That handle is put up
+        // from Vizuzik's own settings panel — i.e. exactly when Vizuzik is in the foreground,
+        // which is normally this class's cue that there is nothing worth drawing over — and it is
+        // a short, explicit thing the user is in the middle of.
+        if (!shouldRun && OverlayEdgeGlowService.isCalibrating()) return;
+
         if (shouldRun == lastStarted) return;
         if (shouldRun) {
             // Only counts as started if the request actually went through — a foreground-service

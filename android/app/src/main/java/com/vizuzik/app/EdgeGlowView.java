@@ -323,6 +323,9 @@ final class EdgeGlowView extends View {
     // costs a query to UsageStatsManager (see ForegroundApp), and a second of lag when leaving
     // the music app is not worth paying for it 24 times a second.
     private static final long FOREGROUND_CHECK_MS = 1_000;
+    /** How long the tracked app has to stay missing before that is acted on — see
+     *  updateSuppression(). */
+    private static final long TRACKED_APP_GRACE_MS = 2_500;
     // The real display, and where this window sits on it. The cocoon is placed against the
     // *screen*, not against this view: the window is laid out with NO_LIMITS and into the display
     // cutout, so its own width/height and origin do not reliably correspond to the screen the
@@ -339,6 +342,9 @@ final class EdgeGlowView extends View {
     private boolean foregroundKnown;
     private boolean trackedAppOnScreen = true;
     private long lastForegroundCheckAtMs;
+    /** When the tracked app was first found to be gone, or 0 while it is there — the start of the
+     *  grace period above. */
+    private long trackedAppMissingSinceMs;
 
     EdgeGlowView(Context context) {
         super(context);
@@ -606,7 +612,15 @@ final class EdgeGlowView extends View {
         refreshDisplaySize();
         Context context = getContext();
         foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
-        trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
+        boolean seenNow = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
+        // A grace period before believing the music app has gone. Leaving it is worth reacting to
+        // within a second, but a fold or a rotation churns through activities for a moment, and a
+        // single bad sample in that churn used to be enough to drop "vinyl" to its fallback style
+        // — which then looked like the setting itself had changed.
+        if (seenNow) trackedAppMissingSinceMs = 0;
+        else if (trackedAppMissingSinceMs == 0) trackedAppMissingSinceMs = now;
+        trackedAppOnScreen = seenNow
+            || now - trackedAppMissingSinceMs < TRACKED_APP_GRACE_MS;
         // Never while the calibration handle is up: the whole point of that moment is to see
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
         suppressed = !calibrating && onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
@@ -921,6 +935,12 @@ final class EdgeGlowView extends View {
     }
 
     private ArtRect artRect() {
+        // The screen's size is normally refreshed on the slow timer, but the anchor can be asked
+        // for before the first of those has run — the calibration handle is put up in the same
+        // breath as the overlay window itself, when this view has not even been measured yet, and
+        // an anchor that answered "don't know" then left the handle parked in the top-left corner
+        // of the screen. WindowManager can answer at any time, so ask it rather than give up.
+        if (displayWidth <= 0 || displayHeight <= 0) refreshDisplaySize();
         // Landscape means the two-pane layout, portrait the one-column one — read every frame, so
         // folding the device moves the anchor with the cover.
         float screenW = displayWidth > 0 ? displayWidth : getWidth();
@@ -944,6 +964,18 @@ final class EdgeGlowView extends View {
 
         refreshOrigin();
         return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
+    }
+
+    /** The screen's size, asked of WindowManager if the slow timer hasn't run yet — what the
+     *  calibration handle is kept inside of. */
+    float displayWidthPx() {
+        if (displayWidth <= 0) refreshDisplaySize();
+        return displayWidth > 0 ? displayWidth : getWidth();
+    }
+
+    float displayHeightPx() {
+        if (displayHeight <= 0) refreshDisplaySize();
+        return displayHeight > 0 ? displayHeight : getHeight();
     }
 
     /** The anchor as it stands, in screen coordinates: {centre x, centre y, half-size}. How
