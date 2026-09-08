@@ -272,8 +272,17 @@ public class OverlayEdgeGlowService extends Service
             params.y = 0;
             params.alpha = touchSafeAlpha;
         }
+        // updateViewLayout() alone left the window at whatever alpha it was first added with —
+        // confirmed on device: the record sampled at roughly the touch-safe alpha, never the full
+        // opacity "small" asks for, even once its width/height/position had visibly taken effect.
+        // Removing and re-adding the same view goes through addOverlayView()'s own, already
+        // — proven — path instead (ArtCalibrationPuck's window is never anything but freshly
+        // added, and it has never shown this problem), at the cost of a one-frame flicker on a
+        // transition that already isn't a quiet moment: a track changing, or the tracked app
+        // itself coming or going.
         try {
-            windowManager.updateViewLayout(glowView, params);
+            windowManager.removeViewImmediate(glowView);
+            windowManager.addView(glowView, params);
         } catch (Exception e) {
             Log.w(TAG, "onWindowBoundsWanted", e);
         }

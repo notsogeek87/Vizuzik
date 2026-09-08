@@ -51,7 +51,21 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     private static final float MIN_SEEKBAR_WIDTH_FRACTION = 0.55f;
     // An image has to cover a real fraction of the window's height to count as the player's own
     // full-size cover art rather than a list thumbnail or a mini-player's small icon.
-    private static final float MIN_ARTWORK_HEIGHT_FRACTION = 0.22f;
+    //
+    // Set against a real measurement rather than a guess: EdgeGlowView's own art-position model
+    // (ART_TALL_MAX_HEIGHT_FRACTION) puts Deezer's actual full-player cover at ~40% of the
+    // screen's height, measured directly off a real Deezer screenshot. A promoted card on the
+    // home feed — confirmed against a screenshot of Deezer's own "Accueil" tab, the concrete case
+    // that slipped past the first version of this heuristic — ran to about 19-29% there, large
+    // enough to have cleared the previous, lower threshold. This sits with real margin under the
+    // cover's own ~40% and over what a feed card measured at.
+    private static final float MIN_ARTWORK_HEIGHT_FRACTION = 0.32f;
+    // The player's own cover sits centred on the screen (see EdgeGlowView's ART_TALL_CENTER_X_FRACTION,
+    // 0.5) — every other large image on a Deezer screen is feed or carousel content, which is
+    // laid out in a row and essentially never centred. Measured on that same "Accueil" screenshot:
+    // the promoted card's own centre sat 23% of the screen's width off-centre, comfortably outside
+    // this tolerance, while an actually-centred cover sits inside it by construction.
+    private static final float MAX_ARTWORK_CENTER_OFFSET_FRACTION = 0.12f;
 
     private long lastCheckAtMs;
 
@@ -89,7 +103,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             Rect window = new Rect();
             root.getBoundsInScreen(window);
             if (window.width() <= 0 || window.height() <= 0) return false;
-            Scan scan = new Scan(window.width(), window.height());
+            Scan scan = new Scan(window.width(), window.height(), window.centerX());
             scan.walk(root, 0);
             return scan.hasWideSeekBar && scan.hasLargeArtwork;
         } finally {
@@ -102,13 +116,15 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     private static final class Scan {
         final int windowWidth;
         final int windowHeight;
+        final int windowCenterX;
         int nodesVisited;
         boolean hasWideSeekBar;
         boolean hasLargeArtwork;
 
-        Scan(int windowWidth, int windowHeight) {
+        Scan(int windowWidth, int windowHeight, int windowCenterX) {
             this.windowWidth = windowWidth;
             this.windowHeight = windowHeight;
+            this.windowCenterX = windowCenterX;
         }
 
         void walk(AccessibilityNodeInfo node, int depth) {
@@ -127,7 +143,8 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                         hasWideSeekBar = true;
                     }
                     if (!hasLargeArtwork && name.contains("Image")
-                        && bounds.height() >= windowHeight * MIN_ARTWORK_HEIGHT_FRACTION) {
+                        && bounds.height() >= windowHeight * MIN_ARTWORK_HEIGHT_FRACTION
+                        && Math.abs(bounds.centerX() - windowCenterX) <= windowWidth * MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
                         hasLargeArtwork = true;
                     }
                 }
