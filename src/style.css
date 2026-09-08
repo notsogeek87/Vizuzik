@@ -611,6 +611,48 @@ body[data-mode="cassette"] .mode-toggle .icon-cassette {
   margin: 0;
 }
 
+/* Bloc de diagnostic : volontairement dense et monospace — il est fait pour être capturé et lu
+   en une fois, pas pour être joli. */
+.edge-diagnostics {
+  margin: 4px 0 2px;
+  border-top: 1px solid rgba(247, 248, 252, 0.1);
+  padding-top: 12px;
+}
+
+.edge-diagnostics > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: rgba(247, 248, 252, 0.55);
+}
+
+.edge-diagnostics__hint {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(247, 248, 252, 0.45);
+  margin: 8px 0 10px;
+}
+
+.edge-diagnostics__list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.edge-diagnostics__list dt {
+  color: rgba(247, 248, 252, 0.5);
+  white-space: nowrap;
+}
+
+.edge-diagnostics__list dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: rgba(247, 248, 252, 0.9);
+  overflow-wrap: anywhere;
+}
+
 .app-hide__hint {
   font-size: 0.8rem;
   line-height: 1.4;

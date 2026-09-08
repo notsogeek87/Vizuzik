@@ -213,7 +213,9 @@ public class OverlayEdgeGlowService extends Service
         // needless way to find out the hard way. Reported on a Z Fold, where nothing this narrow
         // was worth risking for two percent of brightness.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.alpha = Math.max(0f, maxObscuringOpacityForTouch() - 0.02f);
+            float max = maxObscuringOpacityForTouch();
+            OverlayDiagnostics.touchOpacityMax = max;
+            params.alpha = Math.max(0f, max - 0.02f);
         }
         // Without this the window is laid out in the "default" cutout mode, which keeps it clear
         // of the notch and the status bar in portrait — so the bars stopped at the top of the app
@@ -239,6 +241,15 @@ public class OverlayEdgeGlowService extends Service
         }
         glowView = view;
         touchSafeAlpha = params.alpha;
+        OverlayDiagnostics.serviceRunning = true;
+        OverlayDiagnostics.windowMode = "full";
+        OverlayDiagnostics.windowAlphaWanted = params.alpha;
+        OverlayDiagnostics.windowAlphaApplied = params.alpha;
+        OverlayDiagnostics.windowX = params.x;
+        OverlayDiagnostics.windowY = params.y;
+        OverlayDiagnostics.windowWidth = params.width;
+        OverlayDiagnostics.windowHeight = params.height;
+        OverlayDiagnostics.windowError = "";
         view.setWindowBoundsListener(this::onWindowBoundsWanted);
         return true;
     }
@@ -272,19 +283,68 @@ public class OverlayEdgeGlowService extends Service
             params.y = 0;
             params.alpha = touchSafeAlpha;
         }
-        // updateViewLayout() alone left the window at whatever alpha it was first added with —
-        // confirmed on device: the record sampled at roughly the touch-safe alpha, never the full
-        // opacity "small" asks for, even once its width/height/position had visibly taken effect.
-        // Removing and re-adding the same view goes through addOverlayView()'s own, already
-        // — proven — path instead (ArtCalibrationPuck's window is never anything but freshly
-        // added, and it has never shown this problem), at the cost of a one-frame flicker on a
-        // transition that already isn't a quiet moment: a track changing, or the tracked app
-        // itself coming or going.
+        OverlayDiagnostics.windowMode = small ? "small" : "full";
+        OverlayDiagnostics.windowAlphaWanted = params.alpha;
+        OverlayDiagnostics.windowX = params.x;
+        OverlayDiagnostics.windowY = params.y;
+        OverlayDiagnostics.windowWidth = params.width;
+        OverlayDiagnostics.windowHeight = params.height;
+        // Off this stack frame on purpose. This is reached from EdgeGlowView's own frame tick —
+        // that is, from inside a callback the view hierarchy is in the middle of running — and
+        // tearing the window down from there is exactly the kind of re-entrancy removeViewImmediate
+        // refuses to do. It throwing here would be completely invisible: the window simply stays at
+        // the alpha it already had, which is indistinguishable from the resize never having been
+        // asked for. Posting it to the main looper runs the same work a moment later with nothing
+        // of the view's own on the stack.
+        calibrationHandler.post(() -> applyWindowParams(params));
+    }
+
+    /**
+     * Re-lays-out the overlay window, remove-and-re-add rather than updateViewLayout().
+     *
+     * updateViewLayout() alone left the window at whatever alpha it was first added with —
+     * the record sampled at roughly the touch-safe alpha, never the full opacity "small" asks for,
+     * even once its width/height/position had visibly taken effect. Re-adding goes through
+     * addOverlayView()'s own, already-proven path instead (ArtCalibrationPuck's window is never
+     * anything but freshly added, and it has never shown this problem), at the cost of a one-frame
+     * flicker on a transition that already isn't a quiet moment: a track changing, or the tracked
+     * app itself coming or going.
+     *
+     * The failure that matters is the half-done one — removed, then the re-add throws — which
+     * would leave the overlay gone for the rest of the session with nothing to bring it back. So
+     * the re-add is retried once with the plainest possible params, and whatever went wrong is
+     * kept for the diagnostics panel rather than only going to a logcat nobody here can read.
+     */
+    private void applyWindowParams(WindowManager.LayoutParams params) {
+        if (glowView == null || windowManager == null) return;
         try {
             windowManager.removeViewImmediate(glowView);
-            windowManager.addView(glowView, params);
         } catch (Exception e) {
-            Log.w(TAG, "onWindowBoundsWanted", e);
+            // Not attached, or refused: nothing was taken away, so nothing needs putting back.
+            OverlayDiagnostics.windowError = "remove: " + e;
+            Log.w(TAG, "applyWindowParams/remove", e);
+            return;
+        }
+        try {
+            windowManager.addView(glowView, params);
+            OverlayDiagnostics.windowError = "";
+            OverlayDiagnostics.windowAlphaApplied = params.alpha;
+        } catch (Exception e) {
+            OverlayDiagnostics.windowError = "add: " + e;
+            Log.w(TAG, "applyWindowParams/add", e);
+            try {
+                params.width = WindowManager.LayoutParams.MATCH_PARENT;
+                params.height = WindowManager.LayoutParams.MATCH_PARENT;
+                params.x = 0;
+                params.y = 0;
+                params.alpha = touchSafeAlpha;
+                windowManager.addView(glowView, params);
+                OverlayDiagnostics.windowAlphaApplied = params.alpha;
+                OverlayDiagnostics.windowMode = "full (repli)";
+            } catch (Exception fatal) {
+                OverlayDiagnostics.windowError = "add+repli: " + fatal;
+                Log.w(TAG, "applyWindowParams/re-add", fatal);
+            }
         }
     }
 
@@ -565,6 +625,8 @@ public class OverlayEdgeGlowService extends Service
         // Before the view goes: the handle is a window of its own and would otherwise be left
         // behind on top of the music app, and what it was dragged to is worth keeping.
         finishCalibration();
+        OverlayDiagnostics.serviceRunning = false;
+        OverlayDiagnostics.windowMode = "arrêté";
         if (glowView != null && windowManager != null) {
             try {
                 windowManager.removeView(glowView);

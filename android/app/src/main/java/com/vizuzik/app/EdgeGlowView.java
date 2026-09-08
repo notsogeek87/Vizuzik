@@ -564,6 +564,7 @@ final class EdgeGlowView extends View {
             advanceVinyl(dtMs / 1000f);
             updateSuppression(now);
             updateWindowBounds();
+            publishDiagnostics();
 
             invalidate();
         } catch (Exception e) {
@@ -661,8 +662,15 @@ final class EdgeGlowView extends View {
         // Only asked when there is a list to check against — most installs pick nothing, and the
         // question costs the same incremental usage-event query onlyOverMusicApp's already does,
         // just wasted if there is nothing here for its answer to matter to.
+        // Read whether or not there is a hide list to check it against: the diagnostics panel's
+        // whole job is to say which app the overlay thinks is in front, and an answer that only
+        // exists when a setting happens to be on would be missing exactly when it's needed.
+        // currentPackage() is the same 300ms-throttled latch isTrackedAppInForeground() just used,
+        // so asking it again here costs a field read.
+        String foreground = foregroundKnown ? ForegroundApp.currentForegroundPackage(context) : null;
+        lastForegroundPackage = foreground != null ? foreground : "";
         boolean explicitlyHidden = foregroundKnown && !hiddenPackages.isEmpty()
-            && hiddenPackages.contains(ForegroundApp.currentForegroundPackage(context));
+            && hiddenPackages.contains(foreground);
         // Never while the calibration handle is up: the whole point of that moment is to see
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
         suppressed = !calibrating
@@ -1165,6 +1173,23 @@ final class EdgeGlowView extends View {
         lastWantedCy = cy;
         lastWantedHalf = half;
         windowBoundsListener.onWindowBoundsWanted(small, cx, cy, half);
+    }
+
+    /** The package updateSuppression() last saw in front, kept only so publishDiagnostics() has
+     *  something to report — nothing decides anything on it. */
+    private String lastForegroundPackage = "";
+
+    /** Hands the settings panel what this view actually concluded this frame — see
+     *  OverlayDiagnostics for why any of this is readable from outside at all. Plain field writes,
+     *  no allocation, cheap enough to sit in the frame tick. */
+    private void publishDiagnostics() {
+        OverlayDiagnostics.styleSelected = style;
+        OverlayDiagnostics.styleActive = activeStyle();
+        OverlayDiagnostics.suppressed = suppressed;
+        OverlayDiagnostics.foregroundKnown = foregroundKnown;
+        OverlayDiagnostics.trackedAppOnScreen = trackedAppOnScreen;
+        OverlayDiagnostics.foregroundPackage = lastForegroundPackage;
+        OverlayDiagnostics.viewVisible = getVisibility() == VISIBLE;
     }
 
     /** A couple of pixels of slack: this runs every tick, and re-laying out the window over a

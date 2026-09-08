@@ -384,6 +384,17 @@
           <label><input id="edge-right" type="checkbox" /> Droite</label>
         </div>
 
+        <!-- Ce que la surcouche fait réellement, en direct. Replié par défaut : ce n'est pas un
+             réglage, c'est de quoi diagnostiquer « le disque est transparent » ou « le lecteur
+             n'est pas détecté » sans avoir à deviner — voir OverlayDiagnostics côté natif. -->
+        <details id="edge-diagnostics" class="edge-diagnostics">
+          <summary>Diagnostic (avancé)</summary>
+          <p class="edge-diagnostics__hint">
+            Ouvrez Deezer avec la surcouche active, revenez ici, puis faites une capture de ce bloc.
+          </p>
+          <dl id="edge-diagnostics-list" class="edge-diagnostics__list"></dl>
+        </details>
+
         <button id="edge-settings-close" type="button" class="grant-button">Fermer</button>
       </div>
     </div>

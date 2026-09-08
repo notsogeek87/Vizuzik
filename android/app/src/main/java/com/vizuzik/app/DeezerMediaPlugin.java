@@ -512,6 +512,64 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
+     * Everything the overlay currently believes about itself, for the settings panel's diagnostics
+     * block — see OverlayDiagnostics for why this is worth a plugin method at all. Read-only: this
+     * changes nothing and starts nothing, it only reports.
+     *
+     * The version is in here for the least interesting and most necessary reason: every fix to this
+     * overlay so far has been judged from a screenshot of a build nobody could confirm was the one
+     * carrying the fix. CI stamps the run number into versionName, so this line settles that
+     * question before any pixel in the same screenshot is argued about.
+     */
+    @PluginMethod
+    public void getOverlayDiagnostics(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("version", installedVersionName());
+        result.put("serviceRunning", OverlayDiagnostics.serviceRunning);
+        result.put("windowMode", OverlayDiagnostics.windowMode);
+        result.put("windowAlphaWanted", OverlayDiagnostics.windowAlphaWanted);
+        result.put("windowAlphaApplied", OverlayDiagnostics.windowAlphaApplied);
+        result.put("windowX", OverlayDiagnostics.windowX);
+        result.put("windowY", OverlayDiagnostics.windowY);
+        result.put("windowWidth", OverlayDiagnostics.windowWidth);
+        result.put("windowHeight", OverlayDiagnostics.windowHeight);
+        result.put("touchOpacityMax", OverlayDiagnostics.touchOpacityMax);
+        result.put("windowError", OverlayDiagnostics.windowError);
+        result.put("styleSelected", OverlayDiagnostics.styleSelected);
+        result.put("styleActive", OverlayDiagnostics.styleActive);
+        result.put("suppressed", OverlayDiagnostics.suppressed);
+        result.put("viewVisible", OverlayDiagnostics.viewVisible);
+        result.put("foregroundKnown", OverlayDiagnostics.foregroundKnown);
+        result.put("trackedAppOnScreen", OverlayDiagnostics.trackedAppOnScreen);
+        result.put("foregroundPackage", OverlayDiagnostics.foregroundPackage);
+        result.put("a11yEnabledInSettings", DeezerPlayerAccessibilityService.isEnabled(getContext()));
+        result.put("a11yConnected", NowPlayerScreenState.isServiceConnected());
+        result.put("onPlayerScreen", NowPlayerScreenState.isOnPlayerScreen());
+        result.put("scanCount", OverlayDiagnostics.scanCount);
+        result.put("msSinceLastScan", OverlayDiagnostics.msSinceLastScan());
+        result.put("scanNodesVisited", OverlayDiagnostics.scanNodesVisited);
+        result.put("scanSawWideSeekBar", OverlayDiagnostics.scanSawWideSeekBar);
+        result.put("scanSawLargeArtwork", OverlayDiagnostics.scanSawLargeArtwork);
+        result.put("scanWidestSeekBarFraction", OverlayDiagnostics.scanWidestSeekBarFraction);
+        result.put("scanTallestImageFraction", OverlayDiagnostics.scanTallestImageFraction);
+        result.put("scanTallestImageOffsetFraction", OverlayDiagnostics.scanTallestImageOffsetFraction);
+        call.resolve(result);
+    }
+
+    /** Asked of PackageManager rather than read from BuildConfig: this has to describe the APK
+     *  that is actually installed on the phone, which is the exact thing in doubt. */
+    private String installedVersionName() {
+        try {
+            Context context = getContext();
+            return context.getPackageManager()
+                .getPackageInfo(context.getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            Log.w(TAG, "installedVersionName", e);
+            return "?";
+        }
+    }
+
+    /**
      * The installed, launchable apps — what the settings panel's "cacher automatiquement" picker
      * is built from, so someone can add to the one app (GitHub) hidden by default without typing
      * a package name. Vizuzik itself is left out: hiding Edge Visualizer over Edge Visualizer is

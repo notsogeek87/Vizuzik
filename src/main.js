@@ -34,6 +34,8 @@ const els = {
   edgeRequirePlayerScreen: document.getElementById("edge-require-player-screen"),
   edgePlayerScreenHint: document.getElementById("edge-player-screen-hint"),
   edgePlayerScreenGrant: document.getElementById("edge-player-screen-grant"),
+  edgeDiagnostics: document.getElementById("edge-diagnostics"),
+  edgeDiagnosticsList: document.getElementById("edge-diagnostics-list"),
   appHideSheet: document.getElementById("app-hide-sheet"),
   appHideFilter: document.getElementById("app-hide-filter"),
   appHideList: document.getElementById("app-hide-list"),
@@ -1010,9 +1012,113 @@ function openEdgeSettingsSheet() {
 
 function closeEdgeSettingsSheet() {
   els.edgeSettingsSheet.classList.remove("is-open");
+  stopDiagnosticsPolling();
   edgeSettingsCloseTimer = setTimeout(() => {
     els.edgeSettingsSheet.hidden = true;
   }, 260);
+}
+
+/* -------------------------------------------------------------------- diagnostics */
+
+// Only ever polled while the block is actually unfolded on screen. Every value in it comes from
+// fields the overlay writes as it runs, so there is nothing to compute and nothing to keep in
+// sync — but it is still a bridge call a second, which is not something to leave running behind a
+// closed sheet.
+let diagnosticsTimer = null;
+
+const DIAGNOSTIC_ROWS = [
+  ["version", "Version installée", (d) => d.version],
+  ["service", "Service surcouche", (d) => (d.serviceRunning ? "actif" : "arrêté")],
+  ["style", "Style", (d) => `${d.styleSelected} → ${d.styleActive}`],
+  ["visible", "Vue", (d) => (d.suppressed ? "masquée" : d.viewVisible ? "visible" : "invisible")],
+  [
+    "fenetre",
+    "Fenêtre",
+    (d) => `${d.windowMode} ${d.windowWidth}×${d.windowHeight} @${d.windowX},${d.windowY}`,
+  ],
+  // The one line the whole "le disque est transparent" question turns on: 1.00 means the window is
+  // genuinely opaque and anything still see-through is what's being painted, not the window.
+  ["alpha", "Opacité fenêtre", (d) => `${fmt(d.windowAlphaApplied)} (max tactile ${fmt(d.touchOpacityMax)})`],
+  ["erreur", "Erreur fenêtre", (d) => d.windowError || "—"],
+  [
+    "avant",
+    "App à l'écran",
+    (d) => (d.foregroundKnown ? `${d.foregroundPackage || "?"}${d.trackedAppOnScreen ? " (suivie)" : ""}` : "inconnue"),
+  ],
+  [
+    "a11y",
+    "Accessibilité",
+    (d) => `${d.a11yEnabledInSettings ? "activée" : "désactivée"} / ${d.a11yConnected ? "connectée" : "non connectée"}`,
+  ],
+  ["lecteur", "Écran lecteur", (d) => (d.onPlayerScreen ? "oui" : "non")],
+  [
+    "scans",
+    "Analyses",
+    (d) => (d.scanCount === 0 ? "aucune" : `${d.scanCount} (il y a ${Math.round(d.msSinceLastScan / 100) / 10}s)`),
+  ],
+  [
+    "scan-detail",
+    "Dernière analyse",
+    (d) =>
+      d.scanCount === 0
+        ? "—"
+        : `${d.scanNodesVisited} nœuds · barre ${fmt(d.scanWidestSeekBarFraction)}${d.scanSawWideSeekBar ? "✓" : "✗"}` +
+          ` · pochette ${fmt(d.scanTallestImageFraction)} décalée ${fmt(d.scanTallestImageOffsetFraction)}${d.scanSawLargeArtwork ? "✓" : "✗"}`,
+  ],
+];
+
+function fmt(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  if (value < 0) return "—";
+  return value.toFixed(2);
+}
+
+async function refreshDiagnostics() {
+  if (!els.edgeDiagnosticsList) return;
+  let data;
+  try {
+    data = await DeezerMedia.getOverlayDiagnostics();
+  } catch (err) {
+    // An older native build, or the web preview: say so rather than showing a stale panel that
+    // looks like real state.
+    els.edgeDiagnosticsList.innerHTML =
+      "<dt>Indisponible</dt><dd>Ce build natif ne fournit pas encore le diagnostic.</dd>";
+    return;
+  }
+  els.edgeDiagnosticsList.replaceChildren(
+    ...DIAGNOSTIC_ROWS.flatMap(([key, label, read]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      let value;
+      try {
+        value = read(data);
+      } catch (err) {
+        value = "—";
+      }
+      dd.textContent = value === undefined || value === null || value === "" ? "—" : String(value);
+      dd.dataset.key = key;
+      return [dt, dd];
+    })
+  );
+}
+
+function startDiagnosticsPolling() {
+  if (diagnosticsTimer) return;
+  refreshDiagnostics();
+  diagnosticsTimer = setInterval(refreshDiagnostics, 1000);
+}
+
+function stopDiagnosticsPolling() {
+  clearInterval(diagnosticsTimer);
+  diagnosticsTimer = null;
+}
+
+if (els.edgeDiagnostics) {
+  els.edgeDiagnostics.addEventListener("toggle", () => {
+    if (els.edgeDiagnostics.open) startDiagnosticsPolling();
+    else stopDiagnosticsPolling();
+  });
 }
 
 /* ------------------------------------------------------------------ display modes */

@@ -98,13 +98,36 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
      */
     private boolean looksLikeNowPlayingScreen() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return false;
+        if (root == null) {
+            // Worth its own mark: "the service is running but never gets a tree" and "it gets a
+            // tree and doesn't recognise it" are different problems with different fixes, and
+            // without this they look identical from the settings panel.
+            OverlayDiagnostics.markScan();
+            OverlayDiagnostics.scanNodesVisited = 0;
+            OverlayDiagnostics.scanSawWideSeekBar = false;
+            OverlayDiagnostics.scanSawLargeArtwork = false;
+            OverlayDiagnostics.scanWidestSeekBarFraction = -1f;
+            OverlayDiagnostics.scanTallestImageFraction = -1f;
+            OverlayDiagnostics.scanTallestImageOffsetFraction = -1f;
+            return false;
+        }
         try {
             Rect window = new Rect();
             root.getBoundsInScreen(window);
             if (window.width() <= 0 || window.height() <= 0) return false;
             Scan scan = new Scan(window.width(), window.height(), window.centerX());
             scan.walk(root, 0);
+            // What the walk actually saw, thresholds aside — a heuristic that is merely mis-tuned
+            // (a cover at 30% against a 32% floor) and one looking at a tree with no SeekBar and no
+            // Image in it at all are indistinguishable from the booleans alone, and telling them
+            // apart is the difference between moving a number and rewriting the whole approach.
+            OverlayDiagnostics.markScan();
+            OverlayDiagnostics.scanNodesVisited = scan.nodesVisited;
+            OverlayDiagnostics.scanSawWideSeekBar = scan.hasWideSeekBar;
+            OverlayDiagnostics.scanSawLargeArtwork = scan.hasLargeArtwork;
+            OverlayDiagnostics.scanWidestSeekBarFraction = scan.widestSeekBarFraction;
+            OverlayDiagnostics.scanTallestImageFraction = scan.tallestImageFraction;
+            OverlayDiagnostics.scanTallestImageOffsetFraction = scan.tallestImageOffsetFraction;
             return scan.hasWideSeekBar && scan.hasLargeArtwork;
         } finally {
             root.recycle();
@@ -120,6 +143,10 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         int nodesVisited;
         boolean hasWideSeekBar;
         boolean hasLargeArtwork;
+        // The best candidate seen for each, threshold or no threshold — reported, never tested on.
+        float widestSeekBarFraction = -1f;
+        float tallestImageFraction = -1f;
+        float tallestImageOffsetFraction = -1f;
 
         Scan(int windowWidth, int windowHeight, int windowCenterX) {
             this.windowWidth = windowWidth;
@@ -138,14 +165,23 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                 if (!name.isEmpty()) {
                     Rect bounds = new Rect();
                     node.getBoundsInScreen(bounds);
-                    if (!hasWideSeekBar && name.contains("SeekBar")
-                        && bounds.width() >= windowWidth * MIN_SEEKBAR_WIDTH_FRACTION) {
-                        hasWideSeekBar = true;
+                    if (name.contains("SeekBar")) {
+                        float widthFraction = bounds.width() / (float) windowWidth;
+                        if (widthFraction > widestSeekBarFraction) widestSeekBarFraction = widthFraction;
+                        if (widthFraction >= MIN_SEEKBAR_WIDTH_FRACTION) hasWideSeekBar = true;
                     }
-                    if (!hasLargeArtwork && name.contains("Image")
-                        && bounds.height() >= windowHeight * MIN_ARTWORK_HEIGHT_FRACTION
-                        && Math.abs(bounds.centerX() - windowCenterX) <= windowWidth * MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
-                        hasLargeArtwork = true;
+                    if (name.contains("Image")) {
+                        float heightFraction = bounds.height() / (float) windowHeight;
+                        if (heightFraction > tallestImageFraction) {
+                            tallestImageFraction = heightFraction;
+                            tallestImageOffsetFraction =
+                                Math.abs(bounds.centerX() - windowCenterX) / (float) windowWidth;
+                        }
+                        if (heightFraction >= MIN_ARTWORK_HEIGHT_FRACTION
+                            && Math.abs(bounds.centerX() - windowCenterX)
+                                <= windowWidth * MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
+                            hasLargeArtwork = true;
+                        }
                     }
                 }
             }
