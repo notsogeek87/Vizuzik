@@ -285,6 +285,22 @@
           </select>
         </label>
 
+        <!-- Vizuzik ne peut pas lire la mise en page de Deezer (ni accessibilité, ni capture
+             d'écran : voir TrackedAudioCapture) : elle estime où se trouve la pochette. Ces deux
+             boutons sont la correction quand l'estimation tombe à côté. -->
+        <div class="edge-settings__row edge-settings__row--stacked">
+          <span>
+            Position de la pochette
+            <small>« Cocon » et « Vinyle » se placent sur la pochette de Deezer. Si le repère
+              tombe à côté sur votre téléphone, ajustez-le une fois : ouvrez Deezer, faites
+              glisser la pastille sur la pochette, − et + pour la taille, ✓ pour valider.</small>
+          </span>
+          <div class="edge-settings__buttons">
+            <button id="edge-art-calibrate" type="button" class="grant-button">Ajuster</button>
+            <button id="edge-art-reset" type="button" class="text-button">Réinitialiser</button>
+          </div>
+        </div>
+
         <label class="edge-settings__row">
           <span>Fréquences utilisées</span>
           <select id="edge-band">

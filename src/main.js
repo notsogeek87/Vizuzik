@@ -27,6 +27,8 @@ const els = {
   edgeStyle: document.getElementById("edge-style"),
   edgeBand: document.getElementById("edge-band"),
   edgeCocoonFallback: document.getElementById("edge-cocoon-fallback"),
+  edgeArtCalibrate: document.getElementById("edge-art-calibrate"),
+  edgeArtReset: document.getElementById("edge-art-reset"),
   edgeColorMode: document.getElementById("edge-color-mode"),
   edgeCustomColors: document.getElementById("edge-custom-colors"),
   edgeColor1: document.getElementById("edge-color-1"),
@@ -904,6 +906,37 @@ els.edgeOverlayEnabled.addEventListener("change", () => {
 });
 els.edgeUsageGrant.addEventListener("click", () => {
   DeezerMedia.requestUsageAccess().catch(() => {});
+});
+
+/* Where the album art sits can only be estimated from the screen's shape (there is no way to read
+   another app's layout from here — see ArtCalibrationPuck.java), so this is how someone corrects
+   that estimate on their own phone. The panel is closed on the way out: the handle appears over
+   whatever is in front, and what needs to be in front is the music app, not this. */
+els.edgeArtCalibrate.addEventListener("click", async () => {
+  try {
+    const result = await DeezerMedia.startArtCalibration();
+    if (result && result.started === false) {
+      showToast("Impossible d'afficher le repère", 2600);
+      return;
+    }
+    closeEdgeSettingsSheet();
+    showToast("Ouvrez Deezer, glissez la pastille sur la pochette, puis ✓", 5000);
+  } catch (err) {
+    // Either the overlay grant is missing (the native side rejects with "permission" rather than
+    // sending anyone off to Deezer to look for a handle that can't be shown), or this is an older
+    // native build that has no calibration handle at all.
+    const missingGrant = err && String(err.message || err).includes("permission");
+    showToast(
+      missingGrant ? "Autorisez d'abord l'affichage par-dessus les apps" : "Réglage indisponible sur cette version",
+      2800
+    );
+  }
+});
+
+els.edgeArtReset.addEventListener("click", () => {
+  DeezerMedia.resetArtCalibration()
+    .then(() => showToast("Position de la pochette réinitialisée", 2200))
+    .catch(() => {});
 });
 
 els.edgeColorMode.addEventListener("change", () => {

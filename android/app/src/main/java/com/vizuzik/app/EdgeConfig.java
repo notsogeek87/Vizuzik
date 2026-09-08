@@ -53,6 +53,11 @@ final class EdgeConfig {
     private static final String KEY_ONLY_OVER_MUSIC_APP = "edgeOnlyOverMusicApp";
     private static final String KEY_BAR_SIZE = "edgeBarSize";
     private static final String KEY_COCOON_FALLBACK = "edgeCocoonFallback";
+    // Deliberately outside write()'s reach — see writeArtCalibration() for why these three are
+    // the only settings the panel is not allowed to overwrite.
+    private static final String KEY_ART_OFFSET_X = "edgeArtOffsetX";
+    private static final String KEY_ART_OFFSET_Y = "edgeArtOffsetY";
+    private static final String KEY_ART_SCALE = "edgeArtScale";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -77,6 +82,13 @@ final class EdgeConfig {
          *  both are drawn against where that app's album art sits, so anywhere else there is
          *  nothing for either of them to be drawn against. */
         final String cocoonFallback;
+        /** Where the album art really sits on *this* phone, as a correction to the layout model
+         *  EdgeGlowView.artRect() estimates — see writeArtCalibration(). Offsets are fractions of
+         *  the screen's width/height so they survive a resolution change; scale multiplies the
+         *  estimated size. 0/0/1 means "the estimate, untouched". */
+        final float artOffsetX;
+        final float artOffsetY;
+        final float artScale;
 
         Snapshot(
             String style,
@@ -92,7 +104,10 @@ final class EdgeConfig {
             boolean left,
             boolean right,
             boolean onlyOverMusicApp,
-            String cocoonFallback
+            String cocoonFallback,
+            float artOffsetX,
+            float artOffsetY,
+            float artScale
         ) {
             this.style = style;
             this.intensity = intensity;
@@ -108,6 +123,9 @@ final class EdgeConfig {
             this.right = right;
             this.onlyOverMusicApp = onlyOverMusicApp;
             this.cocoonFallback = cocoonFallback;
+            this.artOffsetX = artOffsetX;
+            this.artOffsetY = artOffsetY;
+            this.artScale = artScale;
         }
     }
 
@@ -136,8 +154,27 @@ final class EdgeConfig {
             prefs.getBoolean(KEY_LEFT, false),
             prefs.getBoolean(KEY_RIGHT, false),
             prefs.getBoolean(KEY_ONLY_OVER_MUSIC_APP, false),
-            prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS)
+            prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS),
+            prefs.getFloat(KEY_ART_OFFSET_X, 0f),
+            prefs.getFloat(KEY_ART_OFFSET_Y, 0f),
+            prefs.getFloat(KEY_ART_SCALE, 1f)
         );
+    }
+
+    /**
+     * Where the album art actually sits on this particular phone, once someone has dragged the
+     * calibration handle onto it (see ArtCalibrationPuck). Kept out of write() above on purpose:
+     * that one mirrors the whole settings panel in one go, and the panel has no idea what the
+     * calibration currently is — a slider moved after a calibration would silently throw it away.
+     * These three keys therefore only ever change from here.
+     */
+    static void writeArtCalibration(Context context, float offsetX, float offsetY, float scale) {
+        prefs(context)
+            .edit()
+            .putFloat(KEY_ART_OFFSET_X, offsetX)
+            .putFloat(KEY_ART_OFFSET_Y, offsetY)
+            .putFloat(KEY_ART_SCALE, scale)
+            .apply();
     }
 
     /**

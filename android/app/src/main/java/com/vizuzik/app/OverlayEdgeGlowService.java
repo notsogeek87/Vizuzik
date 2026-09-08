@@ -49,10 +49,16 @@ public class OverlayEdgeGlowService extends Service
     private static final String TAG = "OverlayEdgeGlow";
     private static final String CHANNEL_ID = "vizuzik_overlay";
     private static final int NOTIFICATION_ID = 4243;
+    /** Puts the album-art calibration handle on screen — see ArtCalibrationPuck. */
+    static final String ACTION_CALIBRATE_ART = "com.vizuzik.app.CALIBRATE_ART";
+    private static final long CALIBRATION_WATCH_MS = 10_000;
 
     private WindowManager windowManager;
     private NotificationManager notificationManager;
     private EdgeGlowView glowView;
+    private ArtCalibrationPuck calibrationPuck;
+    private final android.os.Handler calibrationHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final float[] anchor = new float[3];
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -90,6 +96,27 @@ public class OverlayEdgeGlowService extends Service
 
     static void requestStop(Context context) {
         context.stopService(new Intent(context, OverlayEdgeGlowService.class));
+    }
+
+    /**
+     * Puts the calibration handle on screen, starting the overlay first if it isn't already
+     * running — someone can perfectly well go looking for this before ever having seen the
+     * overlay, and a handle for an anchor nothing is drawing would be a strange thing to offer.
+     *
+     * @return whether the request could be made at all.
+     */
+    static boolean requestArtCalibration(Context context) {
+        try {
+            Intent intent = new Intent(context, OverlayEdgeGlowService.class);
+            intent.setAction(ACTION_CALIBRATE_ART);
+            ContextCompat.startForegroundService(context, intent);
+            return true;
+        } catch (Exception e) {
+            // Same reachable failure as requestStart(): a foreground service can be refused when
+            // the process is in the background, and it must never take the app down with it.
+            Log.w(TAG, "requestArtCalibration", e);
+            return false;
+        }
     }
 
     @Override
@@ -136,6 +163,9 @@ public class OverlayEdgeGlowService extends Service
             // (see DeezerMediaBridge), so there's no need to also ask for it here.
             DeezerMediaBridge.getInstance().addListener(this);
             AudioLevelsBridge.getInstance().addListener(this);
+            if (intent != null && ACTION_CALIBRATE_ART.equals(intent.getAction())) {
+                showCalibrationPuck();
+            }
         }
         return START_STICKY;
     }
@@ -182,6 +212,108 @@ public class OverlayEdgeGlowService extends Service
         }
         glowView = view;
         return true;
+    }
+
+    /**
+     * Adds the calibration handle: its own small window, deliberately not the overlay itself made
+     * touchable — see ArtCalibrationPuck for why a full-screen touchable window would leave
+     * someone unable to press play on the app they are calibrating against.
+     */
+    private void showCalibrationPuck() {
+        if (calibrationPuck != null || glowView == null || windowManager == null) return;
+        ArtCalibrationPuck puck = new ArtCalibrationPuck(this, new ArtCalibrationPuck.Listener() {
+            @Override
+            public void onCentreMoved(float screenX, float screenY) {
+                moveCalibrationPuck(screenX, screenY);
+            }
+
+            @Override
+            public void onScaleNudged(float factor) {
+                if (glowView != null) glowView.nudgeArtScale(factor);
+            }
+
+            @Override
+            public void onFinished() {
+                finishCalibration();
+            }
+        });
+
+        // Placed on the anchor it is about to correct, so the first thing it does is show where
+        // Vizuzik currently thinks the cover is. Middle of the screen if the view cannot answer
+        // yet — somewhere reachable, never the top-left corner.
+        boolean placed = glowView.readArtAnchor(anchor);
+        float centreX = placed ? anchor[0] : glowView.getWidth() * 0.5f;
+        float centreY = placed ? anchor[1] : glowView.getHeight() * 0.5f;
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+            puck.widthPx(),
+            puck.heightPx(),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            // Touchable, unlike the overlay itself — that is the whole point of this window. Not
+            // focusable, so the app underneath keeps the keyboard and the back gesture.
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        );
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.x = Math.round(centreX - puck.widthPx() * 0.5f);
+        params.y = Math.round(centreY - puck.heightPx() * 0.5f);
+        try {
+            windowManager.addView(puck, params);
+        } catch (Exception e) {
+            Log.w(TAG, "showCalibrationPuck", e);
+            return;
+        }
+        calibrationPuck = puck;
+        puck.markTouched(android.os.SystemClock.elapsedRealtime());
+        glowView.setCalibrating(true);
+        calibrationHandler.postDelayed(calibrationWatchdog, CALIBRATION_WATCH_MS);
+    }
+
+    /** Ends calibration on its own if the handle has been left untouched — see IDLE_TIMEOUT_MS. */
+    private final Runnable calibrationWatchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (calibrationPuck == null) return;
+            if (calibrationPuck.idleForMs(android.os.SystemClock.elapsedRealtime())
+                >= ArtCalibrationPuck.IDLE_TIMEOUT_MS) {
+                finishCalibration();
+                return;
+            }
+            calibrationHandler.postDelayed(this, CALIBRATION_WATCH_MS);
+        }
+    };
+
+    private void moveCalibrationPuck(float screenCentreX, float screenCentreY) {
+        if (calibrationPuck == null || windowManager == null || glowView == null) return;
+        try {
+            WindowManager.LayoutParams params =
+                (WindowManager.LayoutParams) calibrationPuck.getLayoutParams();
+            params.x = Math.round(screenCentreX - calibrationPuck.getWidth() * 0.5f);
+            params.y = Math.round(screenCentreY - calibrationPuck.getHeight() * 0.5f);
+            windowManager.updateViewLayout(calibrationPuck, params);
+            glowView.setArtCalibrationFromScreenCentre(screenCentreX, screenCentreY);
+        } catch (Exception e) {
+            Log.w(TAG, "moveCalibrationPuck", e);
+        }
+    }
+
+    /** Takes the handle away and writes down where it was left. */
+    private void finishCalibration() {
+        calibrationHandler.removeCallbacks(calibrationWatchdog);
+        if (calibrationPuck != null && windowManager != null) {
+            try {
+                windowManager.removeView(calibrationPuck);
+            } catch (Exception ignored) {
+                // Already detached — nothing left to take away.
+            }
+        }
+        calibrationPuck = null;
+        if (glowView == null) return;
+        glowView.setCalibrating(false);
+        EdgeConfig.writeArtCalibration(
+            this, glowView.artOffsetX(), glowView.artOffsetY(), glowView.artScale()
+        );
     }
 
     /**
@@ -302,6 +434,9 @@ public class OverlayEdgeGlowService extends Service
 
     @Override
     public void onDestroy() {
+        // Before the view goes: the handle is a window of its own and would otherwise be left
+        // behind on top of the music app, and what it was dragged to is worth keeping.
+        finishCalibration();
         if (glowView != null && windowManager != null) {
             try {
                 windowManager.removeView(glowView);

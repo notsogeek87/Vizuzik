@@ -472,7 +472,40 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("right", config.right);
         result.put("onlyOverMusicApp", config.onlyOverMusicApp);
         result.put("cocoonFallback", config.cocoonFallback);
+        // Read-only here: setEdgeConfig() deliberately cannot write these back, so a slider moved
+        // after a calibration can never throw it away. See EdgeConfig.writeArtCalibration().
+        result.put("artOffsetX", config.artOffsetX);
+        result.put("artOffsetY", config.artOffsetY);
+        result.put("artScale", config.artScale);
         call.resolve(result);
+    }
+
+    /**
+     * Puts the album-art calibration handle on screen, so the overlay can be told where this
+     * particular phone's music app actually keeps its cover — see ArtCalibrationPuck. Resolves
+     * with whether the handle could be asked for at all; the web layer uses that to say something
+     * honest rather than send the user off to Deezer looking for a handle that never appeared.
+     */
+    @PluginMethod
+    public void startArtCalibration(PluginCall call) {
+        // Same guard as startEdgeOverlay(): without the "display over other apps" grant the
+        // service would start and immediately stop itself, and the panel would have sent someone
+        // off to Deezer to look for a handle that was never going to appear.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !Settings.canDrawOverlays(getContext())) {
+            call.reject("permission");
+            return;
+        }
+        boolean started = OverlayEdgeGlowService.requestArtCalibration(getContext());
+        JSObject result = new JSObject();
+        result.put("started", started);
+        call.resolve(result);
+    }
+
+    /** Back to the modelled position — the way out of a calibration dragged somewhere silly. */
+    @PluginMethod
+    public void resetArtCalibration(PluginCall call) {
+        EdgeConfig.writeArtCalibration(getContext(), 0f, 0f, 1f);
+        call.resolve();
     }
 
     /**

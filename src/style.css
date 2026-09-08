@@ -573,6 +573,44 @@ body[data-mode="cassette"] .mode-toggle .icon-cassette {
   accent-color: rgb(var(--c2));
 }
 
+/* A row whose control is a pair of buttons rather than one field: they need the full width and
+   an explanation above them, not a label beside them. */
+.edge-settings__row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.edge-settings__row--stacked > span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edge-settings__row--stacked small {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: rgba(247, 248, 252, 0.55);
+}
+
+.edge-settings__buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edge-settings__buttons .grant-button {
+  flex: 1;
+  margin: 0;
+  font-size: 0.92rem;
+  padding: 0.7rem 1rem;
+}
+
+.edge-settings__buttons .text-button {
+  flex: none;
+  margin: 0;
+}
+
 .edge-settings__colors {
   display: flex;
   gap: 10px;

@@ -81,27 +81,40 @@ final class EdgeGlowView extends View {
     // reason: opposite edges are both on by default and must never meet in the middle.
     private static final float BAR_MAX_FRACTION = 0.2f;
 
-    // Where Deezer's own now-playing album art sits. This view has no way to read another app's
-    // actual view bounds — there is no accessibility hook wired up for that — so "cocoon", the
-    // one style drawn around a point rather than along the four edges, works from measurements
-    // taken off screenshots.
+    // Where the music app's own now-playing album art sits. This view has no way to read another
+    // app's actual view bounds — there is no accessibility hook wired up for that, and screen
+    // capture was deliberately dropped from this app (see TrackedAudioCapture: MediaProjection
+    // made Android show its "start recording your screen" dialog every time) — so the two styles
+    // anchored to the cover work from a *model* of how that screen is laid out.
     //
-    // Deezer lays that screen out two ways, and which one is up can be told from this window's
-    // own shape, without asking Deezer anything. Both were measured on a Z Fold:
-    //   folded   1248x1823 — one column, the cover a square 0.583 of the width, top edge 0.105
-    //                        of the height down, centred horizontally
-    //   unfolded 2448x1575 — two panes, the cover moved into the left one: vertically centred,
-    //                        centred on the first quarter of the width, and sized off the
-    //                        *height* (0.619) since height is what constrains a wide layout
+    // A model, not one phone's measurements: a player of this shape sizes its cover as a square
+    // that is capped twice over — by the screen's width, and by the room left between the header
+    // and the stack of controls underneath. Whichever cap is smaller wins, which is exactly what
+    // lets one set of numbers survive a screen they were never measured on: on a tall phone the
+    // width cap binds and the cover comes out nearly full width, on a short or unfolded one the
+    // height cap binds and it shrinks instead of running off the screen.
     //
-    // A screen shape or a Deezer version far from either of those drifts, and nothing here can
-    // correct for that short of real layout inspection.
+    // Calibrated against a Z Fold, both layouts:
+    //   folded   1248x1823 — one column: cover side 732 px (the height cap: 0.4015 x 1823), top
+    //                        edge 188 px down (0.103 x 1823), centred horizontally
+    //   unfolded 2448x1575 — two panes, the cover in the left one: side 975 px (the height cap
+    //                        again, 0.619 x 1575), centred on the first quarter of the width
+    //
+    // Anything the model still gets wrong on a given phone is what the calibration handle is for
+    // — see setArtCalibrationFromScreenCentre() and ArtCalibrationPuck.
     private static final float ART_TALL_CENTER_X_FRACTION = 0.5f;
-    private static final float ART_TALL_TOP_FRACTION = 0.105f;
-    private static final float ART_TALL_WIDTH_FRACTION = 0.583f;
+    private static final float ART_TALL_TOP_FRACTION = 0.103f;
+    private static final float ART_TALL_MAX_WIDTH_FRACTION = 0.88f;
+    private static final float ART_TALL_MAX_HEIGHT_FRACTION = 0.4015f;
     private static final float ART_WIDE_CENTER_X_FRACTION = 0.25f;
     private static final float ART_WIDE_CENTER_Y_FRACTION = 0.5f;
-    private static final float ART_WIDE_HEIGHT_FRACTION = 0.619f;
+    private static final float ART_WIDE_MAX_HEIGHT_FRACTION = 0.619f;
+    private static final float ART_WIDE_MAX_PANE_FRACTION = 0.80f;
+    /** How far the calibration handle may push the anchor, as a fraction of the screen — enough
+     *  to reach any layout, bounded so a stray drag can never park it off-screen for good. */
+    private static final float ART_OFFSET_LIMIT = 0.45f;
+    private static final float ART_SCALE_MIN = 0.4f;
+    private static final float ART_SCALE_MAX = 2.2f;
 
     // The cocoon bundle, in multiples of the artwork's half-size. What makes it read as a ribbon
     // of light rather than a few loops is the density: two dozen hairlines packed into a narrow
@@ -150,10 +163,14 @@ final class EdgeGlowView extends View {
     // grooves actually occupy.
     private static final float VINYL_GROOVE_START = 0.34f;
     private static final float VINYL_GROOVE_SPAN = 0.60f;
-    // Same 13%-of-diameter label CSS's .disc__label uses, expressed as a fraction of the radius.
-    private static final float VINYL_LABEL_FRACTION = 0.13f;
+    // A little wider than the web player's own .disc__label, which is sized for a screen where
+    // nothing sits behind it: over the music app's still cover, the label is what says "record"
+    // at a glance, and at 13% of the radius it was too small to say it.
+    private static final float VINYL_LABEL_FRACTION = 0.17f;
     // Same --void CSS variable the web player's own .cover background sits on (#14141f).
     private static final int VINYL_VOID_COLOR = 0xFF14141F;
+    /** How far past the record's own edge its shadow reaches, as a multiple of the radius. */
+    private static final float VINYL_SHADOW_REACH = 1.09f;
 
     // Everything about the ribbon that depends only on where you are around it, computed once at
     // class load: the superellipse radius (three Math.pow calls each), the unit vector, and the
@@ -247,6 +264,14 @@ final class EdgeGlowView extends View {
     private Bitmap vinylBitmap;
     private BitmapShader vinylShader;
     private final Matrix vinylMatrix = new Matrix();
+    // Its own Paint rather than the shared one every other style passes around: the record is
+    // built from a dozen draws whose alphas differ wildly, and one of them inheriting another's
+    // is exactly how the label ended up drawn at 10% opacity, making the whole disc look
+    // see-through. Nothing outside drawVinyl() ever touches this.
+    private final Paint vinylPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Shader vinylVignette;
+    private Shader vinylShadow;
+    private float vinylShadersForHalf;
 
     // The bars style used to draw whatever the capture last handed over, raw, which flickers:
     // consecutive frames of a real spectrum jump around a lot. These follow it with an
@@ -286,6 +311,12 @@ final class EdgeGlowView extends View {
     private boolean edgeRight = true;
     private boolean onlyOverMusicApp = true;
     private String cocoonFallback = EdgeConfig.STYLE_BARS;
+    // This phone's own correction to the modelled album-art anchor — see artRect() and
+    // EdgeConfig.writeArtCalibration(). 0/0/1 is "the model, untouched".
+    private float artOffsetX;
+    private float artOffsetY;
+    private float artScale = 1f;
+    private boolean calibrating;
 
     // Whether the tracked app is currently something other than what's on screen, so this window
     // should paint nothing. Re-evaluated on a slow timer rather than per frame: answering it
@@ -333,6 +364,13 @@ final class EdgeGlowView extends View {
         edgeRight = config.right;
         onlyOverMusicApp = config.onlyOverMusicApp;
         cocoonFallback = config.cocoonFallback;
+        // Not applied while the handle is up: the drag in progress *is* the newer value, and the
+        // preferences it would be re-read from are only written once that drag is finished.
+        if (!calibrating) {
+            artOffsetX = config.artOffsetX;
+            artOffsetY = config.artOffsetY;
+            artScale = config.artScale > 0 ? config.artScale : 1f;
+        }
         // Answer again on the next tick rather than keep a verdict reached under the old setting.
         lastForegroundCheckAtMs = 0;
     }
@@ -569,7 +607,9 @@ final class EdgeGlowView extends View {
         Context context = getContext();
         foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
         trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
-        suppressed = onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
+        // Never while the calibration handle is up: the whole point of that moment is to see
+        // where the anchor sits, and hiding it would leave the handle pointing at nothing.
+        suppressed = !calibrating && onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen;
     }
 
     /** Reads the screen's real size, which is what the cocoon is positioned against. */
@@ -624,6 +664,7 @@ final class EdgeGlowView extends View {
             } else {
                 drawGlow(canvas);
             }
+            if (calibrating) drawArtFrame(canvas);
         } catch (Exception e) {
             Log.w(TAG, "onDraw", e);
         }
@@ -844,6 +885,127 @@ final class EdgeGlowView extends View {
         canvas.drawRect(left, top, left + w, top + h, paint);
     }
 
+    /** Where the music app's own album art sits, in this view's coordinates *and* on the screen —
+     *  shared by "cocoon" and "vinyl", the two styles anchored to it rather than to the screen's
+     *  edges. See the ART_* constants above for the model it comes from. */
+    private static final class ArtRect {
+        final float cx;
+        final float cy;
+        final float half;
+        final float screenCx;
+        final float screenCy;
+        ArtRect(float cx, float cy, float half, float screenCx, float screenCy) {
+            this.cx = cx;
+            this.cy = cy;
+            this.half = half;
+            this.screenCx = screenCx;
+            this.screenCy = screenCy;
+        }
+    }
+
+    /**
+     * Where this view's own coordinate space starts on the screen.
+     *
+     * The overlay is added MATCH_PARENT with FLAG_LAYOUT_NO_LIMITS and cutout mode ALWAYS, so its
+     * canvas covers the whole display and view coordinates simply *are* screen coordinates.
+     * getLocationOnScreen() does not always agree: on a Z Fold it reports the status bar's height
+     * for a window that demonstrably starts at the very top of the screen, and subtracting that
+     * pulled the disc 103 px above Deezer's cover — the exact height of that bar. The view's own
+     * measured size settles the argument, since a view as tall as the display cannot begin
+     * anywhere but at its top; only a genuinely inset window falls back to the reported location.
+     */
+    private void refreshOrigin() {
+        getLocationOnScreen(viewLocation);
+        if (displayWidth > 0 && getWidth() >= displayWidth - 1) viewLocation[0] = 0;
+        if (displayHeight > 0 && getHeight() >= displayHeight - 1) viewLocation[1] = 0;
+    }
+
+    private ArtRect artRect() {
+        // Landscape means the two-pane layout, portrait the one-column one — read every frame, so
+        // folding the device moves the anchor with the cover.
+        float screenW = displayWidth > 0 ? displayWidth : getWidth();
+        float screenH = displayHeight > 0 ? displayHeight : getHeight();
+        if (screenW <= 0 || screenH <= 0) return null;
+        boolean wide = screenW > screenH;
+        float side = wide
+            ? Math.min(screenH * ART_WIDE_MAX_HEIGHT_FRACTION, screenW * 0.5f * ART_WIDE_MAX_PANE_FRACTION)
+            : Math.min(screenW * ART_TALL_MAX_WIDTH_FRACTION, screenH * ART_TALL_MAX_HEIGHT_FRACTION);
+        if (side <= 0) return null;
+
+        float screenCx = screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
+            + artOffsetX * screenW;
+        float screenCy = (wide
+            ? screenH * ART_WIDE_CENTER_Y_FRACTION
+            : screenH * ART_TALL_TOP_FRACTION + side * 0.5f) + artOffsetY * screenH;
+        // The calibration only resizes the disc about its own centre; where that centre sits is
+        // the offsets' business alone, so a size correction never drags the anchor with it.
+        float half = side * 0.5f * artScale;
+        if (half <= 0) return null;
+
+        refreshOrigin();
+        return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
+    }
+
+    /** The anchor as it stands, in screen coordinates: {centre x, centre y, half-size}. How
+     *  ArtCalibrationPuck knows where to place itself when calibration starts. */
+    boolean readArtAnchor(float[] out) {
+        ArtRect art = artRect();
+        if (art == null || out == null || out.length < 3) return false;
+        out[0] = art.screenCx;
+        out[1] = art.screenCy;
+        out[2] = art.half;
+        return true;
+    }
+
+    /**
+     * Moves the anchor so that it lands on a point the user picked on screen, and remembers that
+     * as an offset from the modelled position rather than as an absolute one — so the correction
+     * still means something after a fold, a rotation or a resolution change.
+     */
+    void setArtCalibrationFromScreenCentre(float screenCx, float screenCy) {
+        float screenW = displayWidth > 0 ? displayWidth : getWidth();
+        float screenH = displayHeight > 0 ? displayHeight : getHeight();
+        if (screenW <= 0 || screenH <= 0) return;
+        float savedX = artOffsetX;
+        float savedY = artOffsetY;
+        artOffsetX = 0f;
+        artOffsetY = 0f;
+        ArtRect modelled = artRect();
+        artOffsetX = savedX;
+        artOffsetY = savedY;
+        if (modelled == null) return;
+        artOffsetX = clampOffset((screenCx - modelled.screenCx) / screenW);
+        artOffsetY = clampOffset((screenCy - modelled.screenCy) / screenH);
+    }
+
+    /** Grows or shrinks the anchor about its own centre, for a cover the model sized wrong. */
+    void nudgeArtScale(float factor) {
+        artScale = Math.max(ART_SCALE_MIN, Math.min(ART_SCALE_MAX, artScale * factor));
+    }
+
+    float artOffsetX() {
+        return artOffsetX;
+    }
+
+    float artOffsetY() {
+        return artOffsetY;
+    }
+
+    float artScale() {
+        return artScale;
+    }
+
+    /** Draws the anchor as a frame while the calibration handle is up, so the target is visible
+     *  whichever style is selected — including the two that aren't drawn against the cover. */
+    void setCalibrating(boolean calibrating) {
+        this.calibrating = calibrating;
+    }
+
+    private static float clampOffset(float value) {
+        if (Float.isNaN(value)) return 0f;
+        return Math.max(-ART_OFFSET_LIMIT, Math.min(ART_OFFSET_LIMIT, value));
+    }
+
     /**
      * The one style that isn't confined to the four screen edges: a ribbon of light wrapped
      * around where Deezer's own album art sits on screen — see ART_* above for where that
@@ -866,41 +1028,6 @@ final class EdgeGlowView extends View {
      * Reuses the beat/palette/ambient state the other two styles maintain; the geometry, the
      * sweep and the per-point spectrum sampling are what's specific here.
      */
-    /** Screen-space centre and half-size of wherever the music app's own album art sits — shared
-     *  by "cocoon" and "vinyl", the two styles anchored to it rather than to the screen's edges.
-     *  See the ART_* constants above for where the estimate comes from and its limits. */
-    private static final class ArtRect {
-        final float cx;
-        final float cy;
-        final float half;
-        ArtRect(float cx, float cy, float half) {
-            this.cx = cx;
-            this.cy = cy;
-            this.half = half;
-        }
-    }
-
-    private ArtRect artRect() {
-        // Measured against the screen, then translated into this view's own coordinates: the
-        // window is laid out with NO_LIMITS and into the display cutout, so its size and origin
-        // are not the screen's, and placing anything with getWidth()/getHeight() drifted it well
-        // off the cover. Landscape means Deezer's two-pane layout, portrait its one-column one —
-        // read every frame, so folding the device moves the anchor with the cover.
-        float screenW = displayWidth > 0 ? displayWidth : getWidth();
-        float screenH = displayHeight > 0 ? displayHeight : getHeight();
-        boolean wide = screenW > screenH;
-        float half = wide
-            ? screenH * ART_WIDE_HEIGHT_FRACTION * 0.5f
-            : screenW * ART_TALL_WIDTH_FRACTION * 0.5f;
-        if (half <= 0) return null;
-        getLocationOnScreen(viewLocation);
-        float cx = screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
-            - viewLocation[0];
-        float cy = (wide ? screenH * ART_WIDE_CENTER_Y_FRACTION : screenH * ART_TALL_TOP_FRACTION + half)
-            - viewLocation[1];
-        return new ArtRect(cx, cy, half);
-    }
-
     private void drawCocoon(Canvas canvas) {
         int width = getWidth();
         int height = getHeight();
@@ -938,8 +1065,8 @@ final class EdgeGlowView extends View {
         // that just ran off it would read as cut in half. Allowed slightly past the edge rather
         // than squeezed to a thread, since a ribbon grazing the border still looks deliberate.
         float room = Math.min(
-            Math.min(cx + viewLocation[0], screenW - (cx + viewLocation[0])),
-            Math.min(cy + viewLocation[1], screenH - (cy + viewLocation[1]))
+            Math.min(art.screenCx, screenW - art.screenCx),
+            Math.min(art.screenCy, screenH - art.screenCy)
         ) * 1.06f - half * COCOON_INNER;
         if (room > 0 && band + swing > room) {
             float squeeze = room / (band + swing);
@@ -1131,19 +1258,32 @@ final class EdgeGlowView extends View {
         ArtRect art = artRect();
         if (art == null) return;
         float half = art.half;
-
-        paint.setStyle(Paint.Style.FILL);
-        paint.setAntiAlias(true);
-        paint.setAlpha(255);
+        buildVinylShaders(half);
 
         canvas.save();
         canvas.translate(art.cx, art.cy);
+        // The shadow is cast by the record, not turned by it, so it goes down before the rotation
+        // — and outside it, since what shows of it is the ring past the record's own edge.
+        vinylPaint.reset();
+        vinylPaint.setAntiAlias(true);
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setShader(vinylShadow);
+        canvas.drawCircle(0, 0, half * VINYL_SHADOW_REACH, vinylPaint);
+
         canvas.rotate(vinylAngleDeg);
         // A small beat-driven lift, same spirit as the web player's own disc scaling up on an
         // impulse — the one bit of this style that answers the music rather than just turning at
         // its own fixed rate.
         float lift = 1f + clamp01(beatEnergy) * 0.02f;
         canvas.scale(lift, lift);
+
+        // An opaque disc under the artwork before anything else. Nothing behind this window may
+        // show through the record — a cover with an alpha channel, or one that doesn't quite fill
+        // the circle, would otherwise let Deezer's own still artwork ghost through the turning
+        // one, which reads as a double exposure rather than as a record.
+        vinylPaint.setShader(null);
+        vinylPaint.setColor(withAlpha(VINYL_VOID_COLOR, 255));
+        canvas.drawCircle(0, 0, half, vinylPaint);
 
         // The artwork itself, scaled to cover a circle of radius `half` — the shorter of its two
         // sides fills the disc exactly, the longer one overflows and is cropped by drawCircle()
@@ -1152,52 +1292,127 @@ final class EdgeGlowView extends View {
         vinylMatrix.setScale(scale, scale);
         vinylMatrix.postTranslate(-bitmap.getWidth() * scale * 0.5f, -bitmap.getHeight() * scale * 0.5f);
         shader.setLocalMatrix(vinylMatrix);
-        paint.setShader(shader);
-        canvas.drawCircle(0, 0, half, paint);
-        paint.setShader(null);
+        vinylPaint.setAlpha(255);
+        vinylPaint.setShader(shader);
+        canvas.drawCircle(0, 0, half, vinylPaint);
+
+        // Darkened towards the rim: a flat circle of artwork looks like a sticker, and the app's
+        // own still cover is right underneath it to be mistaken for.
+        vinylPaint.setShader(vinylVignette);
+        canvas.drawCircle(0, 0, half, vinylPaint);
+        vinylPaint.setShader(null);
 
         drawVinylGrooves(canvas, half);
         drawVinylLabel(canvas, half);
+        drawVinylRim(canvas, half);
 
         canvas.restore();
-        paint.setAntiAlias(false);
+    }
+
+    /** The shadow and the vignette depend on nothing but the disc's size, so they are rebuilt
+     *  only when that changes — a fold, a calibration, not every frame. */
+    private void buildVinylShaders(float half) {
+        if (vinylShadow != null && vinylVignette != null && Math.abs(half - vinylShadersForHalf) < 0.5f) {
+            return;
+        }
+        vinylShadersForHalf = half;
+        vinylVignette = new RadialGradient(
+            0, 0, half,
+            new int[] { withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 46), withAlpha(Color.BLACK, 130) },
+            new float[] { 0f, 0.55f, 0.86f, 1f },
+            Shader.TileMode.CLAMP
+        );
+        vinylShadow = new RadialGradient(
+            0, 0, half * VINYL_SHADOW_REACH,
+            new int[] { withAlpha(Color.BLACK, 120), withAlpha(Color.BLACK, 120), withAlpha(Color.BLACK, 0) },
+            new float[] { 0f, 1f / VINYL_SHADOW_REACH, 1f },
+            Shader.TileMode.CLAMP
+        );
     }
 
     /** Faint concentric rings over the artwork, the same repeating-radial-gradient texture the
      *  web player's .disc__grooves gives its own spinning record. */
     private void drawVinylGrooves(Canvas canvas, float half) {
-        paint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setShader(null);
+        vinylPaint.setStyle(Paint.Style.STROKE);
         float start = half * VINYL_GROOVE_START;
         float span = half * VINYL_GROOVE_SPAN;
         for (int i = 0; i < VINYL_GROOVES; i++) {
             float radius = start + span * ((i + 1f) / VINYL_GROOVES);
-            paint.setStrokeWidth(Math.max(1f, density * 0.6f));
-            paint.setColor(withAlpha(Color.BLACK, 70));
-            canvas.drawCircle(0, 0, radius, paint);
-            paint.setStrokeWidth(Math.max(0.6f, density * 0.35f));
-            paint.setColor(withAlpha(Color.WHITE, 26));
-            canvas.drawCircle(0, 0, radius - density * 0.8f, paint);
+            vinylPaint.setStrokeWidth(Math.max(1f, density * 0.6f));
+            vinylPaint.setColor(withAlpha(Color.BLACK, 70));
+            canvas.drawCircle(0, 0, radius, vinylPaint);
+            vinylPaint.setStrokeWidth(Math.max(0.6f, density * 0.35f));
+            vinylPaint.setColor(withAlpha(Color.WHITE, 26));
+            canvas.drawCircle(0, 0, radius - density * 0.8f, vinylPaint);
         }
     }
 
     /** The centre label and spindle hole — what turns a circle of artwork into a record rather
-     *  than a coaster. Coloured from the same travelling palette as the rest of the overlay. */
+     *  than a coaster. Coloured from the same travelling palette as the rest of the overlay.
+     *
+     *  Every colour here carries its own alpha and the paint's is reset first: sharing one Paint
+     *  with the grooves above is what once left this drawn at their alpha of 26, i.e. all but
+     *  invisible, which is exactly what made the whole record look like a transparency.
+     */
     private void drawVinylLabel(Canvas canvas, float half) {
         float labelRadius = half * VINYL_LABEL_FRACTION;
         int[] colors = {
             withAlpha(VINYL_VOID_COLOR, 255),
             withAlpha(VINYL_VOID_COLOR, 255),
-            withAlpha(paletteColorAt(0f), 217),
-            withAlpha(paletteColorAt(1f), 128),
-            withAlpha(paletteColorAt(1f), 0),
+            withAlpha(saturate(paletteColorAt(0f)), 255),
+            withAlpha(saturate(paletteColorAt(1f)), 255),
+            withAlpha(dim(paletteColorAt(1f), 0.35f), 255),
         };
-        float[] stops = { 0f, 0.34f, 0.38f, 0.70f, 0.72f };
-        paint.setStyle(Paint.Style.FILL);
-        paint.setShader(new RadialGradient(0, 0, labelRadius, colors, stops, Shader.TileMode.CLAMP));
-        canvas.drawCircle(0, 0, labelRadius, paint);
-        paint.setShader(null);
-        paint.setColor(withAlpha(Color.BLACK, 200));
-        canvas.drawCircle(0, 0, Math.max(1.5f * density, labelRadius * 0.14f), paint);
+        float[] stops = { 0f, 0.30f, 0.42f, 0.86f, 1f };
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setAlpha(255);
+        vinylPaint.setShader(new RadialGradient(0, 0, labelRadius, colors, stops, Shader.TileMode.CLAMP));
+        canvas.drawCircle(0, 0, labelRadius, vinylPaint);
+        vinylPaint.setShader(null);
+        vinylPaint.setColor(withAlpha(Color.BLACK, 255));
+        canvas.drawCircle(0, 0, Math.max(1.5f * density, labelRadius * 0.16f), vinylPaint);
+    }
+
+    /**
+     * The square the anchor currently claims the album art occupies, drawn only while the
+     * calibration handle is up. Deliberately a square and not a disc: what is being lined up is
+     * the *cover*, and its corners are the part you can actually judge against the app underneath
+     * — a circle inside a square leaves nothing to align. Drawn whatever the selected style, so
+     * the anchor can also be set from "bars" or "glow" before switching over to a style that
+     * needs it.
+     */
+    private void drawArtFrame(Canvas canvas) {
+        ArtRect art = artRect();
+        if (art == null) return;
+        float half = art.half;
+        vinylPaint.reset();
+        vinylPaint.setAntiAlias(true);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(Math.max(2f, density * 1.6f));
+        vinylPaint.setColor(withAlpha(Color.BLACK, 150));
+        canvas.drawRect(art.cx - half, art.cy - half, art.cx + half, art.cy + half, vinylPaint);
+        vinylPaint.setStrokeWidth(Math.max(1f, density * 0.9f));
+        vinylPaint.setColor(withAlpha(lit(saturate(paletteColorAt(0f)), 0.55f), 255));
+        canvas.drawRect(art.cx - half, art.cy - half, art.cx + half, art.cy + half, vinylPaint);
+        // A cross through the middle: aligning two centres is easier than aligning four edges.
+        float arm = half * 0.16f;
+        canvas.drawLine(art.cx - arm, art.cy, art.cx + arm, art.cy, vinylPaint);
+        canvas.drawLine(art.cx, art.cy - arm, art.cx, art.cy + arm, vinylPaint);
+    }
+
+    /** The record's edge: a dark rim with a thin lit ring just inside it. Cheap, and the single
+     *  detail that most makes the disc sit *on* the app's own cover instead of in it. */
+    private void drawVinylRim(Canvas canvas, float half) {
+        vinylPaint.setShader(null);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        float rim = Math.max(1.5f, density * 1.4f);
+        vinylPaint.setStrokeWidth(rim);
+        vinylPaint.setColor(withAlpha(Color.BLACK, 165));
+        canvas.drawCircle(0, 0, half - rim * 0.5f, vinylPaint);
+        vinylPaint.setStrokeWidth(Math.max(0.8f, density * 0.5f));
+        vinylPaint.setColor(withAlpha(Color.WHITE, 38));
+        canvas.drawCircle(0, 0, half - rim * 1.8f, vinylPaint);
     }
 
     private static float squircle(float angle) {
