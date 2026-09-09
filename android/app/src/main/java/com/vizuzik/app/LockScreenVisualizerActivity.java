@@ -1,5 +1,6 @@
 package com.vizuzik.app;
 
+import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -84,13 +85,33 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      *  treats the window as a normal unlocked one again — exactly the "bars show up but the
      *  screen doesn't go away" report this receiver fixes. ACTION_USER_PRESENT is the system
      *  broadcast sent the moment the keyguard is actually dismissed, independent of which
-     *  Activity happens to be on top of it. */
+     *  Activity happens to be on top of it.
+     *
+     *  Only ever registered when {@link #keyguardWasLockedOnShow} is true — see onStart(). A
+     *  broadcast this receiver is never listening for cannot fire, so gating registration is
+     *  enough; the field below is read only by onStart() and never by this receiver itself. */
     private final BroadcastReceiver userPresentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             finish();
         }
     };
+    /** Whether the device was genuinely keyguard-locked the moment this screen came up — checked
+     *  fresh in onStart() rather than assumed. On many phones "lock screen after screen turns
+     *  off" has a delay (a few seconds, sometimes longer) rather than being immediate; this
+     *  screen shows up the instant the screen goes off (see LockScreenVisualizerController,
+     *  triggered by ACTION_SCREEN_OFF with no delay of its own), which routinely lands inside
+     *  that grace window before the keyguard has actually engaged. setTurnScreenOn() then wakes
+     *  the display straight back into an *unlocked* keyguard, which Android dismisses on its own
+     *  — no PIN, pattern or fingerprint involved — firing ACTION_USER_PRESENT immediately.
+     *  Trusting that broadcast unconditionally (an earlier version of this file did) made
+     *  userPresentReceiver finish() this screen within a moment of it appearing on exactly this
+     *  very common setup, i.e. the whole feature reads as "doesn't work any more". Gating
+     *  registration on the keyguard actually being locked at show time keeps the fix for a real
+     *  unlock (see userPresentReceiver's own doc) without it firing on a keyguard that was never
+     *  really engaged in the first place — that case falls back to the pre-existing dismissal
+     *  paths (double tap, home button/onStop()) exactly as before this was added. */
+    private boolean keyguardWasLockedOnShow;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -184,14 +205,22 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             new IntentFilter(LockScreenVisualizerController.ACTION_DISABLED),
             ContextCompat.RECEIVER_NOT_EXPORTED
         );
-        // ACTION_USER_PRESENT is a protected system broadcast (only the system can send it), so
-        // NOT_EXPORTED is correct here too, same as disabledReceiver above.
-        ContextCompat.registerReceiver(
-            this,
-            userPresentReceiver,
-            new IntentFilter(Intent.ACTION_USER_PRESENT),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        );
+        // See keyguardWasLockedOnShow's own doc: only trust ACTION_USER_PRESENT when the keyguard
+        // was actually engaged the moment this screen appeared, otherwise it fires immediately
+        // for reasons that have nothing to do with the user unlocking anything.
+        KeyguardManager keyguardManager =
+            (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        keyguardWasLockedOnShow = keyguardManager != null && keyguardManager.isKeyguardLocked();
+        if (keyguardWasLockedOnShow) {
+            // ACTION_USER_PRESENT is a protected system broadcast (only the system can send it),
+            // so NOT_EXPORTED is correct here too, same as disabledReceiver above.
+            ContextCompat.registerReceiver(
+                this,
+                userPresentReceiver,
+                new IntentFilter(Intent.ACTION_USER_PRESENT),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            );
+        }
     }
 
     @Override
@@ -216,10 +245,12 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         } catch (IllegalArgumentException e) {
             // Already unregistered (e.g. this onStop() runs twice) — nothing left to undo.
         }
-        try {
-            unregisterReceiver(userPresentReceiver);
-        } catch (IllegalArgumentException e) {
-            // Already unregistered (e.g. this onStop() runs twice) — nothing left to undo.
+        if (keyguardWasLockedOnShow) {
+            try {
+                unregisterReceiver(userPresentReceiver);
+            } catch (IllegalArgumentException e) {
+                // Already unregistered (e.g. this onStop() runs twice) — nothing left to undo.
+            }
         }
         finish();
     }
