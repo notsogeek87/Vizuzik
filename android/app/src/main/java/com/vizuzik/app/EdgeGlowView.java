@@ -378,6 +378,10 @@ final class EdgeGlowView extends View {
     // established at all — the two are different answers and are acted on differently.
     private boolean foregroundKnown;
     private boolean trackedAppOnScreen = true;
+    /** Stricter than trackedAppOnScreen: true only when the tracked app being in front rests on
+     *  real evidence, not on ForegroundApp's own fail-open default — see activeStyle(), the one
+     *  place that needs this distinction rather than trackedAppOnScreen's permissive answer. */
+    private boolean trackedAppConfirmed;
     private long lastForegroundCheckAtMs;
     private long lastDisplayCheckAtMs;
     private long lastUsageAccessCheckAtMs;
@@ -664,7 +668,12 @@ final class EdgeGlowView extends View {
             lastUsageAccessCheckAtMs = now;
             foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
         }
-        trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
+        boolean trackedInForeground = foregroundKnown && ForegroundApp.isTrackedAppInForeground(context);
+        trackedAppOnScreen = !foregroundKnown || trackedInForeground;
+        // isTrackedAppInForeground() fails open (answers "yes" when it simply doesn't know), which
+        // is right for suppression above but wrong for activeStyle() below — see
+        // ForegroundApp.isLastAnswerConfirmed() and the "vinyl"/"cocoon" comment there.
+        trackedAppConfirmed = trackedInForeground && ForegroundApp.isLastAnswerConfirmed();
         // Only asked when there is a list to check against — most installs pick nothing, and the
         // question costs the same incremental usage-event query onlyOverMusicApp's already does,
         // just wasted if there is nothing here for its answer to matter to.
@@ -723,7 +732,11 @@ final class EdgeGlowView extends View {
      * never measured for, hiding that app's own content and, from Android 12, stopping its
      * touches from being delivered at all. So without an answer they fall back to an edge style,
      * which is true over anything. That answer needs "usage access", which is what the settings
-     * panel says these two styles are for.
+     * panel says these two styles are for — and it is trackedAppConfirmed, not trackedAppOnScreen,
+     * that actually carries it: the latter also reads true whenever ForegroundApp simply hasn't
+     * observed a foreground app yet (its own deliberate fail-open, correct for suppression, wrong
+     * here), which is how the disc was seen spinning over an app that was neither Deezer nor
+     * anything measured for it. See ForegroundApp.isLastAnswerConfirmed().
      *
      * requirePlayerScreen narrows it a step further, past "the tracked app is in front" to "and
      * it's showing its own full-screen player" — Deezer can be in front while showing search, its
@@ -736,7 +749,7 @@ final class EdgeGlowView extends View {
         if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
         boolean playerScreenKnown = requirePlayerScreen && NowPlayerScreenState.isServiceConnected();
         boolean onPlayerScreen = !playerScreenKnown || NowPlayerScreenState.isOnPlayerScreen();
-        if (foregroundKnown && trackedAppOnScreen && onPlayerScreen) return style;
+        if (foregroundKnown && trackedAppConfirmed && onPlayerScreen) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 
@@ -1277,6 +1290,7 @@ final class EdgeGlowView extends View {
         OverlayDiagnostics.suppressed = suppressed;
         OverlayDiagnostics.foregroundKnown = foregroundKnown;
         OverlayDiagnostics.trackedAppOnScreen = trackedAppOnScreen;
+        OverlayDiagnostics.trackedAppConfirmed = trackedAppConfirmed;
         OverlayDiagnostics.foregroundPackage = lastForegroundPackage;
         OverlayDiagnostics.viewVisible = getVisibility() == VISIBLE;
     }
