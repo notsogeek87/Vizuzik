@@ -165,9 +165,14 @@ async function requestSeek(position) {
 const cssState = { beat: -1, level: -1, bass: -1, progress: -1 };
 
 visualizer.onFrame = ({ beat, level, bass }) => {
-  writeVar("--beat", "beat", beat);
-  writeVar("--level", "level", level);
-  writeVar("--bass", "bass", bass);
+  // A sheet's backdrop (.sheet.is-open) is a blurred, 62%-opaque overlay, not a solid one — the
+  // disc/progress/play-button glows underneath keep pulsing right through it, which reads as
+  // flicker right where the settings sheet's own bottom rows sit. Same "at rest" values
+  // showScreen() writes when the player itself isn't showing.
+  const behindASheet = !!document.querySelector(".sheet.is-open");
+  writeVar("--beat", "beat", behindASheet ? 0 : beat);
+  writeVar("--level", "level", behindASheet ? 0 : level);
+  writeVar("--bass", "bass", behindASheet ? 0 : bass);
   // Same idea, a fourth reactive var: how far into the track playback actually is, 0..1. Read
   // from `progress` (see progress.js) rather than tracked separately here, so it's exactly the
   // same number the progress bar itself is drawing at that instant, scrub included. Cassette
