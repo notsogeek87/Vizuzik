@@ -1210,6 +1210,27 @@ final class EdgeGlowView extends View {
     }
 
     /**
+     * Forces the next tick's updateWindowBounds() to re-apply the window's bounds even if they
+     * land on the exact same target as before, instead of taking the "nothing to do" shortcut —
+     * called on every track change (see OverlayEdgeGlowService.onNowPlayingChanged()).
+     *
+     * That shortcut compares only against the target *last asked for*, never against where the
+     * window actually, verifiably is. A window that starts out a few pixels short of the modelled
+     * anchor — a display-metrics read caught mid-settle right as this window was first added, the
+     * one moment nothing here waits for — computes an equally wrong target and then matches it
+     * forever after: every later tick derives the same modelled position from the same stable
+     * inputs, lands within closeEnough()'s 2px tolerance of that first, wrong value, and is
+     * therefore never re-sent to WindowManager. Reopening Deezer "fixes" it today only because
+     * that tears the whole service down and rebuilds the window from nothing. A track change is a
+     * far cheaper, far more frequent moment to give the anchor the same fresh start.
+     */
+    void invalidateWindowBounds() {
+        lastWantedCx = Float.NaN;
+        lastWantedCy = Float.NaN;
+        lastWantedHalf = Float.NaN;
+    }
+
+    /**
      * The one place "vinyl" and every other style actually disagree about what this window
      * should be. Bars/glow paint along the four screen edges — a large area, but one Deezer
      * doesn't put much of its own touch handling in. "Vinyl" sits squarely on the cover, exactly
