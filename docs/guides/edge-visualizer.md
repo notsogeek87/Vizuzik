@@ -57,7 +57,7 @@ L'icône réglages (⚙) à côté du badge ouvre le panneau :
 | Réglage | Effet |
 |---|---|
 | Masquer hors de l'app de musique | Masque **tout** dès que Deezer/Spotify n'est plus à l'écran, au lieu de basculer sur le style de repli. Désactivé par défaut ; demande l'autorisation « Accès aux données d'utilisation » — voir plus bas. |
-| Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure) ou « Cocon » (un faisceau tressé autour de la pochette de Deezer — voir plus bas, c'est le seul des trois qui ne se limite pas aux bords). |
+| Style | « Barres » (32 bandes séparées, le défaut), « Contour lumineux » (une seule bordure), « Particules » (des étincelles qui jaillissent des bords — voir plus bas), « Cocon » (un faisceau tressé autour de la pochette de Deezer — voir plus bas, lui et « Vinyle » sont les deux seuls à ne pas se limiter aux bords) ou « Vinyle » (la pochette du morceau redessinée en disque qui tourne). |
 | Hauteur des barres | Jusqu'où les barres montent. N'agit que sur le style « Barres » : le contour est une bordure d'épaisseur fixe, et le cocon se dimensionne sur la pochette. |
 | Hors de l'app de musique | Ce que « Cocon » affiche quand Deezer n'est pas à l'écran : les barres ou le contour. Sans effet sur les deux autres styles. |
 | Fréquences utilisées | Quelle partie du spectre fait varier le contour : tout le spectre, seulement les basses, les médiums, ou les aigus. |
@@ -82,6 +82,17 @@ Les 32 bandes du spectre, chacune sur son bord. Ce n'est plus l'affichage brut d
 - les barres ont des **extrémités arrondies**, et leur hauteur maximale se mesure sur la **plus
   petite dimension de l'écran** : sur un écran large, une fraction de la largeur laisserait les
   rangées gauche et droite traverser presque un tiers de l'écran chacune.
+
+## Le style « Particules »
+
+Plutôt qu'une forme continue qui réagit au spectre dans son ensemble (comme « Barres » ou « Contour
+lumineux »), « Particules » fait jaillir des étincelles individuelles depuis les bords actifs :
+chaque bande du spectre qui dépasse un seuil a une chance de faire naître une étincelle à l'endroit
+correspondant du bord, qui part vers l'intérieur puis s'éteint en une fraction de seconde. Plus une
+bande est forte, plus les étincelles qu'elle produit sont fréquentes, rapides et grandes. Un battement
+détecté en fait naître davantage sur tous les bords à la fois, sans jamais en inventer en dehors
+d'une vraie capture — comme « Barres », ce style n'a pas de régime ambiant : sans son réel, les
+étincelles déjà en vol terminent leur course et rien de nouveau n'apparaît.
 
 ## Le style « Cocon »
 
