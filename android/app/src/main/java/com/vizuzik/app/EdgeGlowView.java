@@ -3,6 +3,8 @@ package com.vizuzik.app;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Rect;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -274,6 +276,11 @@ final class EdgeGlowView extends View {
     // these, so one pair of shaders serves both reels rather than one pair each.
     private Shader cassetteReelDiscShader;
     private Shader cassetteReelShadowShader;
+    // Muted the same way the web version's own .cassette__art-image is (saturate(0.85)
+    // contrast(0.93) brightness(0.96)): a glossy phone photo shown at full brightness/saturation
+    // on a printed cassette label would look pasted on rather than printed. Built once alongside
+    // the shaders above, reused on the vinylPaint whenever the label draws the album art.
+    private ColorMatrixColorFilter cassetteArtColorFilter;
     // One Path per brightness tier, each holding several strands as subpaths. Allocated once and
     // rebuilt in place: allocating Paths per frame would be pure waste.
     private final Path[] cocoonTiers = new Path[COCOON_TIERS];
@@ -2055,13 +2062,14 @@ final class EdgeGlowView extends View {
      * with no letterboxing — the same trick as the web version's own
      * "@media (orientation: portrait) .cassette__art" rule.
      *
-     * Deliberately simpler than the web version: no album art on the label (there is no bridge
-     * for it to sit "printed" on the way it does over a plain CSS panel, and a photograph is
-     * exactly the kind of bright, detailed content this always-on screen can least afford), and
-     * none of the purely decorative gloss sweep or plastic-grain texture — this view redraws
-     * itself up to 30 times a second for as long as the lock screen is up, so it keeps only the
-     * one moving part worth that cost: the two reels, turning only while something is actually
-     * playing (see advanceCassette()), exactly like "vinyl"'s own rotation.
+     * The label carries the current track's own artwork, muted like ink on paper the same way
+     * the web version's .cassette__art-image is (see cassetteArtColorFilter) — without it a
+     * lock-screen "cassette" is unrecognisable at a glance as *this* track's, the one thing an
+     * AOD-style screen most needs to say. Still deliberately simpler than the web version in
+     * other ways: none of the purely decorative gloss sweep or plastic-grain texture — this view
+     * redraws itself up to 30 times a second for as long as the lock screen is up, so it keeps
+     * only the moving parts worth that cost: the two reels, turning only while something is
+     * actually playing (see advanceCassette()), exactly like "vinyl"'s own rotation.
      */
     private void drawCassette(Canvas canvas) {
         if (displayWidth <= 0 || displayHeight <= 0) refreshDisplaySize();
@@ -2107,11 +2115,33 @@ final class EdgeGlowView extends View {
         vinylPaint.setColor(withAlpha(Color.WHITE, 26));
         canvas.drawRoundRect(14, 14, 306, 186, 12, 12, vinylPaint);
 
-        // The label — a plain panel, same as the web version shows before its first track's
-        // artwork has loaded (see .cassette__label there).
+        // The label: the current track's own artwork, cropped to fill and muted like ink on
+        // paper — see cassetteArtColorFilter — the same treatment the web version's own
+        // .cassette__art-image gives it, and the same bitmap "vinyl" already has on hand
+        // (setAlbumArt() is called on every track change regardless of which style is active). A
+        // plain panel shows through until the first track loads, same as the web version.
+        Bitmap cassetteArt = vinylBitmap;
+        BitmapShader cassetteArtShader = vinylShader;
         vinylPaint.setStyle(Paint.Style.FILL);
-        vinylPaint.setColor(withAlpha(Color.WHITE, 22));
-        canvas.drawRoundRect(22, 20, 250, 78, 6, 6, vinylPaint);
+        if (cassetteArt != null && cassetteArtShader != null && !cassetteArt.isRecycled()) {
+            float labelW = 228f;
+            float labelH = 58f;
+            float artScale = Math.max(labelW / cassetteArt.getWidth(), labelH / cassetteArt.getHeight());
+            vinylMatrix.setScale(artScale, artScale);
+            vinylMatrix.postTranslate(
+                22f - (cassetteArt.getWidth() * artScale - labelW) * 0.5f,
+                20f - (cassetteArt.getHeight() * artScale - labelH) * 0.5f
+            );
+            cassetteArtShader.setLocalMatrix(vinylMatrix);
+            vinylPaint.setShader(cassetteArtShader);
+            vinylPaint.setColorFilter(cassetteArtColorFilter);
+            canvas.drawRoundRect(22, 20, 250, 78, 6, 6, vinylPaint);
+            vinylPaint.setShader(null);
+            vinylPaint.setColorFilter(null);
+        } else {
+            vinylPaint.setColor(withAlpha(Color.WHITE, 22));
+            canvas.drawRoundRect(22, 20, 250, 78, 6, 6, vinylPaint);
+        }
 
         // The brand tab: three flat bands in the album's own three accents, a printed colour
         // spine like a real cassette's rather than one two-colour gradient block — see
@@ -2288,6 +2318,15 @@ final class EdgeGlowView extends View {
             new float[] { 0f, 0.62f, 0.86f, 1f },
             Shader.TileMode.CLAMP
         );
+        // Desaturate, then scale every channel down a touch for the web version's own
+        // contrast(0.93) brightness(0.96) — ColorMatrix has no separate contrast op, and this is
+        // a decorative label, not a colour-critical one, so the approximation is close enough.
+        ColorMatrix artMatrix = new ColorMatrix();
+        artMatrix.setSaturation(0.85f);
+        ColorMatrix artScale = new ColorMatrix();
+        artScale.setScale(0.93f, 0.93f, 0.93f, 1f);
+        artMatrix.postConcat(artScale);
+        cassetteArtColorFilter = new ColorMatrixColorFilter(artMatrix);
     }
 
     private static float squircle(float angle) {
