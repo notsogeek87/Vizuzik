@@ -182,6 +182,34 @@ déjà dans l'espace du viewBox 320x200 fixe une fois le canvas mis à l'échell
 l'échelle « cover » ajoutée juste au-dessus), donc rien ne peut jamais avoir besoin d'être
 régénéré.
 
+**Une troisième relecture : plus proche d'une vraie cassette, pas juste moins plate.** Demandé
+explicitement plus « réaliste », en repartant d'une photo de référence (cassette « SIDE B », bande
+arc-en-ciel, bobines claires). Trois changements, côté web et natif à la fois :
+
+- **Bobines claires plutôt que sombres.** `cassette-reel-disc`/`cassetteReelDiscShader` passe d'un
+  dégradé gris-noir à un dégradé quasi blanc (`#eef0f6 → #b7bac6 → #54545e`) — les bobines réelles
+  sont moulées dans un polystyrène translucide clair, pas dans du plastique sombre ; c'était le
+  détail qui faisait le plus « illustration » plutôt que « cassette ».
+- **Bande de bobine liée à la lecture réelle.** Chaque bobine avait deux fins anneaux fixes
+  identiques en guise de bande enroulée — remplacés par un seul disque plein (`.cassette__coil`
+  côté web, un simple `drawCircle` de rayon variable côté natif) dont le rayon suit `--progress`
+  (0..1, écrit dans `onFrame` de `main.js` depuis la même instance `PlaybackProgress` que la barre
+  de lecture) côté web, et `cassetteProgress()` (ancré sur `positionMs`/`durationMs` de
+  `DeezerMediaBridge.NowPlaying`, extrapolé par le temps réellement écoulé, exactement comme
+  `PlaybackProgress.positionNow()`) côté natif. La bobine gauche (« alimentation ») commence pleine
+  et se réduit vers son moyeu à mesure que le morceau avance ; la droite (« réception ») fait
+  l'inverse — le sens réel de déroulement d'une cassette, pas une asymétrie arbitraire.
+- **Détails typographiques/mécaniques** repris de la photo de référence : la pastille d'accent
+  devient une bande à trois couleurs (les trois accents de la pochette plutôt que les deux du
+  dégradé `#cassette-accent`), chaque moyeu de bobine gagne une petite croix moulée sombre (le
+  clip visible au centre d'une vraie bobine), et chaque vis gagne une fente (une ligne courte,
+  chacune à un angle différent — de vraies vis ne sont jamais toutes orientées pareil).
+
+Rien ici n'ajoute de nouvelle allocation par frame côté natif : la bande colorée passe par un
+`Path` mis en cache (`cassetteBrandClipPath`, même raisonnement que `cassetteTapePath`), et le
+rayon de la bobine est un simple `float` recalculé à partir de `cassetteProgress()` — pas de
+Shader supplémentaire, `cassetteReelDiscShader` reste construit une seule fois.
+
 ## Correctif : la tâche partagée avec MainActivity coinçait `isForeground()` à vrai
 
 Premier retour du terrain (Z Fold8 réel) : l'Edge Visualizer (les barres par-dessus Deezer)

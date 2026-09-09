@@ -170,6 +170,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     public void onNowPlayingChanged(DeezerMediaBridge.NowPlaying nowPlaying) {
         if (glowView == null || nowPlaying == null) return;
         glowView.setPlaying(nowPlaying.isPlaying);
+        glowView.setCassetteProgress(nowPlaying.positionMs, nowPlaying.durationMs);
 
         String trackKey = nowPlaying.title + "::" + nowPlaying.artist;
         boolean isNewTrack = !trackKey.equals(lastTrackKey);

@@ -258,6 +258,10 @@ final class EdgeGlowView extends View {
     // below: this view redraws up to 30 times a second, and a fresh Path every frame for a curve
     // that never actually changes shape would be pure waste.
     private final Path cassetteTapePath = new Path();
+    // The brand tab's own rounded-rect clip, for its three colour bands — see drawCassette().
+    // Cached the same way and for the same reason as cassetteTapePath just above: a fixed shape,
+    // built once rather than reallocated on every one of this view's ~30 redraws a second.
+    private final Path cassetteBrandClipPath = new Path();
     // "cassette"'s shading shaders — built once, lazily, on the first frame that draws it, and
     // never rebuilt afterward: unlike buildVinylShaders() (which depends on the disc's own size
     // in *screen* pixels and so has to track that size), every one of these lives entirely inside
@@ -328,6 +332,14 @@ final class EdgeGlowView extends View {
     // once, whichever the standalone screen is currently drawing). See advanceCassette().
     private float cassetteReelADeg;
     private float cassetteReelBDeg;
+    // How far into the track playback actually is, for "cassette"'s own wound-tape coils — see
+    // setCassetteProgress()/cassetteProgress(). Anchored rather than tracked per-frame, the same
+    // reasoning as the web player's own PlaybackProgress.positionNow(): a position is only ever
+    // known as of the instant it was reported, so the anchor is extrapolated forward by real
+    // elapsed time between updates rather than re-queried every tick.
+    private long cassetteDurationMs;
+    private long cassetteAnchorPositionMs;
+    private long cassetteAnchorAtMs;
     // The last artwork handed over for "vinyl" — see setAlbumArt(). Read from the main thread
     // only (set from DeezerMediaBridge's callback, which also runs on the main thread), so a
     // plain reference is enough; the shader is rebuilt once per track rather than per frame.
@@ -553,6 +565,32 @@ final class EdgeGlowView extends View {
      *  rotation, called on every now-playing update rather than only on a track change. */
     void setPlaying(boolean playing) {
         vinylPlaying = playing;
+    }
+
+    /**
+     * "cassette"'s own wound-tape coils track playback the same way the web player's progress
+     * bar does — see LockScreenVisualizerActivity.onNowPlayingChanged(), which calls this
+     * alongside setPlaying() on every now-playing update, not just a track change (a position
+     * this stale by even a few seconds would make the coils visibly jump on the next redraw).
+     */
+    void setCassetteProgress(long positionMs, long durationMs) {
+        cassetteDurationMs = Math.max(0, durationMs);
+        long clampedPosition = Math.max(0, positionMs);
+        cassetteAnchorPositionMs = cassetteDurationMs > 0
+            ? Math.min(clampedPosition, cassetteDurationMs)
+            : clampedPosition;
+        cassetteAnchorAtMs = SystemClock.elapsedRealtime();
+    }
+
+    /** 0..1, extrapolated from the last setCassetteProgress() anchor by real elapsed time —
+     *  frozen the instant playback isn't, same rule advanceVinyl()/advanceCassette() apply to
+     *  their own rotation. 0 (nothing wound onto the take-up side yet) if no duration is known
+     *  yet, which is also what the coils show before the first now-playing update ever arrives. */
+    private float cassetteProgress() {
+        if (cassetteDurationMs <= 0) return 0f;
+        long elapsed = vinylPlaying ? SystemClock.elapsedRealtime() - cassetteAnchorAtMs : 0;
+        long position = Math.max(0, Math.min(cassetteDurationMs, cassetteAnchorPositionMs + elapsed));
+        return position / (float) cassetteDurationMs;
     }
 
     /** The capture feeding this view stopped for good — drop straight back to ambient. */
@@ -2069,12 +2107,32 @@ final class EdgeGlowView extends View {
         vinylPaint.setColor(withAlpha(Color.WHITE, 26));
         canvas.drawRoundRect(14, 14, 306, 186, 12, 12, vinylPaint);
 
-        // The label and the brand tab — a plain panel and the travelling palette, same as the web
-        // version shows before its first track's artwork has loaded (see .cassette__label there).
+        // The label — a plain panel, same as the web version shows before its first track's
+        // artwork has loaded (see .cassette__label there).
         vinylPaint.setStyle(Paint.Style.FILL);
         vinylPaint.setColor(withAlpha(Color.WHITE, 22));
         canvas.drawRoundRect(22, 20, 250, 78, 6, 6, vinylPaint);
-        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 220));
+
+        // The brand tab: three flat bands in the album's own three accents, a printed colour
+        // spine like a real cassette's rather than one two-colour gradient block — see
+        // .cassette__brand-band in the web version for the same idea. Clipped to a rounded rect
+        // (not clipRect(), which would square off the tab's own corners) so the bands still read
+        // as one rounded tab rather than three stacked rectangles.
+        if (cassetteBrandClipPath.isEmpty()) {
+            cassetteBrandClipPath.addRoundRect(260, 20, 298, 78, 6, 6, Path.Direction.CW);
+        }
+        canvas.save();
+        canvas.clipPath(cassetteBrandClipPath);
+        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 255));
+        canvas.drawRect(260, 20, 298, 39.33f, vinylPaint);
+        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(1f)), 255));
+        canvas.drawRect(260, 39.33f, 298, 58.66f, vinylPaint);
+        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(2f)), 255));
+        canvas.drawRect(260, 58.66f, 298, 78, vinylPaint);
+        canvas.restore();
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(1f);
+        vinylPaint.setColor(withAlpha(Color.BLACK, 89));
         canvas.drawRoundRect(260, 20, 298, 78, 6, 6, vinylPaint);
 
         // The window the reels sit behind, and the run of tape strung between them.
@@ -2091,24 +2149,44 @@ final class EdgeGlowView extends View {
         canvas.drawPath(cassetteTapePath, vinylPaint);
         vinylPaint.setStrokeCap(Paint.Cap.BUTT);
 
-        drawCassetteReel(canvas, 108, 134, cassetteReelADeg);
-        drawCassetteReel(canvas, 212, 134, cassetteReelBDeg);
+        // The wound tape itself, one coil per reel: the "supply" side (a) starts full and shrinks
+        // toward its hub as the track plays, the "take-up" side (b) is the mirror image — see
+        // cassetteProgress() and .cassette__coil in the web version for the same idea.
+        float progress = cassetteProgress();
+        drawCassetteReel(canvas, 108, 134, cassetteReelADeg, 26f - progress * 14f);
+        drawCassetteReel(canvas, 212, 134, cassetteReelBDeg, 12f + progress * 14f);
 
         vinylPaint.setStyle(Paint.Style.FILL);
         vinylPaint.setColor(withAlpha(Color.WHITE, 71));
-        float[][] screws = { { 20, 20 }, { 300, 20 }, { 20, 180 }, { 300, 180 }, { 160, 186 } };
-        for (float[] screw : screws) canvas.drawCircle(screw[0], screw[1], 3.4f, vinylPaint);
+        vinylPaint.setStrokeWidth(0.7f);
+        vinylPaint.setStrokeCap(Paint.Cap.ROUND);
+        float[][] screws = {
+            { 20, 20, -18 }, { 300, 20, 35 }, { 20, 180, 70 }, { 300, 180, -40 }, { 160, 186, 12 },
+        };
+        for (float[] screw : screws) {
+            canvas.save();
+            canvas.rotate(screw[2], screw[0], screw[1]);
+            vinylPaint.setStyle(Paint.Style.FILL);
+            canvas.drawCircle(screw[0], screw[1], 3.4f, vinylPaint);
+            vinylPaint.setStyle(Paint.Style.STROKE);
+            vinylPaint.setColor(withAlpha(Color.BLACK, 140));
+            canvas.drawLine(screw[0] - 2.6f, screw[1], screw[0] + 2.6f, screw[1], vinylPaint);
+            vinylPaint.setStyle(Paint.Style.FILL);
+            vinylPaint.setColor(withAlpha(Color.WHITE, 71));
+            canvas.restore();
+        }
 
         canvas.restore();
     }
 
-    /** One reel: its cast shadow on the window floor, its own shaded disc, the ring, two
-     *  concentric "wound tape" rings, the palette-coloured hub, and six short teeth that carry
-     *  the rotation — everything else in drawCassette() stays fixed. Translates to (cx, cy) once
-     *  and draws everything from there, so cassetteReelDiscShader (built centred on (0,0), see
+    /** One reel: its cast shadow on the window floor, its own shaded disc, the ring, the wound
+     *  tape coil, the palette-coloured hub, its moulded cross, and six short teeth that carry the
+     *  rotation — everything else in drawCassette() stays fixed. Translates to (cx, cy) once and
+     *  draws everything from there, so cassetteReelDiscShader (built centred on (0,0), see
      *  buildCassetteShaders()) lines up the same way for both reels without needing its own copy
-     *  for each. */
-    private void drawCassetteReel(Canvas canvas, float cx, float cy, float angleDeg) {
+     *  for each. coilRadius is the caller's business (cassetteProgress()) — this method just
+     *  paints whatever it's handed. */
+    private void drawCassetteReel(Canvas canvas, float cx, float cy, float angleDeg, float coilRadius) {
         // The shadow the reel casts onto the window floor beneath it, offset down-right of the
         // reel's own centre — its own save/restore since that offset differs from the reel's.
         vinylPaint.setStyle(Paint.Style.FILL);
@@ -2122,7 +2200,8 @@ final class EdgeGlowView extends View {
         canvas.translate(cx, cy);
 
         // The reel's own body: a shaded, slightly convex disc rather than a flat window-coloured
-        // background with a couple of rings drawn over it — see .cassette__reeldisc.
+        // background with a couple of rings drawn over it — see .cassette__reeldisc. Light —
+        // real reels are moulded from translucent white/grey polystyrene, not dark plastic.
         vinylPaint.setShader(cassetteReelDiscShader);
         canvas.drawCircle(0, 0, 29, vinylPaint);
         vinylPaint.setShader(null);
@@ -2131,16 +2210,32 @@ final class EdgeGlowView extends View {
         vinylPaint.setStrokeWidth(6f);
         vinylPaint.setColor(withAlpha(Color.WHITE, 102));
         canvas.drawCircle(0, 0, 30, vinylPaint);
-        vinylPaint.setStrokeWidth(2f);
-        vinylPaint.setColor(withAlpha(Color.WHITE, 46));
-        canvas.drawCircle(0, 0, 23, vinylPaint);
-        canvas.drawCircle(0, 0, 16, vinylPaint);
+
+        // The wound tape — a solid coil rather than a couple of thin outline rings, sized by
+        // whatever cassetteProgress()-derived radius the caller worked out for this reel.
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setColor(withAlpha(0xFF1C1712, 255));
+        canvas.drawCircle(0, 0, Math.max(0f, coilRadius), vinylPaint);
 
         vinylPaint.setStyle(Paint.Style.FILL);
         vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 255));
         canvas.drawCircle(0, 0, 11, vinylPaint);
 
+        // The small moulded cross every reel hub is built around, visible through the
+        // accent-coloured centre cap — a recessed detail, dark rather than lit, and rotated a
+        // little off-axis the way a real one is never driven in facing exactly true.
+        canvas.save();
+        canvas.rotate(20);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(1.4f);
+        vinylPaint.setStrokeCap(Paint.Cap.ROUND);
+        vinylPaint.setColor(withAlpha(Color.BLACK, 102));
+        canvas.drawLine(0, -6.5f, 0, 6.5f, vinylPaint);
+        canvas.drawLine(-6.5f, 0, 6.5f, 0, vinylPaint);
+        canvas.restore();
+
         canvas.rotate(angleDeg);
+        vinylPaint.setStyle(Paint.Style.FILL);
         vinylPaint.setColor(withAlpha(Color.BLACK, 179));
         for (int i = 0; i < 6; i++) {
             canvas.save();
@@ -2176,11 +2271,12 @@ final class EdgeGlowView extends View {
         // Off-centre towards the top-left, the same cheat the shell's own case-light above uses —
         // a gradient simply centred off to one side of what it's painted on, rather than an
         // Android Shader's local matrix (which would need resetting per reel to stay off-centre
-        // in the right direction relative to each one).
+        // in the right direction relative to each one). Light — real reels are moulded from
+        // translucent white/grey polystyrene; a dark disc here read as illustration, not cassette.
         cassetteReelDiscShader = new RadialGradient(
             -6, -8, 34,
-            new int[] { 0xFF4A4A58, 0xFF232329, 0xFF08080A },
-            new float[] { 0f, 0.55f, 1f },
+            new int[] { 0xFFEEF0F6, 0xFFB7BAC6, 0xFF54545E },
+            new float[] { 0f, 0.5f, 1f },
             Shader.TileMode.CLAMP
         );
         cassetteReelShadowShader = new RadialGradient(

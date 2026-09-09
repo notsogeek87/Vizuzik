@@ -162,12 +162,20 @@ async function requestSeek(position) {
 // The visualizer owns the only animation frame loop in the app; the DOM's beat-reactive
 // styling rides along on it through three custom properties. Values are written only when
 // they actually move, so a quiet passage costs no style invalidation at all.
-const cssState = { beat: -1, level: -1, bass: -1 };
+const cssState = { beat: -1, level: -1, bass: -1, progress: -1 };
 
 visualizer.onFrame = ({ beat, level, bass }) => {
   writeVar("--beat", "beat", beat);
   writeVar("--level", "level", level);
   writeVar("--bass", "bass", bass);
+  // Same idea, a fourth reactive var: how far into the track playback actually is, 0..1. Read
+  // from `progress` (see progress.js) rather than tracked separately here, so it's exactly the
+  // same number the progress bar itself is drawing at that instant, scrub included. Cassette
+  // mode is the one consumer today (see .cassette__coil in style.css), tying each reel's own
+  // wound-tape amount to it — but any mode could read it, the same way any of them can read
+  // --beat/--level/--bass.
+  const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, progress.positionNow() / progress.duration)) : 0;
+  writeVar("--progress", "progress", playedRatio);
   syncPaletteVars();
   progress.render();
 };
