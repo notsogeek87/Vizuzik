@@ -256,6 +256,18 @@ final class EdgeGlowView extends View {
     // below: this view redraws up to 30 times a second, and a fresh Path every frame for a curve
     // that never actually changes shape would be pure waste.
     private final Path cassetteTapePath = new Path();
+    // "cassette"'s shading shaders — built once, lazily, on the first frame that draws it, and
+    // never rebuilt afterward: unlike buildVinylShaders() (which depends on the disc's own size
+    // in *screen* pixels and so has to track that size), every one of these lives entirely inside
+    // drawCassette()'s already-scaled canvas (see the canvas.scale() call there), in the same
+    // fixed 320x200 viewBox units every other coordinate in that method uses — coordinates that
+    // never change no matter how big the standalone screen actually is.
+    private Shader cassetteCaseLightShader;
+    private Shader cassetteCaseVignetteShader;
+    // Centred on (0,0): drawCassetteReel() translates to each reel's own centre before using
+    // these, so one pair of shaders serves both reels rather than one pair each.
+    private Shader cassetteReelDiscShader;
+    private Shader cassetteReelShadowShader;
     // One Path per brightness tier, each holding several strands as subpaths. Allocated once and
     // rebuilt in place: allocating Paths per frame would be pure waste.
     private final Path[] cocoonTiers = new Path[COCOON_TIERS];
@@ -2019,12 +2031,23 @@ final class EdgeGlowView extends View {
 
         vinylPaint.reset();
         vinylPaint.setAntiAlias(true);
+        buildCassetteShaders();
 
         // Shell + a raised inner edge, same dark navy the web player's own .cover background (and
         // "vinyl"'s own VINYL_VOID_COLOR) sit on, kept the darkest thing on screen on purpose.
         vinylPaint.setStyle(Paint.Style.FILL);
         vinylPaint.setColor(withAlpha(VINYL_VOID_COLOR, 255));
         canvas.drawRoundRect(8, 8, 312, 192, 16, 16, vinylPaint);
+
+        // A soft top-left spotlight and a darker taper into the corners, painted straight onto
+        // the flat shell fill above — see .cassette__case-light/.cassette__case-vignette in the
+        // web version for the same idea. What keeps a flat fill from reading as a flat fill.
+        vinylPaint.setShader(cassetteCaseLightShader);
+        canvas.drawRoundRect(8, 8, 312, 192, 16, 16, vinylPaint);
+        vinylPaint.setShader(cassetteCaseVignetteShader);
+        canvas.drawRoundRect(8, 8, 312, 192, 16, 16, vinylPaint);
+        vinylPaint.setShader(null);
+
         vinylPaint.setStyle(Paint.Style.STROKE);
         vinylPaint.setStrokeWidth(1.5f);
         vinylPaint.setColor(withAlpha(Color.WHITE, 26));
@@ -2063,24 +2086,44 @@ final class EdgeGlowView extends View {
         canvas.restore();
     }
 
-    /** One reel: the ring, two concentric "wound tape" rings, the palette-coloured hub, and six
-     *  short teeth that carry the rotation — everything else in drawCassette() stays fixed. */
+    /** One reel: its cast shadow on the window floor, its own shaded disc, the ring, two
+     *  concentric "wound tape" rings, the palette-coloured hub, and six short teeth that carry
+     *  the rotation — everything else in drawCassette() stays fixed. Translates to (cx, cy) once
+     *  and draws everything from there, so cassetteReelDiscShader (built centred on (0,0), see
+     *  buildCassetteShaders()) lines up the same way for both reels without needing its own copy
+     *  for each. */
     private void drawCassetteReel(Canvas canvas, float cx, float cy, float angleDeg) {
-        vinylPaint.setStyle(Paint.Style.STROKE);
-        vinylPaint.setStrokeWidth(6f);
-        vinylPaint.setColor(withAlpha(Color.WHITE, 102));
-        canvas.drawCircle(cx, cy, 30, vinylPaint);
-        vinylPaint.setStrokeWidth(2f);
-        vinylPaint.setColor(withAlpha(Color.WHITE, 46));
-        canvas.drawCircle(cx, cy, 23, vinylPaint);
-        canvas.drawCircle(cx, cy, 16, vinylPaint);
-
+        // The shadow the reel casts onto the window floor beneath it, offset down-right of the
+        // reel's own centre — its own save/restore since that offset differs from the reel's.
         vinylPaint.setStyle(Paint.Style.FILL);
-        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 255));
-        canvas.drawCircle(cx, cy, 11, vinylPaint);
+        vinylPaint.setShader(cassetteReelShadowShader);
+        canvas.save();
+        canvas.translate(cx + 3, cy + 3);
+        canvas.drawCircle(0, 0, 31, vinylPaint);
+        canvas.restore();
 
         canvas.save();
         canvas.translate(cx, cy);
+
+        // The reel's own body: a shaded, slightly convex disc rather than a flat window-coloured
+        // background with a couple of rings drawn over it — see .cassette__reeldisc.
+        vinylPaint.setShader(cassetteReelDiscShader);
+        canvas.drawCircle(0, 0, 29, vinylPaint);
+        vinylPaint.setShader(null);
+
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(6f);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 102));
+        canvas.drawCircle(0, 0, 30, vinylPaint);
+        vinylPaint.setStrokeWidth(2f);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 46));
+        canvas.drawCircle(0, 0, 23, vinylPaint);
+        canvas.drawCircle(0, 0, 16, vinylPaint);
+
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 255));
+        canvas.drawCircle(0, 0, 11, vinylPaint);
+
         canvas.rotate(angleDeg);
         vinylPaint.setColor(withAlpha(Color.BLACK, 179));
         for (int i = 0; i < 6; i++) {
@@ -2090,6 +2133,49 @@ final class EdgeGlowView extends View {
             canvas.restore();
         }
         canvas.restore();
+    }
+
+    /**
+     * "cassette"'s own shading shaders, built once on the first frame that draws it and never
+     * rebuilt after (guarded by cassetteCaseLightShader alone — all four are always set
+     * together). See the field comments for why these don't need buildVinylShaders()'s own
+     * "rebuild if the size changed" logic: every coordinate here is already in drawCassette()'s
+     * fixed 320x200 viewBox space, which never changes size the way the disc's screen-pixel
+     * radius does.
+     */
+    private void buildCassetteShaders() {
+        if (cassetteCaseLightShader != null) return;
+        cassetteCaseLightShader = new RadialGradient(
+            69, 30, 300,
+            new int[] { withAlpha(Color.WHITE, 41), withAlpha(Color.WHITE, 8), withAlpha(Color.WHITE, 0) },
+            new float[] { 0f, 0.5f, 1f },
+            Shader.TileMode.CLAMP
+        );
+        cassetteCaseVignetteShader = new RadialGradient(
+            160, 100, 280,
+            new int[] { withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 100) },
+            new float[] { 0f, 0.7f, 1f },
+            Shader.TileMode.CLAMP
+        );
+        // Off-centre towards the top-left, the same cheat the shell's own case-light above uses —
+        // a gradient simply centred off to one side of what it's painted on, rather than an
+        // Android Shader's local matrix (which would need resetting per reel to stay off-centre
+        // in the right direction relative to each one).
+        cassetteReelDiscShader = new RadialGradient(
+            -6, -8, 34,
+            new int[] { 0xFF4A4A58, 0xFF232329, 0xFF08080A },
+            new float[] { 0f, 0.55f, 1f },
+            Shader.TileMode.CLAMP
+        );
+        cassetteReelShadowShader = new RadialGradient(
+            0, 0, 31,
+            new int[] {
+                withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 0),
+                withAlpha(Color.BLACK, 127), withAlpha(Color.BLACK, 0),
+            },
+            new float[] { 0f, 0.62f, 0.86f, 1f },
+            Shader.TileMode.CLAMP
+        );
     }
 
     private static float squircle(float angle) {

@@ -263,6 +263,20 @@ body[data-state="playing"] .cassette__reel {
   stroke-width: 2;
 }
 
+/* Painted straight onto the flat shell fill above, before anything else: a soft top-left
+   spotlight and a darker taper into the corners, so the case reads as a gently curved moulded
+   surface even before the bezel/sheen/label add their own detail on top of it. Static — no
+   animation budget spent here, unlike .cassette__gloss below. */
+.cassette__case-light {
+  fill: url(#cassette-case-light);
+  pointer-events: none;
+}
+
+.cassette__case-vignette {
+  fill: url(#cassette-case-vignette);
+  pointer-events: none;
+}
+
 /* A raised inner edge and a short specular arc near the top-left corner: two cheap strokes
    that read as moulded plastic catching light, instead of a flat filled rectangle. */
 .cassette__bezel {
@@ -296,6 +310,15 @@ body[data-state="playing"] .cassette__reel {
   stroke-width: 1.5;
 }
 
+/* Shared by the label and the window: the shadow the raised bezel around each would actually
+   cast onto it, top edge only — what makes them read as recessed into the shell rather than
+   printed flat on top of it. Sits between the panel's own fill and its frame/border in the
+   markup, same reasoning both places. */
+.cassette__inset-shadow {
+  fill: url(#cassette-inset-shadow);
+  pointer-events: none;
+}
+
 .cassette__brandsheen {
   stroke: rgba(255, 255, 255, 0.4);
   stroke-width: 2;
@@ -326,6 +349,22 @@ body[data-state="playing"] .cassette__tape {
 
 @keyframes cassette-tape-run {
   to { stroke-dashoffset: -14; }
+}
+
+/* Cast onto the window floor by the reel sitting on it — outside the rotating .cassette__reel
+   group on purpose, since a shadow doesn't turn with the thing casting it. See
+   .cassette__reeldisc below for what actually sells the reel itself as raised above this. */
+.cassette__reelshadow {
+  fill: url(#cassette-reel-shadow);
+  pointer-events: none;
+}
+
+/* The reel's own body, underneath its rings — a shaded, slightly convex disc rather than a flat
+   window-coloured background with a couple of rings drawn over it. Inside the rotating group on
+   purpose: the same cheat drawVinyl() and the web player's own .disc__label already make, a
+   shaded surface turning with the object it shades rather than staying fixed under it. */
+.cassette__reeldisc {
+  fill: url(#cassette-reel-disc);
 }
 
 .cassette__reelring {

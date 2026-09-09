@@ -152,6 +152,15 @@ est celle qui justifie ce coût : les deux bobines, tournant à deux vitesses l�
 (`CASSETTE_DEG_PER_SEC_A`/`_B`, les mêmes que `.cassette__reel`/`.cassette__reel--b` côté web),
 seulement pendant la lecture — exactement la même règle que la rotation de « Vinyle ».
 
+Le premier jet rendait plat — remonté après coup, comparé côte à côte avec la version web une fois
+celle-ci elle-même approfondie (ombre portée de chaque bobine, dégradé radial sur leur propre
+disque plutôt que des anneaux sur un fond plat, un spot et un vignettage sur la coque). Portés ici
+sous forme de `RadialGradient` (`buildCassetteShaders()`), statiques : construits une seule fois,
+au premier appel de `drawCassette()`, jamais reconstruits ensuite — contrairement à
+`buildVinylShaders()`, rien ici ne dépend de la taille réelle de l'écran (tout est déjà dans
+l'espace du viewBox 320x200 fixe une fois le canvas mis à l'échelle), donc rien ne peut jamais
+avoir besoin d'être régénéré.
+
 ## Correctif : la tâche partagée avec MainActivity coinçait `isForeground()` à vrai
 
 Premier retour du terrain (Z Fold8 réel) : l'Edge Visualizer (les barres par-dessus Deezer)
