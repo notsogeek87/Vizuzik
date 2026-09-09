@@ -2318,14 +2318,29 @@ final class EdgeGlowView extends View {
             new float[] { 0f, 0.62f, 0.86f, 1f },
             Shader.TileMode.CLAMP
         );
-        // Desaturate, then scale every channel down a touch for the web version's own
-        // contrast(0.93) brightness(0.96) — ColorMatrix has no separate contrast op, and this is
-        // a decorative label, not a colour-critical one, so the approximation is close enough.
+        // Desaturate, then apply contrast and brightness the way CSS's own filter()s actually do
+        // (see .cassette__art-image) — ColorMatrix has no separate contrast op, and an earlier
+        // version of this approximated contrast(c) as just another multiplicative scale. That's
+        // wrong: CSS contrast(c) for c<1 pulls values *toward* mid-grey (out = (in-0.5)*c+0.5),
+        // which lightens shadows, while a plain scale only ever darkens further. Compounding that
+        // wrong approximation with brightness() into one flat darkening multiply read fine on a
+        // bright album cover but crushed a dark one to near-black on this label — the actual
+        // report this fixes. contrast then brightness, applied in that order (matching the CSS
+        // filter list's own left-to-right order), collapse into one scale+offset pass here:
+        // out = brightness*contrast*in + brightness*127.5*(1-contrast).
         ColorMatrix artMatrix = new ColorMatrix();
-        artMatrix.setSaturation(0.85f);
-        ColorMatrix artScale = new ColorMatrix();
-        artScale.setScale(0.93f, 0.93f, 0.93f, 1f);
-        artMatrix.postConcat(artScale);
+        artMatrix.setSaturation(0.9f);
+        float artContrast = 0.88f;
+        float artBrightness = 1.05f;
+        float artScaleAmount = artContrast * artBrightness;
+        float artOffset = artBrightness * 127.5f * (1f - artContrast);
+        ColorMatrix artTone = new ColorMatrix(new float[] {
+            artScaleAmount, 0, 0, 0, artOffset,
+            0, artScaleAmount, 0, 0, artOffset,
+            0, 0, artScaleAmount, 0, artOffset,
+            0, 0, 0, 1, 0,
+        });
+        artMatrix.postConcat(artTone);
         cassetteArtColorFilter = new ColorMatrixColorFilter(artMatrix);
     }
 
