@@ -37,9 +37,13 @@
          setArtwork() and sits on the label, cropped to it and muted (see .cassette__art-image),
          as if it had been printed there; a plain panel shows through until the first track
          loads. A soft diagonal glare drifts across the whole shell on a slow, unconditional
-         loop (see .cassette__gloss) and a static grain layer stands in for moulded-plastic
-         texture (see .cassette__grain) — both ambient, like the disc's own .disc__sheen
-         elsewhere, and neither tied to the beat any more than the shell shape itself is. -->
+         loop (see .cassette__gloss), ambient like the disc's own .disc__sheen elsewhere and
+         not tied to the beat any more than the shell shape itself is. No grain/noise texture
+         here on purpose: an feTurbulence filter was tried and dropped — combined with the gloss
+         sweep and reel rotation animating right underneath it, it made Android WebView
+         re-rasterise the whole shell every frame instead of painting the "static" noise once,
+         visible as a flicker confined to this mode (nothing else in the app uses an SVG
+         filter). -->
     <div id="cassette" class="cassette" aria-hidden="true">
       <svg class="cassette__art" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
         <defs>
@@ -80,12 +84,6 @@
             <stop offset="0.54" stop-color="#fff" stop-opacity="0" />
             <stop offset="1" stop-color="#fff" stop-opacity="0" />
           </linearGradient>
-          <!-- A static grain layer standing in for moulded-plastic texture, see .cassette__grain
-               in style.css — cheap because it's never re-seeded or animated, just painted once. -->
-          <filter id="cassette-grain" x="-5%" y="-5%" width="110%" height="110%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" result="noise" />
-            <feColorMatrix in="noise" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0" />
-          </filter>
         </defs>
 
         <rect class="cassette__shell" x="8" y="8" width="304" height="184" rx="16" />
@@ -158,7 +156,6 @@
         <g clip-path="url(#cassette-shell-clip)">
           <rect class="cassette__gloss" x="-40" y="0" width="200" height="200" fill="url(#cassette-gloss)" />
         </g>
-        <rect class="cassette__grain" x="8" y="8" width="304" height="184" rx="16" filter="url(#cassette-grain)" />
       </svg>
     </div>
 
