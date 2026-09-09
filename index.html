@@ -291,6 +291,23 @@
           <input id="edge-overlay-enabled" type="checkbox" />
         </label>
 
+        <!-- A different, more intrusive feature from "Mode superposition" above: it takes over
+             the lock screen and keeps the display lit while music plays, instead of letting the
+             phone sleep or show its own Always-On Display — there is no public API that lets a
+             third-party app draw on the real one. See
+             docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. Off by default, and
+             needs its own permission(s) before it can do anything at all. -->
+        <label class="edge-settings__row edge-settings__row--switch">
+          <span>
+            Visualiseur écran verrouillé (expérimental)
+            <small id="edge-lockscreen-hint">Chargement…</small>
+          </span>
+          <input id="edge-lockscreen-enabled" type="checkbox" />
+        </label>
+        <button id="edge-lockscreen-grant" type="button" class="grant-button edge-settings__grant" hidden>
+          Autoriser les notifications
+        </button>
+
         <!-- Needs "usage access" to be honoured: nothing else can tell an overlay window which
              app is actually on screen. Left on with the permission missing, the overlay simply
              keeps showing everywhere rather than hiding on a guess — see ForegroundApp. -->
@@ -343,6 +360,7 @@
           <select id="edge-style">
             <option value="bars">Barres (spectre)</option>
             <option value="glow">Contour lumineux</option>
+            <option value="particles">Particules</option>
             <option value="cocoon">Cocon (ruban tressé)</option>
             <option value="vinyl">Vinyle (disque qui tourne)</option>
           </select>

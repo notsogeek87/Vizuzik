@@ -34,6 +34,21 @@
 
         </activity>
 
+        <!-- The "fake AOD": shown over the lock screen, screen kept on, while music plays and the
+             screen would otherwise sleep — see LockScreenVisualizerActivity and
+             docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md for why this exists
+             instead of drawing on the real Always-On Display (no public API allows that).
+             singleTask so a second full-screen-intent trigger while it's already showing lands
+             in the existing instance (onNewIntent) rather than stacking another one on top.
+             excludeFromRecents: this screen is never something to switch back to from the
+             recents list, only ever reached by the system bringing the phone's display back on. -->
+        <activity
+            android:name=".LockScreenVisualizerActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:theme="@style/AppTheme.NoActionBar" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -123,6 +138,21 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+
+    <!-- Runtime-requested on Android 13+ (a no-op grant below that): without it, notify() from
+         LockScreenVisualizerController silently drops the notification whose full-screen intent
+         is what brings LockScreenVisualizerActivity up over the lock screen — see
+         DeezerMediaPlugin's notification-permission alias. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Lets a HIGH-importance notification's full-screen intent actually launch its Activity
+         instead of only appearing as a heads-up notification. Declaring it is not enough from
+         Android 14: the user must separately grant "full screen intent" special access in system
+         Settings (see DeezerMediaPlugin.requestFullScreenIntentPermission()) — a deliberate
+         platform restriction, since this permission is meant for calls and alarms and Vizuzik is
+         neither; without that grant the notification still posts, it just never takes over the
+         screen on its own. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Android calls this "microphone", but nothing here ever opens the microphone: it is what
          android.media.audiofx.Visualizer requires in order to attach to the music app's own audio

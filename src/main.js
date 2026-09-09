@@ -24,6 +24,9 @@ const els = {
   edgeSettingsSheet: document.getElementById("edge-settings-sheet"),
   edgeSettingsClose: document.getElementById("edge-settings-close"),
   edgeOverlayEnabled: document.getElementById("edge-overlay-enabled"),
+  edgeLockscreenEnabled: document.getElementById("edge-lockscreen-enabled"),
+  edgeLockscreenHint: document.getElementById("edge-lockscreen-hint"),
+  edgeLockscreenGrant: document.getElementById("edge-lockscreen-grant"),
   edgeStyle: document.getElementById("edge-style"),
   edgeBand: document.getElementById("edge-band"),
   edgeCocoonFallback: document.getElementById("edge-cocoon-fallback"),
@@ -591,6 +594,86 @@ function updatePlayerScreenAccessHint() {
     : "Nécessite une permission d'accessibilité séparée (elle lit l'écran de Deezer/Spotify, rien d'autre) — sans elle, ce réglage reste sans effet.";
 }
 
+/* --- lock-screen visualizer: a "fake AOD" — the display kept lit, showing the same styles as
+   Edge Visualizer, in place of the phone's own screen-off/Always-On Display while music plays.
+   There is no public API on Android or One UI for a third-party app to draw on the real AOD
+   hardware panel — see docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. Off by
+   default: unlike Edge Visualizer, this keeps the screen genuinely on, which costs meaningfully
+   more battery than a real AOD ever would. */
+
+const LOCKSCREEN_VISUALIZER_ENABLED_KEY = "vizuzik:lockScreenVisualizer";
+
+function isLockScreenVisualizerEnabled() {
+  try {
+    // Opposite default from Edge Visualizer's own key: absent means *off* here — this is the
+    // more intrusive of the two features, and starts off until someone deliberately turns it on.
+    return localStorage.getItem(LOCKSCREEN_VISUALIZER_ENABLED_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function rememberLockScreenVisualizerEnabled(enabled) {
+  try {
+    localStorage.setItem(LOCKSCREEN_VISUALIZER_ENABLED_KEY, enabled ? "on" : "off");
+  } catch (err) {
+    /* see isLockScreenVisualizerEnabled() */
+  }
+}
+
+let lockScreenVisualizerEnabled = isLockScreenVisualizerEnabled();
+// The two grants this needs, in the order they're asked for — see updateLockScreenHint(). Assumed
+// missing until the native side says otherwise, same as every other special permission here.
+let lockScreenNotificationGranted = false;
+let lockScreenFullScreenGranted = false;
+
+function setLockScreenVisualizerEnabled(enabled) {
+  lockScreenVisualizerEnabled = enabled;
+  rememberLockScreenVisualizerEnabled(enabled);
+  DeezerMedia.setLockScreenVisualizerEnabled({ enabled }).catch(() => {});
+  updateLockScreenHint();
+}
+
+async function syncLockScreenPermissions() {
+  try {
+    const notificationState = await DeezerMedia.checkNotificationPermission();
+    lockScreenNotificationGranted = !!(notificationState && notificationState.granted);
+  } catch (err) {
+    // Older native build without the method: leave it unknown, same as every other check here.
+    lockScreenNotificationGranted = false;
+  }
+  try {
+    const fullScreenState = await DeezerMedia.checkFullScreenIntentPermission();
+    lockScreenFullScreenGranted = !!(fullScreenState && fullScreenState.granted);
+  } catch (err) {
+    lockScreenFullScreenGranted = false;
+  }
+  updateLockScreenHint();
+}
+
+/** One button covers both grants, one at a time — same "strictly sequential" rule
+ *  runFirstLaunchSetup() follows for Edge Visualizer's own two permissions: notifications first
+ *  (without it the whole feature is silently a no-op), then the Android 14+ full-screen-intent
+ *  special access, since asking for both at once would stack one system screen on the other. */
+function updateLockScreenHint() {
+  if (!els.edgeLockscreenHint) return;
+  if (!lockScreenNotificationGranted) {
+    els.edgeLockscreenGrant.hidden = false;
+    els.edgeLockscreenGrant.textContent = "Autoriser les notifications";
+    els.edgeLockscreenHint.textContent =
+      "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé. Nécessite d'autoriser les notifications.";
+  } else if (!lockScreenFullScreenGranted) {
+    els.edgeLockscreenGrant.hidden = false;
+    els.edgeLockscreenGrant.textContent = "Autoriser le plein écran";
+    els.edgeLockscreenHint.textContent =
+      "Encore une autorisation nécessaire (Android 14+) : sans elle, la notification s'affiche normalement mais ne ramène jamais l'écran toute seule.";
+  } else {
+    els.edgeLockscreenGrant.hidden = true;
+    els.edgeLockscreenHint.textContent =
+      "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé.";
+  }
+}
+
 /** Re-reads the native "display over other apps" grant. Called on launch and on every resume. */
 async function syncOverlayPermission() {
   try {
@@ -997,6 +1080,9 @@ async function loadEdgeConfig() {
   // (below Android 8), where there is nothing to turn on.
   els.edgeOverlayEnabled.checked = edgeOverlayEnabled;
   els.edgeOverlayEnabled.disabled = !overlaySupported;
+  // Same reasoning: lives in LockScreenVisualizerPreference, not EdgeConfig, tracked here by
+  // lockScreenVisualizerEnabled.
+  els.edgeLockscreenEnabled.checked = lockScreenVisualizerEnabled;
 }
 
 let edgeSettingsCloseTimer = null;
@@ -1253,6 +1339,7 @@ els.edgeSettingsOpen.addEventListener("click", () => {
   // without making the sheet wait on a PackageManager query it only sometimes ends up needing.
   ensureInstalledAppsLoaded();
   syncPlayerScreenAccess();
+  syncLockScreenPermissions();
 });
 els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
 els.edgeSettingsSheet.addEventListener("click", (event) => {
@@ -1271,6 +1358,21 @@ els.edgeOverlayEnabled.addEventListener("change", () => {
 });
 els.edgeUsageGrant.addEventListener("click", () => {
   DeezerMedia.requestUsageAccess().catch(() => {});
+});
+
+els.edgeLockscreenEnabled.addEventListener("change", () => {
+  setLockScreenVisualizerEnabled(els.edgeLockscreenEnabled.checked);
+});
+
+els.edgeLockscreenGrant.addEventListener("click", async () => {
+  // One at a time, same rule as everywhere else in this file: only ever the grant
+  // updateLockScreenHint() is currently pointing at, never both at once.
+  if (!lockScreenNotificationGranted) {
+    await DeezerMedia.requestNotificationPermission().catch(() => {});
+  } else {
+    DeezerMedia.requestFullScreenIntentPermission().catch(() => {});
+  }
+  syncLockScreenPermissions();
 });
 
 /* Where the album art sits can only be estimated from the screen's shape (there is no way to read
@@ -1742,6 +1844,8 @@ applyDisplayMode(false);
   // (false), so EdgeOverlayController could never start the overlay on its own from a track
   // starting in Deezer — exactly the "Vizuzik never opened this session" case it exists for.
   DeezerMedia.setEdgeOverlayEnabled({ enabled: edgeOverlayEnabled }).catch(() => {});
+  // Same cold-start mirror, for LockScreenVisualizerPreference/LockScreenVisualizerController.
+  DeezerMedia.setLockScreenVisualizerEnabled({ enabled: lockScreenVisualizerEnabled }).catch(() => {});
   // Cold start only: never repeated on a later resume, since by then a resumed session is
   // already exactly where it should be, and redoing this mid-session would restart a track the
   // user is deliberately listening to or pausing.

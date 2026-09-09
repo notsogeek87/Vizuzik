@@ -41,6 +41,11 @@ public class NowPlayingListenerService extends NotificationListenerService {
         // plays, without the user ever having to open Vizuzik first.
         EdgeOverlayController.getInstance().init(getApplicationContext());
         DeezerMediaBridge.getInstance().addListener(EdgeOverlayController.getInstance());
+        // Same reasoning as EdgeOverlayController just above: the lock-screen visualizer has to
+        // work even if Vizuzik's own Activity/webview never runs this session, and this service
+        // is the one component guaranteed alive whenever notification access is granted.
+        LockScreenVisualizerController.getInstance().init(getApplicationContext());
+        DeezerMediaBridge.getInstance().addListener(LockScreenVisualizerController.getInstance());
         // Same reasoning, and the reason this has to happen *here* rather than when the overlay
         // starts: the music app announces its audio session once, when it opens it, so anything
         // that only starts listening after the user has switched to that app has already missed
@@ -73,6 +78,7 @@ public class NowPlayingListenerService extends NotificationListenerService {
         // nothing else around (MainActivity may never have run this session) to correct it.
         DeezerMediaBridge.getInstance().clear();
         DeezerMediaBridge.getInstance().removeListener(EdgeOverlayController.getInstance());
+        DeezerMediaBridge.getInstance().removeListener(LockScreenVisualizerController.getInstance());
         // Symmetric with the start in onListenerConnected(). Without notification access there is
         // no tracked session left to follow, and an attached Visualizer would otherwise keep
         // RECORD_AUDIO in continuous use for the rest of the process's life.

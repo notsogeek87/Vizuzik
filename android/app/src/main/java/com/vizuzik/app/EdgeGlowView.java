@@ -40,11 +40,12 @@ import java.util.Set;
  * colors (or a fixed custom palette, see EdgeConfig), and a real event (track change, play/pause)
  * is still allowed an honest pulse.
  *
- * Four rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
+ * Five rendering styles, picked in the settings panel (EdgeConfig): "bars", the default, drawing
  * each of the 32 bands on its own; "glow", the border that averages them into one scalar;
- * "cocoon", a ribbon woven around Deezer's own album art; and "vinyl", that same artwork redrawn
- * as a spinning record in the same spot — see drawCocoon() and drawVinyl() below for why and how
- * those two aren't edge-only like the first two.
+ * "particles", sparks spawned from the edges by whichever bands just moved; "cocoon", a ribbon
+ * woven around Deezer's own album art; and "vinyl", that same artwork redrawn as a spinning record
+ * in the same spot — see drawCocoon() and drawVinyl() below for why and how those two aren't
+ * edge-only like the first three.
  */
 final class EdgeGlowView extends View {
 
@@ -156,6 +157,20 @@ final class EdgeGlowView extends View {
     // ever push a strand outward: this view draws on top of the music app, so anything that
     // dipped inward would crawl across the album art it is supposed to be framing.
     private static final float COCOON_WAVE_MAX = 0.085f + 0.042f + 0.055f;
+
+    // "Particles": a fixed pool rather than a growing list, so a burst of spawns can never
+    // allocate — a spawn that finds every slot already alive is simply skipped for that frame.
+    // 48 is enough sparks on screen at once to read as a field rather than a scatter of dots
+    // without ever being dense enough to obscure the app underneath.
+    private static final int PARTICLE_COUNT = 48;
+    private static final float PARTICLE_LIFE_MS = 850f;
+    // Chance per lane per second of spawning one spark at full band level — scaled down by how
+    // loud that band actually is, so a quiet passage spawns far fewer than a loud one instead of
+    // firing at a constant rate regardless of what's playing.
+    private static final float PARTICLE_SPAWN_RATE = 5.5f;
+    private static final int PARTICLE_LANES_PER_EDGE = 8;
+    private static final float PARTICLE_SPEED_DP = 90f;
+    private static final float PARTICLE_DRAG = 0.985f;
 
     // "Vinyl": the same 16s-per-turn rate the web player's own .disc__spin uses, so the overlay
     // reads as the same object rather than a different speed invented for the native side. A
@@ -293,6 +308,22 @@ final class EdgeGlowView extends View {
     private float[] barPeaks;
     private float[] barPeakFall;
 
+    /** One spark of the "particles" style. Plain mutable fields on a fixed-size pool (see
+     *  PARTICLE_COUNT) rather than a list: allocating/removing per spawn/death would mean garbage
+     *  on a decorative overlay's own frame tick, which this file avoids everywhere else too. */
+    private static final class Particle {
+        boolean alive;
+        float x, y, vx, vy;
+        float ageMs;
+        float size;
+        /** Fixed at spawn so a spark keeps one identity as the travelling palette moves under it —
+         *  same trick drawCocoon()'s three strands use at indices 0/1/2. */
+        float colorSlot;
+    }
+
+    private final Particle[] particles = new Particle[PARTICLE_COUNT];
+    private final java.util.Random particleRandom = new java.util.Random();
+
     // Ambient-only breathing: three periods with no common multiple, so the glow never seems to
     // loop — same idea as _updateAmbient() in visualizer.js, just three oscillators instead of
     // per-band ones since this view has no spectrum to speak of, only a border.
@@ -361,6 +392,17 @@ final class EdgeGlowView extends View {
     private final int[] viewLocation = new int[2];
     private final Rect displayBounds = new Rect();
 
+    // Set once by LockScreenVisualizerActivity, never by OverlayEdgeGlowService: this view also
+    // hosts the "fake AOD" full-screen visualizer, where there is no other app underneath to
+    // check for or protect the touches of, and no Deezer layout for "cocoon"/"vinyl" to anchor
+    // themselves against — see updateSuppression() and activeStyle() for what each skips because
+    // of it.
+    private boolean standalone;
+
+    void setStandalone(boolean value) {
+        standalone = value;
+    }
+
     private boolean suppressed;
     /**
      * Whether that verdict has actually been reached yet, as opposed to merely defaulting to
@@ -391,6 +433,7 @@ final class EdgeGlowView extends View {
         density = context.getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
         for (int i = 0; i < cocoonTiers.length; i++) cocoonTiers[i] = new Path();
+        for (int i = 0; i < particles.length; i++) particles[i] = new Particle();
     }
 
     /** Applied once at startup and again whenever the settings panel changes something while the
@@ -572,9 +615,14 @@ final class EdgeGlowView extends View {
             advanceCocoonPhases(dtMs / 1000f);
             advanceBars(dtMs / 1000f);
             advanceVinyl(dtMs / 1000f);
+            advanceParticles(dtMs / 1000f);
             updateSuppression(now);
             updateWindowBounds();
-            publishDiagnostics();
+            // OverlayDiagnostics is a single static, process-wide surface for the settings panel's
+            // diagnostics block — meant to describe OverlayEdgeGlowService's own window. A
+            // standalone instance (LockScreenVisualizerActivity) publishing into the same fields
+            // would fight with it rather than add anything the panel knows how to show.
+            if (!standalone) publishDiagnostics();
 
             invalidate();
         } catch (Exception e) {
@@ -640,6 +688,112 @@ final class EdgeGlowView extends View {
         }
     }
 
+    /**
+     * Ages every spark, moves the live ones, and spawns fresh ones off whichever active edge's
+     * bands just moved. Spawning only ever happens with real levels flowing in — same rule as
+     * advanceBars(): a spectrum style has no ambient regime to fall back to, since inventing
+     * sparks for a spectrum it isn't hearing is exactly the kind of invented rhythm this app
+     * never shows. Existing sparks still age out normally once the capture goes quiet.
+     */
+    private void advanceParticles(float dt) {
+        for (Particle p : particles) {
+            if (!p.alive) continue;
+            p.ageMs += dt * 1000f;
+            if (p.ageMs >= PARTICLE_LIFE_MS) {
+                p.alive = false;
+                continue;
+            }
+            p.vx *= PARTICLE_DRAG;
+            p.vy *= PARTICLE_DRAG;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+        }
+
+        float[] bands = lastBands;
+        boolean live = bands != null && bands.length > 0 && lastLevelsAtMs != 0
+            && SystemClock.elapsedRealtime() - lastLevelsAtMs < LIVE_LEVELS_TIMEOUT_MS;
+        if (!live) return;
+
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        int from = bandFrom(bands.length);
+        int to = bandTo(bands.length);
+        if (to <= from) return;
+        float pulse = clamp01(beatEnergy);
+
+        if (edgeTop) spawnParticlesOnEdge(bands, from, to, width, height, 0, pulse);
+        if (edgeBottom) spawnParticlesOnEdge(bands, from, to, width, height, 1, pulse);
+        if (edgeLeft) spawnParticlesOnEdge(bands, from, to, width, height, 2, pulse);
+        if (edgeRight) spawnParticlesOnEdge(bands, from, to, width, height, 3, pulse);
+    }
+
+    /** One edge's lanes, each an evenly-spaced sample of the active band range — mirrored the same
+     *  way drawBars() mirrors its own slots, bass in the middle of the edge rather than piled at
+     *  one end of every one of the four. edgeSide: 0 top, 1 bottom, 2 left, 3 right. */
+    private void spawnParticlesOnEdge(float[] bands, int from, int to, int width, int height,
+                                      int edgeSide, float pulse) {
+        int n = to - from;
+        boolean horizontal = edgeSide < 2;
+        int extent = horizontal ? width : height;
+        for (int lane = 0; lane < PARTICLE_LANES_PER_EDGE; lane++) {
+            int band = mirroredBandIndex(lane * n / PARTICLE_LANES_PER_EDGE, n, from);
+            float value = clamp01(bands[band] * sensitivity);
+            float chance = (value * intensity + pulse * 0.4f) * PARTICLE_SPAWN_RATE / PARTICLE_LANES_PER_EDGE;
+            if (chance <= 0f || particleRandom.nextFloat() > chance) continue;
+
+            Particle p = freeParticle();
+            if (p == null) return; // pool full — try again next tick rather than force one out
+
+            float along = (lane + 0.5f) / PARTICLE_LANES_PER_EDGE * extent;
+            float speed = (PARTICLE_SPEED_DP * density) * (0.5f + value);
+            switch (edgeSide) {
+                case 0: p.x = along; p.y = 0; p.vx = 0; p.vy = speed; break;
+                case 1: p.x = along; p.y = height; p.vx = 0; p.vy = -speed; break;
+                case 2: p.x = 0; p.y = along; p.vx = speed; p.vy = 0; break;
+                default: p.x = width; p.y = along; p.vx = -speed; p.vy = 0; break;
+            }
+            p.ageMs = 0f;
+            p.size = (2.2f + value * 3.4f) * density;
+            p.colorSlot = (float) band / Math.max(1, bands.length - 1) * 3f;
+            p.alive = true;
+        }
+    }
+
+    private Particle freeParticle() {
+        for (Particle p : particles) {
+            if (!p.alive) return p;
+        }
+        return null;
+    }
+
+    /** Each spark drawn as a small bright core over a wider, dimmer halo — the same two-pass idea
+     *  drawCocoonSparks() uses for its own motes — fading out linearly over its short life. */
+    private void drawParticles(Canvas canvas) {
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setShader(null);
+        paint.setAntiAlias(true);
+
+        for (Particle p : particles) {
+            if (!p.alive) continue;
+            float lifeFrac = clamp01(p.ageMs / PARTICLE_LIFE_MS);
+            float fade = 1f - lifeFrac;
+            int color = saturate(paletteColorAt(p.colorSlot));
+
+            paint.setColor(withAlpha(lit(color, 0.3f), clamp255((int) (60 * fade * brightnessMul))));
+            canvas.drawCircle(p.x, p.y, p.size * 2.4f, paint);
+            paint.setColor(withAlpha(lit(color, 0.6f), clamp255((int) (220 * fade * brightnessMul))));
+            canvas.drawCircle(p.x, p.y, p.size, paint);
+        }
+
+        paint.setAntiAlias(false);
+    }
+
     private static float wrapTwoPi(float value) {
         float tau = (float) (Math.PI * 2);
         float wrapped = value % tau;
@@ -654,6 +808,15 @@ final class EdgeGlowView extends View {
      * over an app it needn't have.
      */
     private void updateSuppression(long now) {
+        // Standalone (LockScreenVisualizerActivity) has no other app underneath to check for or
+        // hide from — it *is* the whole screen, with nothing else in the window stack this view
+        // could be suppressed in favour of. Every question below is meaningless there.
+        if (standalone) {
+            suppressed = false;
+            suppressionResolved = true;
+            if (getVisibility() != VISIBLE) setVisibility(VISIBLE);
+            return;
+        }
         // The screen's own size only changes on a fold or a rotation, and the "usage access"
         // grant almost never — neither is worth asking about at the rate the question "is the
         // music app still in front?" has to be asked to answer it promptly.
@@ -747,6 +910,13 @@ final class EdgeGlowView extends View {
      */
     private String activeStyle() {
         if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
+        // Standalone has no tracked app's now-playing screen to model the artwork's position
+        // against in the first place (see the ART_* constants) — there is no layout to have
+        // measured, only Vizuzik's own plain background. Always the fallback, same one the
+        // overlay uses whenever the tracked app isn't what's on screen.
+        if (standalone) {
+            return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
+        }
         boolean playerScreenKnown = requirePlayerScreen && NowPlayerScreenState.isServiceConnected();
         boolean onPlayerScreen = !playerScreenKnown || NowPlayerScreenState.isOnPlayerScreen();
         if (foregroundKnown && trackedAppConfirmed && onPlayerScreen) return style;
@@ -764,6 +934,8 @@ final class EdgeGlowView extends View {
             String active = activeStyle();
             if (EdgeConfig.STYLE_BARS.equals(active)) {
                 drawBars(canvas);
+            } else if (EdgeConfig.STYLE_PARTICLES.equals(active)) {
+                drawParticles(canvas);
             } else if (EdgeConfig.STYLE_COCOON.equals(active)) {
                 drawCocoon(canvas);
             } else if (EdgeConfig.STYLE_VINYL.equals(active)) {
