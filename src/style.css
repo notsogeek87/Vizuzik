@@ -308,10 +308,24 @@ body[data-state="playing"] .cassette__reel {
   stroke-width: 1.5;
 }
 
+/* The dashes are the "moving" part: a static line would leave the reels as the only sign of
+   playback, so this marches the same way they turn, gated to playing the same way. */
 .cassette__tape {
   fill: none;
   stroke: rgba(247, 248, 252, 0.3);
   stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 5.5;
+  animation: cassette-tape-run 0.7s linear infinite;
+  animation-play-state: paused;
+}
+
+body[data-state="playing"] .cassette__tape {
+  animation-play-state: running;
+}
+
+@keyframes cassette-tape-run {
+  to { stroke-dashoffset: -14; }
 }
 
 .cassette__reelring {
@@ -332,15 +346,51 @@ body[data-state="playing"] .cassette__reel {
   fill: rgba(5, 5, 11, 0.7);
 }
 
+/* Metal gradient rather than a flat fill, so each capstan/screw reads as a small convex bolt
+   catching the same light instead of a painted dot. */
 .cassette__capstan {
-  fill: rgba(5, 5, 11, 0.65);
-  stroke: rgba(247, 248, 252, 0.35);
-  stroke-width: 1.4;
+  fill: url(#cassette-metal);
+  stroke: rgba(0, 0, 0, 0.5);
+  stroke-width: 1;
 }
 
-.cassette__screw,
+.cassette__screw {
+  fill: url(#cassette-metal);
+  stroke: rgba(0, 0, 0, 0.4);
+  stroke-width: 0.6;
+}
+
 .cassette__notch {
   fill: rgba(247, 248, 252, 0.28);
+}
+
+/* A small highlight dot layered on top of each reel's accent-coloured hub (see the inline
+   fill="url(#cassette-accent)" circle it sits over) — same convex, single-light-source read as
+   the screws, without touching the accent fill that follows the album palette. */
+.cassette__hubshine {
+  pointer-events: none;
+}
+
+.cassette__gloss {
+  transform-box: fill-box;
+  animation: cassette-gloss-sweep 7s ease-in-out infinite;
+}
+
+/* Rect sits at x="-40" in the markup, i.e. already off the shell's left edge (shell starts at
+   x="8"); these translate it from further off-screen left to past the shell's right edge
+   (x="312"), so the ~16-unit-wide highlight band inside it (see the #cassette-gloss stops)
+   crosses the full width without ever popping in or out mid-shell. */
+@keyframes cassette-gloss-sweep {
+  0%, 62% { transform: translateX(-170px); }
+  100% { transform: translateX(400px); }
+}
+
+/* Never animated, never re-seeded — one static feTurbulence render composited over everything
+   else in the shell (see .cassette in index.html for stacking order), cheap because the browser
+   only has to paint it once. */
+.cassette__grain {
+  pointer-events: none;
+  mix-blend-mode: overlay;
 }
 
 .cassette__stop--a {
@@ -1721,6 +1771,8 @@ body[data-platform="tv"][data-mode="cassette"] .artist {
   .disc__sheen,
   .disc__spin,
   .cassette__reel,
+  .cassette__tape,
+  .cassette__gloss,
   .title .marquee__text,
   .message__pulse,
   .sheet__wave span,
