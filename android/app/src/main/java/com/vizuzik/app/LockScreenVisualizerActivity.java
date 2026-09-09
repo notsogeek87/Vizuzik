@@ -75,6 +75,22 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             finish();
         }
     };
+    /** setShowWhenLocked() keeps this Activity drawn on top of the keyguard even after the user
+     *  actually unlocks — fingerprint/PIN/pattern auth is handled entirely by the system keyguard
+     *  underneath and never touches this Activity, so nothing here would otherwise notice the
+     *  device is no longer locked. Left alone, that strands this screen up after a real unlock:
+     *  it doesn't finish, and the status/navigation bars that were hidden (see the
+     *  WindowInsetsControllerCompat call in onCreate()) reappear on top of it once the system
+     *  treats the window as a normal unlocked one again — exactly the "bars show up but the
+     *  screen doesn't go away" report this receiver fixes. ACTION_USER_PRESENT is the system
+     *  broadcast sent the moment the keyguard is actually dismissed, independent of which
+     *  Activity happens to be on top of it. */
+    private final BroadcastReceiver userPresentReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            finish();
+        }
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -168,6 +184,14 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             new IntentFilter(LockScreenVisualizerController.ACTION_DISABLED),
             ContextCompat.RECEIVER_NOT_EXPORTED
         );
+        // ACTION_USER_PRESENT is a protected system broadcast (only the system can send it), so
+        // NOT_EXPORTED is correct here too, same as disabledReceiver above.
+        ContextCompat.registerReceiver(
+            this,
+            userPresentReceiver,
+            new IntentFilter(Intent.ACTION_USER_PRESENT),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        );
     }
 
     @Override
@@ -189,6 +213,11 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         AudioLevelsBridge.getInstance().removeListener(this);
         try {
             unregisterReceiver(disabledReceiver);
+        } catch (IllegalArgumentException e) {
+            // Already unregistered (e.g. this onStop() runs twice) — nothing left to undo.
+        }
+        try {
+            unregisterReceiver(userPresentReceiver);
         } catch (IllegalArgumentException e) {
             // Already unregistered (e.g. this onStop() runs twice) — nothing left to undo.
         }
