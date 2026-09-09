@@ -10,8 +10,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.WindowManager;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationManagerCompat;
@@ -27,8 +30,11 @@ import androidx.core.view.WindowInsetsControllerCompat;
  * docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md for why that was checked rather
  * than assumed. This is the closest visual equivalent that public APIs actually allow: the same
  * trick an incoming-call or alarm screen uses (setShowWhenLocked + setTurnScreenOn), never
- * dismissing the keyguard itself — pressing back, tapping anywhere, or the system's own gestures
- * all fall through to it exactly as if this Activity had never shown up.
+ * dismissing the keyguard itself — a double tap or the system's own home gesture/button fall
+ * through to it exactly as if this Activity had never shown up. Deliberately narrow on purpose: a
+ * single stray touch (the phone moving in a pocket or bag while this screen is showing) must not
+ * dismiss it and drop back to the real keyguard's own unlock prompt — see the double-tap gesture
+ * detector and the disabled back press below.
  *
  * Costs real battery that a genuine AOD panel doesn't: the display stays fully driven rather than
  * dropping into the hardware's own low-power ambient refresh path. Never started on its own — see
@@ -93,8 +99,8 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         // an app asks the system to unlock the device (dismissing it outright if there's no PIN,
         // prompting for credentials if there is) — the opposite of what this screen is for. It
         // shows *over* the keyguard, same as an incoming call, and never touches it: pressing
-        // home, the back gesture, or tapping this screen (see the click listener below) all leave
-        // whatever lock the phone had exactly as locked as it was.
+        // home or double-tapping this screen (see below) both just drop back to whatever is
+        // normally there, leaving the phone exactly as locked as it was.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         WindowInsetsControllerCompat controller =
             new WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
@@ -104,13 +110,36 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         EdgeGlowView view = new EdgeGlowView(this);
         view.setStandalone(true);
         view.setBackgroundColor(Color.BLACK);
-        // Any tap drops straight back to whatever would normally be there — the real lock screen,
-        // its own AOD if the device has one. This Activity has no controls of its own to protect
-        // from an accidental touch; showing up at all was already the deliberate act.
-        view.setClickable(true);
-        view.setOnClickListener(v -> finish());
+        // Only a double tap drops back to whatever would normally be there — the real lock
+        // screen, its own AOD if the device has one. A single tap is deliberately ignored: this
+        // screen sits over the keyguard while the phone is moving (pocket, bag, hand), and a
+        // single stray touch dismissing it would fall through to the real lock screen's own
+        // unlock prompt for no reason the user asked for.
+        GestureDetector doubleTapDetector = new GestureDetector(
+            this,
+            new GestureDetector.SimpleOnGestureListener() {
+                @Override
+                public boolean onDoubleTap(MotionEvent e) {
+                    finish();
+                    return true;
+                }
+            }
+        );
+        view.setOnTouchListener((v, event) -> doubleTapDetector.onTouchEvent(event));
         setContentView(view);
         glowView = view;
+
+        // Back press must not dismiss this screen either — only the double tap above or the
+        // system's own home gesture/button (which already finishes this Activity via onStop(),
+        // see below) may. Consuming it here rather than leaving the default (finish this
+        // Activity) keeps a stray back-edge swipe while the phone is moving from doing the same
+        // unwanted thing a stray tap would.
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                // Deliberately empty: swallow the back press instead of dismissing this screen.
+            }
+        });
 
         // Cancel the full-screen-intent notification that got this Activity here — see
         // LockScreenVisualizerController.postFullScreenNotification(). It has done its job the
@@ -218,8 +247,4 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     public void onCaptureStopped() {
         if (glowView != null) glowView.clearLevels();
     }
-
-    // No back-press override: the system default (finish this Activity) is exactly right here —
-    // it drops straight back to whatever is normally underneath, the same as the tap handler
-    // above.
 }

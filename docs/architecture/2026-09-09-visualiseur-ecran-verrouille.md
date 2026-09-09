@@ -97,9 +97,21 @@ Alimentée directement par les deux mêmes ponts qu'`OverlayEdgeGlowService` éc
 
 Ne dissout jamais elle-même le verrouillage : `KeyguardManager.requestDismissKeyguard()` n'est
 jamais appelée (une version précédente de ce fichier, écrite puis corrigée avant tout commit, s'y
-essayait par erreur — cette méthode déverrouille, ce qui est l'exact contraire du but). Un appui
-n'importe où, la touche retour, ou le geste système d'accueil retombent tous sur ce qu'il y aurait
-normalement — l'écran de verrouillage réel, tel quel.
+essayait par erreur — cette méthode déverrouille, ce qui est l'exact contraire du but). Seuls un
+double tap ou le geste/bouton système d'accueil font retomber l'écran sur ce qu'il y aurait
+normalement — l'écran de verrouillage réel, tel quel (voir le correctif ci-dessous : un appui
+simple ou la touche retour ne le font plus).
+
+**Correctif : un simple appui, déclenché par le mouvement du téléphone, dissolvait l'écran vers le
+vrai verrouillage.** Premier retour terrain : le téléphone bougeant en poche ou en sac (tissu
+frottant l'écran) déclenchait des appuis accidentels sur cette Activity plein écran, qui
+`finish()`ait au premier appui — retombant sur le vrai `keyguard`, qui tentait alors de se
+déverrouiller sans que l'utilisateur l'ait demandé. La touche retour posait le même risque (un
+geste de bord accidentel pendant le mouvement). Correctif : un `GestureDetector` remplace le
+`OnClickListener` — seul un double tap appelle désormais `finish()` — et un
+`OnBackPressedCallback` avale la touche retour au lieu de la laisser dissoudre l'écran par défaut.
+Le geste/bouton système d'accueil continue de fonctionner sans changement : il sort déjà cette
+Activity du premier plan, ce qui déclenche `onStop()` → `finish()`.
 
 S'arrête d'elle-même (`onStop()` → `finish()`) dès qu'autre chose passe au premier plan — un
 déverrouillage réel, le bouncer du keyguard, un appel — puisqu'il n'y a rien à reprendre ensuite.
