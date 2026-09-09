@@ -304,9 +304,11 @@ body[data-state="playing"] .cassette__reel {
 }
 
 /* Muted rather than shown at full brightness/saturation — a glossy phone photo sitting on a
-   printed cassette label would look pasted on; this reads more like ink on paper. */
+   printed cassette label would look pasted on; this reads more like ink on paper. contrast()
+   below 1 pulls shadows toward mid-grey and brightness() above 1 lifts the whole image a touch,
+   together keeping a dark album cover legible on the label instead of crushing it toward black. */
 .cassette__art-image {
-  filter: saturate(0.85) contrast(0.93) brightness(0.96);
+  filter: saturate(0.9) contrast(0.88) brightness(1.05);
 }
 
 .cassette__label-frame {
