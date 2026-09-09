@@ -245,6 +245,11 @@ l'écran d'accueil.
 - Une fois activé une première fois (réglage + permission d'overlay accordée), fonctionne même si
   Vizuzik n'est plus jamais ouvert ensuite — voir
   [l'ADR correspondant](../architecture/2026-09-06-edge-visualizer.md) pour comment.
+- Ce contour ne s'affiche que pendant que l'écran est allumé. Pour un rendu plein écran pendant
+  que le téléphone serait normalement en veille, voir
+  [Visualiseur écran verrouillé](../architecture/2026-09-09-visualiseur-ecran-verrouille.md) — une
+  fonctionnalité distincte, désactivée par défaut, qui n'est pas non plus un rendu sur la vraie
+  AOD (impossible pour une app tierce) mais une imitation qui garde l'écran allumé.
 - N'ouvre jamais le microphone : une première version le faisait, mais ça s'est révélé peu fiable
   et a été abandonné (voir la
   même ADR).

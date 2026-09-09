@@ -36,7 +36,13 @@ import java.util.Set;
 
 @CapacitorPlugin(
     name = "DeezerMedia",
-    permissions = { @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "microphone") }
+    permissions = {
+        @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "microphone"),
+        // Android 13+ only (a no-op grant below that, same as every runtime permission on an
+        // older OS) — needed for the lock-screen visualizer's full-screen-intent notification to
+        // post at all. See checkNotificationPermission()/requestNotificationPermission() below.
+        @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notifications"),
+    }
 )
 public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
 
@@ -347,6 +353,91 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         JSObject result = new JSObject();
         result.put("granted", granted);
         call.resolve(result);
+    }
+
+    /** Whether Vizuzik currently holds POST_NOTIFICATIONS — needed for the lock-screen
+     *  visualizer's full-screen-intent notification to post at all (Android 13+; always granted
+     *  below that, same as every runtime permission on an older OS). */
+    @PluginMethod
+    public void checkNotificationPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", getPermissionState("notifications") == PermissionState.GRANTED);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        if (getPermissionState("notifications") == PermissionState.GRANTED) {
+            JSObject result = new JSObject();
+            result.put("granted", true);
+            call.resolve(result);
+            return;
+        }
+        requestPermissionForAlias("notifications", call, "handleNotificationPermission");
+    }
+
+    @PermissionCallback
+    private void handleNotificationPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", getPermissionState("notifications") == PermissionState.GRANTED);
+        call.resolve(result);
+    }
+
+    /**
+     * Whether Android will actually let a HIGH-importance notification's full-screen intent
+     * launch its Activity — what brings LockScreenVisualizerActivity up over the lock screen (see
+     * LockScreenVisualizerController.postFullScreenNotification()). Below Android 14 this is
+     * "supported": false only in the sense that there is nothing to separately grant — the
+     * permission alone is enough, so canUseFullScreenIntent() already answers true there.
+     */
+    @PluginMethod
+    public void checkFullScreenIntentPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", NotificationManagerCompat.from(getContext()).canUseFullScreenIntent());
+        call.resolve(result);
+    }
+
+    /**
+     * Opens the system "full screen intent" special-access screen — only reachable at all from
+     * Android 14, where this became a separate grant rather than something the manifest
+     * permission alone unlocked (see USE_FULL_SCREEN_INTENT in AndroidManifest.xml for why).
+     */
+    @PluginMethod
+    public void requestFullScreenIntentPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            call.reject("unavailable");
+            return;
+        }
+        Intent intent = new Intent(
+            Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+            Uri.parse("package:" + getContext().getPackageName())
+        );
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryStartActivity(intent)) {
+            call.resolve();
+        } else {
+            call.reject("unavailable");
+        }
+    }
+
+    /**
+     * Mirrors the web layer's "Visualiseur écran verrouillé" toggle into
+     * LockScreenVisualizerPreference — the only way LockScreenVisualizerController (running
+     * natively, independent of this plugin/the webview) can find out the setting changed. Unlike
+     * setEdgeOverlayEnabled(), turning this *off* is also acted on immediately: a screen already
+     * shown for it has no other way to learn the setting changed under it.
+     */
+    @PluginMethod
+    public void setLockScreenVisualizerEnabled(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", false);
+        LockScreenVisualizerPreference.setEnabled(getContext(), enabled);
+        LockScreenVisualizerController.getInstance().init(getContext().getApplicationContext());
+        if (enabled) {
+            LockScreenVisualizerController.getInstance().maybeShow();
+        } else {
+            LockScreenVisualizerController.getInstance().onDisabled();
+        }
+        call.resolve();
     }
 
     /**

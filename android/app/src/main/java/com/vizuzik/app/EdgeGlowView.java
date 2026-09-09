@@ -392,6 +392,17 @@ final class EdgeGlowView extends View {
     private final int[] viewLocation = new int[2];
     private final Rect displayBounds = new Rect();
 
+    // Set once by LockScreenVisualizerActivity, never by OverlayEdgeGlowService: this view also
+    // hosts the "fake AOD" full-screen visualizer, where there is no other app underneath to
+    // check for or protect the touches of, and no Deezer layout for "cocoon"/"vinyl" to anchor
+    // themselves against — see updateSuppression() and activeStyle() for what each skips because
+    // of it.
+    private boolean standalone;
+
+    void setStandalone(boolean value) {
+        standalone = value;
+    }
+
     private boolean suppressed;
     /**
      * Whether that verdict has actually been reached yet, as opposed to merely defaulting to
@@ -603,7 +614,11 @@ final class EdgeGlowView extends View {
             advanceParticles(dtMs / 1000f);
             updateSuppression(now);
             updateWindowBounds();
-            publishDiagnostics();
+            // OverlayDiagnostics is a single static, process-wide surface for the settings panel's
+            // diagnostics block — meant to describe OverlayEdgeGlowService's own window. A
+            // standalone instance (LockScreenVisualizerActivity) publishing into the same fields
+            // would fight with it rather than add anything the panel knows how to show.
+            if (!standalone) publishDiagnostics();
 
             invalidate();
         } catch (Exception e) {
@@ -789,6 +804,15 @@ final class EdgeGlowView extends View {
      * over an app it needn't have.
      */
     private void updateSuppression(long now) {
+        // Standalone (LockScreenVisualizerActivity) has no other app underneath to check for or
+        // hide from — it *is* the whole screen, with nothing else in the window stack this view
+        // could be suppressed in favour of. Every question below is meaningless there.
+        if (standalone) {
+            suppressed = false;
+            suppressionResolved = true;
+            if (getVisibility() != VISIBLE) setVisibility(VISIBLE);
+            return;
+        }
         // The screen's own size only changes on a fold or a rotation, and the "usage access"
         // grant almost never — neither is worth asking about at the rate the question "is the
         // music app still in front?" has to be asked to answer it promptly.
@@ -873,6 +897,13 @@ final class EdgeGlowView extends View {
      */
     private String activeStyle() {
         if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
+        // Standalone has no tracked app's now-playing screen to model the artwork's position
+        // against in the first place (see the ART_* constants) — there is no layout to have
+        // measured, only Vizuzik's own plain background. Always the fallback, same one the
+        // overlay uses whenever the tracked app isn't what's on screen.
+        if (standalone) {
+            return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
+        }
         boolean playerScreenKnown = requirePlayerScreen && NowPlayerScreenState.isServiceConnected();
         boolean onPlayerScreen = !playerScreenKnown || NowPlayerScreenState.isOnPlayerScreen();
         if (foregroundKnown && trackedAppOnScreen && onPlayerScreen) return style;

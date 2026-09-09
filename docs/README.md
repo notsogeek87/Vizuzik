@@ -22,6 +22,10 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
   — l'overlay décoratif dessiné sur les bords de l'écran par-dessus l'app de musique, ce qui a
   été retenu (et pourquoi) d'une première tentative retirée, et le panneau de réglages qui
   l'accompagne.
+- [Visualiseur écran verrouillé : la meilleure imitation d'une AOD accessible à une app tierce](architecture/2026-09-09-visualiseur-ecran-verrouille.md)
+  — pourquoi aucune app tierce ne peut dessiner sur la vraie AOD Samsung/Android, ce que fait
+  réellement ce mécanisme à la place (une Activity par-dessus l'écran verrouillé, écran gardé
+  allumé), et son coût en batterie.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des scènes.
