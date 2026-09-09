@@ -152,6 +152,30 @@ est celle qui justifie ce coût : les deux bobines, tournant à deux vitesses l�
 (`CASSETTE_DEG_PER_SEC_A`/`_B`, les mêmes que `.cassette__reel`/`.cassette__reel--b` côté web),
 seulement pendant la lecture — exactement la même règle que la rotation de « Vinyle ».
 
+## Correctif : la tâche partagée avec MainActivity coinçait `isForeground()` à vrai
+
+Premier retour du terrain (Z Fold8 réel) : l'Edge Visualizer (les barres par-dessus Deezer)
+cessait de réapparaître après un cycle verrouillage → visualiseur écran verrouillé →
+déverrouillage, et seul un relancement de Vizuzik le débloquait.
+
+Cause : `LockScreenVisualizerActivity` ne déclarait pas de `taskAffinity`, donc elle héritait par
+défaut de celle de l'application entière — la même que `MainActivity`, qui n'en déclare pas non
+plus. En `singleTask`, lancée avec `FLAG_ACTIVITY_NEW_TASK`, Android ne lui donne alors pas sa
+propre tâche : il la pose au sommet de la tâche existante de `MainActivity` (celle-ci n'a pas
+besoin d'être vivante pour compter — une entrée de tâche persiste dans les récents même après que
+son Activity a été détruite par le système). En se fermant (`finish()` au déverrouillage), l'écran
+retombe donc sur ce qu'il y a en dessous dans cette tâche *partagée* — `MainActivity` elle-même,
+ressuscitée en silence (`onResume()` sans `onPause()` en face). `MainActivity.isForeground()`
+reste alors coincé à vrai indéfiniment, et tout ce qui s'appuie dessus (`EdgeOverlayController`, et
+ce contrôleur-ci) refuse de (re)démarrer jusqu'à ce que l'app soit rouverte puis quittée
+proprement — exactement le symptôme rapporté.
+
+Correctif : `android:taskAffinity=""` sur `LockScreenVisualizerActivity`, qui lui garantit sa
+propre tâche isolée en toutes circonstances — se fermer ne peut alors plus jamais toucher la pile
+de `MainActivity`. Avec ce correctif, l'overlay ne s'arrête même plus pendant le cycle : rien dans
+son propre chemin de décision (`EdgeOverlayController`) ne dépend de cette Activity, donc il
+continue de tourner sans interruption du début à la fin — il n'y a plus rien à faire « revenir ».
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.
@@ -169,7 +193,11 @@ seulement pendant la lecture — exactement la même règle que la rotation de �
 
 **Aucun test manuel sur appareil dans cette session** — même contrainte que le reste de ce dépôt
 (pas de SDK Android ni d'émulateur ici) et un risque plus élevé qu'à l'habitude, puisqu'il s'agit
-cette fois d'interagir avec le verrouillage de l'écran :
+cette fois d'interagir avec le verrouillage de l'écran. Un premier aller-retour réel sur le Z Fold8
+a déjà fait remonter le bug de tâche partagée corrigé ci-dessus — le mécanisme de base (l'écran
+apparaît bien par-dessus le verrouillage) fonctionne donc, mais rien n'a encore confirmé le
+correctif lui-même, ni les cycles répétés (plusieurs allers-retours AOD → déverrouillage) qu'il vise
+à réparer.
 
 - La compilation a été vérifiée via le workflow GitHub Actions (`android.yml`, `assembleDebug`),
   comme chaque changement natif de ce dépôt qui ne peut pas être compilé localement.
