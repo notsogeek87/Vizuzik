@@ -132,6 +132,10 @@ de son côté le plus court (`STANDALONE_ART_FRACTION`, 62 % — voir plus bas p
 batterie). « Cocon » continue de retomber sur le style de repli : rien n'a changé pour lui, voir
 « Pistes non retenues ».
 
+**Deuxième mise à jour :** « Cassette » ne partage plus cette branche `standalone` d'`artRect()`
+avec « Vinyle ». Voir la section dédiée plus bas : elle occupe désormais tout l'écran, comme sur le
+lecteur web, plutôt qu'une icône centrée à 62 %.
+
 ### Le style « Cassette », natif et propre à cet écran
 
 Un sixième style dans `EdgeGlowView` (`EdgeConfig.STYLE_CASSETTE`, `drawCassette()`), jamais
@@ -151,6 +155,20 @@ jusqu'à 30 fois par seconde tant l'écran verrouillé est affiché. La seule pa
 est celle qui justifie ce coût : les deux bobines, tournant à deux vitesses légèrement différentes
 (`CASSETTE_DEG_PER_SEC_A`/`_B`, les mêmes que `.cassette__reel`/`.cassette__reel--b` côté web),
 seulement pendant la lecture — exactement la même règle que la rotation de « Vinyle ».
+
+**Plein écran, pas une icône centrée.** Contrairement à « Vinyle », `drawCassette()` ne passe pas
+par la branche `standalone` d'`artRect()` : elle calcule sa propre mise à l'échelle en « cover »
+(recadrée, jamais en lettrebox) directement à partir de la taille de l'écran, pour occuper tout
+l'écran bord à bord — exactement le rendu du lecteur web (`.cassette__art`, `width:100%;
+height:100%`, viewBox en `xMidYMid slice`), plutôt que le traitement partagé avec « Vinyle » qui la
+réduisait à une icône centrée sur 62 % du plus petit côté. En paysage, l'illustration (dessinée
+« côté cassette », donc paysage) n'a besoin de rien de plus. En portrait — l'orientation normale
+d'un écran verrouillé — elle est tournée de 90° autour du centre de l'écran et son échelle de
+recouvrement est mesurée contre la boîte permutée (la hauteur d'écran comme largeur, la largeur
+d'écran comme hauteur), pour que l'illustration tournée continue de courir bord à bord sans
+lettrebox : la même astuce que la règle web
+`@media (orientation: portrait) { .cassette__art { width: 100vh; height: 100vw; transform:
+translate(-50%, -50%) rotate(90deg); } }`.
 
 ## Correctif : la tâche partagée avec MainActivity coinçait `isForeground()` à vrai
 
