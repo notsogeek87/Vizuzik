@@ -222,6 +222,18 @@ Rien ici n'ajoute de nouvelle allocation par frame côté natif : la bande color
 rayon de la bobine est un simple `float` recalculé à partir de `cassetteProgress()` — pas de
 Shader supplémentaire, `cassetteReelDiscShader` reste construit une seule fois.
 
+**Une quatrième relecture : l'étiquette natale était restée vide.** Remonté avec une capture d'un
+écran verrouillé réel comparée au rendu web : côté natif, l'étiquette restait un panneau uni — le
+choix initial documenté plus haut (« pas de pochette : contenu trop lumineux pour un écran resté
+allumé en continu ») s'est révélé faux dans la pratique : sans la pochette, l'écran verrouillé ne
+dit plus quel morceau joue, ce qui est le seul point d'un affichage façon AOD. `drawCassette()`
+dessine maintenant `vinylBitmap`/`vinylShader` — le même bitmap que « Vinyle », déjà alimenté par
+`setAlbumArt()` à chaque changement de morceau, quel que soit le style actif — recadré en
+« cover » sur l'étiquette et adouci par un `ColorMatrixColorFilter` construit une fois
+(`cassetteArtColorFilter`, une approximation du `saturate(0.85) contrast(0.93) brightness(0.96)`
+du CSS web) : la pochette, mais pas à pleine luminosité, comme une photo imprimée plutôt que
+collée. Un panneau uni reste affiché tant qu'aucune pochette n'est encore arrivée.
+
 ## Correctif : la tâche partagée avec MainActivity coinçait `isForeground()` à vrai
 
 Premier retour du terrain (Z Fold8 réel) : l'Edge Visualizer (les barres par-dessus Deezer)
