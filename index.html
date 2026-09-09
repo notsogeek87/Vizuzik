@@ -308,6 +308,23 @@
           Autoriser les notifications
         </button>
 
+        <!-- Its own, shorter style choice than "Style" further down: no "Cocon" (nothing to weave
+             it around here), no "Contour"/"Particules" (this screen has nothing else on it to
+             frame an edge glow around) — just the three that read well centred on an otherwise
+             black screen. Stored separately from EdgeConfig (see LockScreenVisualizerPreference),
+             read once by LockScreenVisualizerActivity when it's shown, not live. -->
+        <label class="edge-settings__row">
+          <span>
+            Style de l'écran verrouillé
+            <small>Barres, Cassette ou Disque — centré sur l'écran, le reste reste noir pour limiter la casse côté batterie.</small>
+          </span>
+          <select id="edge-lockscreen-style">
+            <option value="bars">Barres (spectre)</option>
+            <option value="cassette">Cassette</option>
+            <option value="vinyl">Disque (vinyle qui tourne)</option>
+          </select>
+        </label>
+
         <!-- Needs "usage access" to be honoured: nothing else can tell an overlay window which
              app is actually on screen. Left on with the permission missing, the overlay simply
              keeps showing everywhere rather than hiding on a guess — see ForegroundApp. -->

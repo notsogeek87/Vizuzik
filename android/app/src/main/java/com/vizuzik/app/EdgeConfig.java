@@ -37,6 +37,12 @@ final class EdgeConfig {
     // spectrum band that just moved, rather than one continuous shape reacting to the whole
     // spectrum at once like the other edge-confined styles.
     static final String STYLE_PARTICLES = "particles";
+    // See EdgeGlowView.drawCassette() — never offered in the general Edge Visualizer picker below
+    // ("Style", edge-style in the settings panel): it has no Deezer layout to anchor itself
+    // against, only the lock screen's own screen-centred rendering (see artRect()'s standalone
+    // branch). Chosen instead from LockScreenVisualizerPreference's own, shorter style list — see
+    // that class and LockScreenVisualizerActivity.
+    static final String STYLE_CASSETTE = "cassette";
 
     static final String BAND_FULL = "full";
     static final String BAND_BASS = "bass";

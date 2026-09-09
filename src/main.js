@@ -27,6 +27,7 @@ const els = {
   edgeLockscreenEnabled: document.getElementById("edge-lockscreen-enabled"),
   edgeLockscreenHint: document.getElementById("edge-lockscreen-hint"),
   edgeLockscreenGrant: document.getElementById("edge-lockscreen-grant"),
+  edgeLockscreenStyle: document.getElementById("edge-lockscreen-style"),
   edgeStyle: document.getElementById("edge-style"),
   edgeBand: document.getElementById("edge-band"),
   edgeCocoonFallback: document.getElementById("edge-cocoon-fallback"),
@@ -634,6 +635,44 @@ function setLockScreenVisualizerEnabled(enabled) {
   updateLockScreenHint();
 }
 
+// The lock screen's own style choice — Barres/Cassette/Disque — kept out of EDGE_STYLE_KEY/
+// EdgeConfig entirely: it lives in LockScreenVisualizerPreference natively (see
+// setLockScreenVisualizerStyle() in DeezerMediaPlugin), read once when that screen is shown, not
+// live like the general Edge Visualizer's own "style". Same reasoning as the toggle above for
+// keeping its own localStorage key rather than folding it into readEdgeSettingsFromForm().
+const LOCKSCREEN_VISUALIZER_STYLE_KEY = "vizuzik:lockScreenVisualizerStyle";
+const LOCKSCREEN_VISUALIZER_STYLES = ["bars", "cassette", "vinyl"];
+
+function isLockScreenVisualizerStyle(value) {
+  return LOCKSCREEN_VISUALIZER_STYLES.includes(value);
+}
+
+function readLockScreenVisualizerStyle() {
+  try {
+    const stored = localStorage.getItem(LOCKSCREEN_VISUALIZER_STYLE_KEY);
+    return isLockScreenVisualizerStyle(stored) ? stored : "bars";
+  } catch (err) {
+    return "bars";
+  }
+}
+
+function rememberLockScreenVisualizerStyle(style) {
+  try {
+    localStorage.setItem(LOCKSCREEN_VISUALIZER_STYLE_KEY, style);
+  } catch (err) {
+    /* see readLockScreenVisualizerStyle() */
+  }
+}
+
+let lockScreenVisualizerStyle = readLockScreenVisualizerStyle();
+
+function setLockScreenVisualizerStyle(style) {
+  if (!isLockScreenVisualizerStyle(style)) return;
+  lockScreenVisualizerStyle = style;
+  rememberLockScreenVisualizerStyle(style);
+  DeezerMedia.setLockScreenVisualizerStyle({ style }).catch(() => {});
+}
+
 async function syncLockScreenPermissions() {
   try {
     const notificationState = await DeezerMedia.checkNotificationPermission();
@@ -1083,6 +1122,7 @@ async function loadEdgeConfig() {
   // Same reasoning: lives in LockScreenVisualizerPreference, not EdgeConfig, tracked here by
   // lockScreenVisualizerEnabled.
   els.edgeLockscreenEnabled.checked = lockScreenVisualizerEnabled;
+  setSelectValue(els.edgeLockscreenStyle, lockScreenVisualizerStyle);
 }
 
 let edgeSettingsCloseTimer = null;
@@ -1362,6 +1402,10 @@ els.edgeUsageGrant.addEventListener("click", () => {
 
 els.edgeLockscreenEnabled.addEventListener("change", () => {
   setLockScreenVisualizerEnabled(els.edgeLockscreenEnabled.checked);
+});
+
+els.edgeLockscreenStyle.addEventListener("change", () => {
+  setLockScreenVisualizerStyle(els.edgeLockscreenStyle.value);
 });
 
 els.edgeLockscreenGrant.addEventListener("click", async () => {
@@ -1846,6 +1890,7 @@ applyDisplayMode(false);
   DeezerMedia.setEdgeOverlayEnabled({ enabled: edgeOverlayEnabled }).catch(() => {});
   // Same cold-start mirror, for LockScreenVisualizerPreference/LockScreenVisualizerController.
   DeezerMedia.setLockScreenVisualizerEnabled({ enabled: lockScreenVisualizerEnabled }).catch(() => {});
+  DeezerMedia.setLockScreenVisualizerStyle({ style: lockScreenVisualizerStyle }).catch(() => {});
   // Cold start only: never repeated on a later resume, since by then a resumed session is
   // already exactly where it should be, and redoing this mid-session would restart a track the
   // user is deliberately listening to or pausing.

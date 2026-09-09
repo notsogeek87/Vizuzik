@@ -36,10 +36,14 @@ import androidx.core.view.WindowInsetsControllerCompat;
  * is explicitly turned on in the settings panel.
  *
  * Hosts the same EdgeGlowView the overlay uses, in "standalone" mode (see EdgeGlowView.
- * setStandalone()): no other app underneath to hide for, and no Deezer layout to anchor
- * "cocoon"/"vinyl" against, since this *is* the whole screen. Feeds it directly from the same two
- * bridges OverlayEdgeGlowService listens to — the app's one audio source and one now-playing
- * source, never a second capture of either.
+ * setStandalone()): no other app underneath to hide for, and no Deezer layout to anchor "cocoon"
+ * against, since this *is* the whole screen — "cocoon" falls back the same way it would over any
+ * other app (see activeStyle()). "Vinyle" and the lock screen's own "Cassette" style don't need
+ * that layout at all: they simply centre themselves on the screen instead (see artRect()'s
+ * standalone branch), and are the two options — along with "Barres" — offered by this screen's
+ * own style picker (see setStandaloneStyle() below and LockScreenVisualizerPreference). Feeds it
+ * directly from the same two bridges OverlayEdgeGlowService listens to — the app's one audio
+ * source and one now-playing source, never a second capture of either.
  */
 public class LockScreenVisualizerActivity extends AppCompatActivity
     implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
@@ -123,6 +127,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         glowView.applyConfig(EdgeConfig.read(this));
+        // Its own, shorter style choice (Barres/Cassette/Disque) rather than EdgeConfig's own
+        // "style" field the line above just read — the two pickers are deliberately separate, see
+        // LockScreenVisualizerPreference and EdgeGlowView.setStandaloneStyle().
+        glowView.setStandaloneStyle(LockScreenVisualizerPreference.getStyle(this));
         DeezerMediaBridge.getInstance().addListener(this);
         AudioLevelsBridge.getInstance().addListener(this);
         ContextCompat.registerReceiver(

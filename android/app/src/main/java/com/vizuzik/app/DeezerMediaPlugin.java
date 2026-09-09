@@ -441,6 +441,20 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
+     * Mirrors the web layer's own lock-screen style pick (Barres/Cassette/Disque) into
+     * LockScreenVisualizerPreference — a separate preference from EdgeConfig.style, and read only
+     * once, by LockScreenVisualizerActivity.onStart(). Unlike setLockScreenVisualizerEnabled()
+     * above, a change here has nothing to act on immediately: it takes effect the next time that
+     * screen is shown, not live while it's already up.
+     */
+    @PluginMethod
+    public void setLockScreenVisualizerStyle(PluginCall call) {
+        String style = call.getString("style", LockScreenVisualizerPreference.STYLE_BARS);
+        LockScreenVisualizerPreference.setStyle(getContext(), style);
+        call.resolve();
+    }
+
+    /**
      * Whether the edge-glow overlay (drawn over the tracked app itself, MuViz Edge-style) can run
      * on this device (Android 8+, TYPE_APPLICATION_OVERLAY) and whether the "display over other
      * apps" special permission is currently granted. The web layer checks this on every resume —

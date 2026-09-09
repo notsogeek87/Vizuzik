@@ -2,7 +2,7 @@
 
 **Statut :** adopté · **Date :** 2026-09-09 · **Concerne :**
 `LockScreenVisualizerActivity.java`, `LockScreenVisualizerController.java`,
-`LockScreenVisualizerPreference.java`, `EdgeGlowView.java` (mode `standalone`),
+`LockScreenVisualizerPreference.java`, `EdgeGlowView.java` (mode `standalone`), `EdgeConfig.java`,
 `NowPlayingListenerService.java`, `DeezerMediaPlugin.java`, `AndroidManifest.xml`, `index.html`,
 `src/main.js`
 
@@ -116,14 +116,41 @@ palette, easing des niveaux…) dans une deuxième classe, `EdgeGlowView` gagne 
 
 - `updateSuppression()` ne fait plus rien (toujours visible) : il n'y a pas d'« autre app » dont se
   cacher ni à protéger des touches.
-- `activeStyle()` retombe toujours sur le style de repli pour « Cocon »/« Vinyle » : il n'y a pas
-  de mise en page Deezer à modéliser sur un fond qui est le sien.
+- `activeStyle()` retombe toujours sur le style de repli pour « Cocon » : il n'y a pas de mise en
+  page Deezer à modéliser sur un fond qui est le sien.
 - Les diagnostics de l'overlay (`OverlayDiagnostics`, statiques et partagés) ne sont pas publiés
   depuis une instance `standalone`, pour ne pas se mélanger avec ceux de l'overlay.
 
 Aucune des méthodes de rendu existantes (`drawBars`, `drawGlow`, `drawParticles`, `drawCocoon`,
 `drawVinyl`) n'a été touchée : tous les styles ajoutés à Edge Visualizer restent disponibles ici
 sans travail supplémentaire, dès qu'un nouveau en arrive.
+
+**Mise à jour :** « Vinyle » et « Cassette » (nouveau, natif — voir plus bas) ne suivent plus cette
+règle de repli. `artRect()` gagne sa propre branche `standalone` : plutôt que le modèle de mise en
+page Deezer (les constantes `ART_*`), elle centre l'ancre sur l'écran lui-même, à une fraction fixe
+de son côté le plus court (`STANDALONE_ART_FRACTION`, 62 % — voir plus bas pour le compromis
+batterie). « Cocon » continue de retomber sur le style de repli : rien n'a changé pour lui, voir
+« Pistes non retenues ».
+
+### Le style « Cassette », natif et propre à cet écran
+
+Un sixième style dans `EdgeGlowView` (`EdgeConfig.STYLE_CASSETTE`, `drawCassette()`), jamais
+proposé dans le sélecteur « Style » d'Edge Visualizer : contrairement aux cinq autres, il n'a rien
+à écouter par-dessus une autre app (pas de bordure à border, pas de pochette Deezer à redessiner),
+donc rien à y faire. Choisi à la place depuis le sélecteur propre à cet écran — trois options
+seulement (Barres/Cassette/Disque), stockées dans `LockScreenVisualizerPreference` plutôt que dans
+`EdgeConfig`, lues une seule fois par `LockScreenVisualizerActivity.onStart()` (`setStandaloneStyle()`
+côté `EdgeGlowView`, jamais piloté par `applyConfig()`) — les deux réglages sont volontairement
+indépendants, pas de partage d'un « style » unique entre l'overlay et cet écran.
+
+Un portage coordonnée par coordonnée de l'illustration `.cassette` du lecteur web
+(`index.html`/`style.css`, viewBox `320x200`), volontairement plus simple qu'elle : pas de pochette
+sur l'étiquette (rien de la trempe d'une photo à afficher sur un écran qui reste allumé en continu),
+ni le balayage de reflet ni le grain plastique — purement décoratifs, et cette vue se redessine
+jusqu'à 30 fois par seconde tant l'écran verrouillé est affiché. La seule partie qui bouge encore
+est celle qui justifie ce coût : les deux bobines, tournant à deux vitesses légèrement différentes
+(`CASSETTE_DEG_PER_SEC_A`/`_B`, les mêmes que `.cassette__reel`/`.cassette__reel--b` côté web),
+seulement pendant la lecture — exactement la même règle que la rotation de « Vinyle ».
 
 ## Ce qui n'a pas été fait, et pourquoi
 
@@ -133,9 +160,10 @@ sans travail supplémentaire, dès qu'un nouveau en arrive.
   fonctionnalité est expérimentale, plus intrusive, et **désactivée par défaut** — elle vit
   entièrement dans le panneau de réglages, sur le même modèle que « Seulement sur l'écran du
   lecteur » (un interrupteur + un bouton d'autorisation qui n'apparaît que si le nécessaire manque).
-- **Pas d'ancrage « Cocon »/« Vinyle » recentré sur l'écran.** Ces deux styles pourraient en
-  théorie être recentrés au milieu de l'écran verrouillé plutôt que de retomber sur Barres/Contour
-  — non fait ici pour garder le changement contenu ; voir « Pistes non retenues ».
+- **Pas d'ancrage « Cocon » recentré sur l'écran.** Contrairement à « Vinyle »/« Cassette » (voir la
+  mise à jour ci-dessus), « Cocon » continue de retomber sur Barres/Contour plutôt que de se centrer
+  — non fait ici pour garder ce changement contenu à ce que le picker de cet écran propose
+  réellement (Barres/Cassette/Disque, jamais Cocon) ; voir « Pistes non retenues ».
 
 ## Tests
 
@@ -155,10 +183,12 @@ cette fois d'interagir avec le verrouillage de l'écran :
 
 ## Pistes non retenues
 
-- **Recentrer « Cocon »/« Vinyle »** sur l'écran verrouillé plutôt que de toujours retomber sur
-  Barres/Contour. Techniquement simple (une position fixe au centre de l'écran plutôt que le
-  modèle `ART_*` calé sur Deezer), non fait pour garder ce changement limité à « rendre les styles
-  existants disponibles ailleurs », pas à en changer le comportement.
+- **Recentrer « Cocon »** sur l'écran verrouillé plutôt que de toujours retomber sur Barres/Contour.
+  Techniquement identique à ce qui a depuis été fait pour « Vinyle »/« Cassette » (voir la mise à
+  jour plus haut) — une position fixe au centre de l'écran plutôt que le modèle `ART_*` calé sur
+  Deezer. Non fait : le picker propre à cet écran (`LockScreenVisualizerPreference`) n'offre que
+  Barres/Cassette/Disque, jamais Cocon, donc rien n'appellerait jamais ce chemin ; l'ajouter serait
+  du code mort tant que ce picker ne change pas.
 - **Suivre l'accéléromètre/le capteur de proximité** pour un geste « lever pour réveiller », comme
   une vraie AOD. Demanderait un nouveau capteur, une nouvelle permission potentielle, et beaucoup
   plus de code pour un gain incertain sans pouvoir le tester sur l'appareil cible.

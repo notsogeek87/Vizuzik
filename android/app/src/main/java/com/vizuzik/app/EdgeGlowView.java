@@ -46,6 +46,11 @@ import java.util.Set;
  * woven around Deezer's own album art; and "vinyl", that same artwork redrawn as a spinning record
  * in the same spot — see drawCocoon() and drawVinyl() below for why and how those two aren't
  * edge-only like the first three.
+ *
+ * A sixth, "cassette" (see drawCassette()), is never offered in that same settings panel: it has
+ * no album art to redraw and no Deezer layout to anchor itself against, so it only ever appears
+ * as one of the three choices (alongside "bars" and "vinyl") on LockScreenVisualizerActivity's own
+ * screen — see setStandalone()/setStandaloneStyle() and LockScreenVisualizerPreference.
  */
 final class EdgeGlowView extends View {
 
@@ -187,6 +192,22 @@ final class EdgeGlowView extends View {
     // nothing sits behind it: over the music app's still cover, the label is what says "record"
     // at a glance, and at 13% of the radius it was too small to say it.
     private static final float VINYL_LABEL_FRACTION = 0.17f;
+    // How much of the screen's shorter side "vinyl"/"cassette" cover when standalone, centred —
+    // see artRect()'s standalone branch. Well under 1: the lock screen visualizer is upfront about
+    // costing real battery for a fully-driven display (see the ADR), and the one thing this view
+    // can still do about that is keep most of the screen actually black rather than lit, the way
+    // "bars"/"glow" already do just by being confined to a thin edge.
+    private static final float STANDALONE_ART_FRACTION = 0.62f;
+    // The same two rates the web player's .cassette__reel/.cassette__reel--b use — see
+    // drawCassette(). Kept as two so the reels visibly drift out of phase with each other, the way
+    // tape actually winds from one to the other, rather than turning as a single locked unit.
+    private static final float CASSETTE_DEG_PER_SEC_A = 360f / 3.2f;
+    private static final float CASSETTE_DEG_PER_SEC_B = 360f / 3.8f;
+    // The web version's viewBox is 320x200 (see index.html's .cassette__art) — every coordinate
+    // in drawCassette() is lifted straight from it, so this is the one constant that maps those
+    // units onto however big artRect() says the shell should be here.
+    private static final float CASSETTE_VIEWBOX_WIDTH = 320f;
+    private static final float CASSETTE_VIEWBOX_HEIGHT = 200f;
     // Same --void CSS variable the web player's own .cover background sits on (#14141f).
     private static final int VINYL_VOID_COLOR = 0xFF14141F;
     /** How far past the record's own edge its shadow reaches, as a multiple of the radius. */
@@ -230,6 +251,11 @@ final class EdgeGlowView extends View {
     }
 
     private final Paint paint = new Paint();
+    // "cassette"'s tape curve — a fixed shape, moved into place by the canvas transform in
+    // drawCassette() rather than rebuilt — allocated once for the same reason cocoonTiers is
+    // below: this view redraws up to 30 times a second, and a fresh Path every frame for a curve
+    // that never actually changes shape would be pure waste.
+    private final Path cassetteTapePath = new Path();
     // One Path per brightness tier, each holding several strands as subpaths. Allocated once and
     // rebuilt in place: allocating Paths per frame would be pure waste.
     private final Path[] cocoonTiers = new Path[COCOON_TIERS];
@@ -283,6 +309,11 @@ final class EdgeGlowView extends View {
     // animation-play-state toggle, and how a real deck's platter actually stops.
     private float vinylAngleDeg;
     private volatile boolean vinylPlaying = true;
+    // "cassette"'s own two reel angles — advanced the same way as vinylAngleDeg, gated by the same
+    // vinylPlaying flag (there is only ever one style's audio-reactive state actually playing at
+    // once, whichever the standalone screen is currently drawing). See advanceCassette().
+    private float cassetteReelADeg;
+    private float cassetteReelBDeg;
     // The last artwork handed over for "vinyl" — see setAlbumArt(). Read from the main thread
     // only (set from DeezerMediaBridge's callback, which also runs on the main thread), so a
     // plain reference is enough; the shader is rebuilt once per track rather than per frame.
@@ -401,6 +432,19 @@ final class EdgeGlowView extends View {
 
     void setStandalone(boolean value) {
         standalone = value;
+    }
+
+    // Set once by LockScreenVisualizerActivity right after setStandalone(true), from its own,
+    // shorter style list (LockScreenVisualizerPreference.STYLE_*) — deliberately never fed from
+    // EdgeConfig.style/applyConfig() the way every other field on this view is, since the two
+    // pickers are meant to stay independent (see that class and activeStyle() below). Null until
+    // set, which activeStyle() treats as "use the general Edge Visualizer logic instead" — the
+    // brief window between this view being attached and LockScreenVisualizerActivity.onStart()
+    // actually calling setStandaloneStyle().
+    private String standaloneStyle;
+
+    void setStandaloneStyle(String value) {
+        standaloneStyle = value;
     }
 
     private boolean suppressed;
@@ -615,6 +659,7 @@ final class EdgeGlowView extends View {
             advanceCocoonPhases(dtMs / 1000f);
             advanceBars(dtMs / 1000f);
             advanceVinyl(dtMs / 1000f);
+            advanceCassette(dtMs / 1000f);
             advanceParticles(dtMs / 1000f);
             updateSuppression(now);
             updateWindowBounds();
@@ -658,6 +703,14 @@ final class EdgeGlowView extends View {
     private void advanceVinyl(float dt) {
         if (!vinylPlaying) return;
         vinylAngleDeg = (vinylAngleDeg + dt * VINYL_DEG_PER_SEC) % 360f;
+    }
+
+    /** Turns "cassette"'s two reels at their fixed, slightly different rates while playing; holds
+     *  both still, mid-turn, the instant it isn't — same rule as advanceVinyl() above. */
+    private void advanceCassette(float dt) {
+        if (!vinylPlaying) return;
+        cassetteReelADeg = (cassetteReelADeg + dt * CASSETTE_DEG_PER_SEC_A) % 360f;
+        cassetteReelBDeg = (cassetteReelBDeg + dt * CASSETTE_DEG_PER_SEC_B) % 360f;
     }
 
     /** Eases the drawn spectrum towards the captured one and lets the peak caps fall. */
@@ -909,11 +962,21 @@ final class EdgeGlowView extends View {
      * has an answer (its service connected), never on a guess in either direction.
      */
     private String activeStyle() {
+        // The lock screen's own style choice, set once by LockScreenVisualizerActivity — see
+        // setStandaloneStyle(). Answered before anything below because it comes from a completely
+        // separate picker (LockScreenVisualizerPreference, not EdgeConfig.style): "vinyl" there
+        // means the screen-centred rendering artRect()'s standalone branch gives it, never the
+        // Deezer-anchored one the overlay uses, so it must never fall through to the cocoon/vinyl
+        // fallback logic below, which answers a different question ("is Deezer's own cover on
+        // screen right now") that standalone has no way to ask.
+        if (standalone && standaloneStyle != null) return standaloneStyle;
         if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
         // Standalone has no tracked app's now-playing screen to model the artwork's position
         // against in the first place (see the ART_* constants) — there is no layout to have
         // measured, only Vizuzik's own plain background. Always the fallback, same one the
-        // overlay uses whenever the tracked app isn't what's on screen.
+        // overlay uses whenever the tracked app isn't what's on screen. Only reachable here for
+        // "cocoon": a standalone view whose own style is "vinyl" already returned above, from a
+        // picker that never offers "cocoon" in the first place — see LockScreenVisualizerPreference.
         if (standalone) {
             return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
         }
@@ -940,6 +1003,8 @@ final class EdgeGlowView extends View {
                 drawCocoon(canvas);
             } else if (EdgeConfig.STYLE_VINYL.equals(active)) {
                 drawVinyl(canvas);
+            } else if (EdgeConfig.STYLE_CASSETTE.equals(active)) {
+                drawCassette(canvas);
             } else {
                 drawGlow(canvas);
             }
@@ -1231,6 +1296,21 @@ final class EdgeGlowView extends View {
         float screenW = displayWidth > 0 ? displayWidth : getWidth();
         float screenH = displayHeight > 0 ? displayHeight : getHeight();
         if (screenW <= 0 || screenH <= 0) return null;
+
+        // No Deezer layout to model here (see the ART_* constants' own comment above) — this view
+        // *is* the whole screen, so "vinyl"/"cassette" just centre themselves on it, sized off the
+        // shorter side so neither ever runs close to an edge in either orientation. No calibration
+        // to apply either: that corrects the *model* below for a phone it estimated wrong, and
+        // there is no model here to be wrong about.
+        if (standalone) {
+            float half = Math.min(screenW, screenH) * STANDALONE_ART_FRACTION * 0.5f;
+            if (half <= 0) return null;
+            refreshOrigin();
+            float screenCx = screenW * 0.5f;
+            float screenCy = screenH * 0.5f;
+            return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
+        }
+
         boolean wide = screenW > screenH;
         float side = wide
             ? Math.min(screenH * ART_WIDE_MAX_HEIGHT_FRACTION, screenW * 0.5f * ART_WIDE_MAX_PANE_FRACTION)
@@ -1906,6 +1986,110 @@ final class EdgeGlowView extends View {
         vinylPaint.setStrokeWidth(Math.max(0.8f, density * 0.5f));
         vinylPaint.setColor(withAlpha(Color.WHITE, 38));
         canvas.drawCircle(0, 0, half - rim * 1.8f, vinylPaint);
+    }
+
+    /**
+     * "cassette": the lock screen's own dedicated style (see LockScreenVisualizerPreference and
+     * activeStyle()) — a straight port of the web player's own .cassette illustration
+     * (index.html/style.css), coordinate for coordinate off its 320x200 viewBox, centred on the
+     * standalone screen the same way "vinyl" now is (see artRect()'s standalone branch).
+     *
+     * Deliberately simpler than the web version: no album art on the label (there is no bridge
+     * for it to sit "printed" on the way it does over a plain CSS panel, and a photograph is
+     * exactly the kind of bright, detailed content this always-on screen can least afford), and
+     * none of the purely decorative gloss sweep or plastic-grain texture — this view redraws
+     * itself up to 30 times a second for as long as the lock screen is up, so it keeps only the
+     * one moving part worth that cost: the two reels, turning only while something is actually
+     * playing (see advanceCassette()), exactly like "vinyl"'s own rotation.
+     */
+    private void drawCassette(Canvas canvas) {
+        ArtRect art = artRect();
+        if (art == null) return;
+        // art.half is calibrated as a *radius* for "vinyl" (a disc of that half-width); reused
+        // here as half the cassette's own width, so both styles claim the same visual weight on
+        // screen at the same STANDALONE_ART_FRACTION.
+        float scale = art.half / (CASSETTE_VIEWBOX_WIDTH * 0.5f);
+
+        canvas.save();
+        canvas.translate(
+            art.cx - CASSETTE_VIEWBOX_WIDTH * 0.5f * scale,
+            art.cy - CASSETTE_VIEWBOX_HEIGHT * 0.5f * scale
+        );
+        canvas.scale(scale, scale);
+
+        vinylPaint.reset();
+        vinylPaint.setAntiAlias(true);
+
+        // Shell + a raised inner edge, same dark navy the web player's own .cover background (and
+        // "vinyl"'s own VINYL_VOID_COLOR) sit on, kept the darkest thing on screen on purpose.
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setColor(withAlpha(VINYL_VOID_COLOR, 255));
+        canvas.drawRoundRect(8, 8, 312, 192, 16, 16, vinylPaint);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(1.5f);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 26));
+        canvas.drawRoundRect(14, 14, 306, 186, 12, 12, vinylPaint);
+
+        // The label and the brand tab — a plain panel and the travelling palette, same as the web
+        // version shows before its first track's artwork has loaded (see .cassette__label there).
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 22));
+        canvas.drawRoundRect(22, 20, 250, 78, 6, 6, vinylPaint);
+        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 220));
+        canvas.drawRoundRect(260, 20, 298, 78, 6, 6, vinylPaint);
+
+        // The window the reels sit behind, and the run of tape strung between them.
+        vinylPaint.setColor(withAlpha(Color.BLACK, 173));
+        canvas.drawRoundRect(30, 90, 290, 176, 12, 12, vinylPaint);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(4f);
+        vinylPaint.setStrokeCap(Paint.Cap.ROUND);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 77));
+        if (cassetteTapePath.isEmpty()) {
+            cassetteTapePath.moveTo(108, 150);
+            cassetteTapePath.cubicTo(140, 176, 180, 176, 212, 150);
+        }
+        canvas.drawPath(cassetteTapePath, vinylPaint);
+        vinylPaint.setStrokeCap(Paint.Cap.BUTT);
+
+        drawCassetteReel(canvas, 108, 134, cassetteReelADeg);
+        drawCassetteReel(canvas, 212, 134, cassetteReelBDeg);
+
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 71));
+        float[][] screws = { { 20, 20 }, { 300, 20 }, { 20, 180 }, { 300, 180 }, { 160, 186 } };
+        for (float[] screw : screws) canvas.drawCircle(screw[0], screw[1], 3.4f, vinylPaint);
+
+        canvas.restore();
+    }
+
+    /** One reel: the ring, two concentric "wound tape" rings, the palette-coloured hub, and six
+     *  short teeth that carry the rotation — everything else in drawCassette() stays fixed. */
+    private void drawCassetteReel(Canvas canvas, float cx, float cy, float angleDeg) {
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(6f);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 102));
+        canvas.drawCircle(cx, cy, 30, vinylPaint);
+        vinylPaint.setStrokeWidth(2f);
+        vinylPaint.setColor(withAlpha(Color.WHITE, 46));
+        canvas.drawCircle(cx, cy, 23, vinylPaint);
+        canvas.drawCircle(cx, cy, 16, vinylPaint);
+
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setColor(withAlpha(saturate(paletteColorAt(0f)), 255));
+        canvas.drawCircle(cx, cy, 11, vinylPaint);
+
+        canvas.save();
+        canvas.translate(cx, cy);
+        canvas.rotate(angleDeg);
+        vinylPaint.setColor(withAlpha(Color.BLACK, 179));
+        for (int i = 0; i < 6; i++) {
+            canvas.save();
+            canvas.rotate(i * 60);
+            canvas.drawRoundRect(-1.1f, -16f, 1.1f, -11f, 1f, 1f, vinylPaint);
+            canvas.restore();
+        }
+        canvas.restore();
     }
 
     private static float squircle(float angle) {
