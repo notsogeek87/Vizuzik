@@ -424,14 +424,6 @@ body[data-state="playing"] .cassette__tape {
   100% { transform: translateX(400px); }
 }
 
-/* Never animated, never re-seeded — one static feTurbulence render composited over everything
-   else in the shell (see .cassette in index.html for stacking order), cheap because the browser
-   only has to paint it once. */
-.cassette__grain {
-  pointer-events: none;
-  mix-blend-mode: overlay;
-}
-
 .cassette__stop--a {
   stop-color: rgb(var(--c1));
 }

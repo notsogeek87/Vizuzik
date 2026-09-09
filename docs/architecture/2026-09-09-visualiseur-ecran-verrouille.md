@@ -132,6 +132,10 @@ de son côté le plus court (`STANDALONE_ART_FRACTION`, 62 % — voir plus bas p
 batterie). « Cocon » continue de retomber sur le style de repli : rien n'a changé pour lui, voir
 « Pistes non retenues ».
 
+**Deuxième mise à jour :** « Cassette » ne partage plus cette branche `standalone` d'`artRect()`
+avec « Vinyle ». Voir la section dédiée plus bas : elle occupe désormais tout l'écran, comme sur le
+lecteur web, plutôt qu'une icône centrée à 62 %.
+
 ### Le style « Cassette », natif et propre à cet écran
 
 Un sixième style dans `EdgeGlowView` (`EdgeConfig.STYLE_CASSETTE`, `drawCassette()`), jamais
@@ -152,14 +156,31 @@ est celle qui justifie ce coût : les deux bobines, tournant à deux vitesses l�
 (`CASSETTE_DEG_PER_SEC_A`/`_B`, les mêmes que `.cassette__reel`/`.cassette__reel--b` côté web),
 seulement pendant la lecture — exactement la même règle que la rotation de « Vinyle ».
 
-Le premier jet rendait plat — remonté après coup, comparé côte à côte avec la version web une fois
-celle-ci elle-même approfondie (ombre portée de chaque bobine, dégradé radial sur leur propre
-disque plutôt que des anneaux sur un fond plat, un spot et un vignettage sur la coque). Portés ici
-sous forme de `RadialGradient` (`buildCassetteShaders()`), statiques : construits une seule fois,
-au premier appel de `drawCassette()`, jamais reconstruits ensuite — contrairement à
-`buildVinylShaders()`, rien ici ne dépend de la taille réelle de l'écran (tout est déjà dans
-l'espace du viewBox 320x200 fixe une fois le canvas mis à l'échelle), donc rien ne peut jamais
-avoir besoin d'être régénéré.
+**Plein écran, pas une icône centrée.** Contrairement à « Vinyle », `drawCassette()` ne passe pas
+par la branche `standalone` d'`artRect()` : elle calcule sa propre mise à l'échelle en « cover »
+(recadrée, jamais en lettrebox) directement à partir de la taille de l'écran, pour occuper tout
+l'écran bord à bord — exactement le rendu du lecteur web (`.cassette__art`, `width:100%;
+height:100%`, viewBox en `xMidYMid slice`), plutôt que le traitement partagé avec « Vinyle » qui la
+réduisait à une icône centrée sur 62 % du plus petit côté. En paysage, l'illustration (dessinée
+« côté cassette », donc paysage) n'a besoin de rien de plus. En portrait — l'orientation normale
+d'un écran verrouillé — elle est tournée de 90° autour du centre de l'écran et son échelle de
+recouvrement est mesurée contre la boîte permutée (la hauteur d'écran comme largeur, la largeur
+d'écran comme hauteur), pour que l'illustration tournée continue de courir bord à bord sans
+lettrebox : la même astuce que la règle web
+`@media (orientation: portrait) { .cassette__art { width: 100vh; height: 100vw; transform:
+translate(-50%, -50%) rotate(90deg); } }`.
+
+**Une deuxième relecture, du grain en plus : trop plat.** Le premier jet — plein écran ou non —
+rendait à plat, remonté à la fois côté web et côté natif. Portées ici sous forme de
+`RadialGradient` (`buildCassetteShaders()`) les mêmes trois idées que côté web (voir
+`docs/architecture` → le CSS lui-même, ou directement `index.html`/`style.css`) : un spot et un
+vignettage sur la coque, une ombre portée par bobine sur le fond de la fenêtre, et un dégradé
+radial sur le disque de chaque bobine plutôt que des anneaux sur un fond plat. Statiques :
+construites une seule fois, au premier appel de `drawCassette()`, jamais reconstruites ensuite —
+contrairement à `buildVinylShaders()`, rien ici ne dépend de la taille réelle de l'écran (tout est
+déjà dans l'espace du viewBox 320x200 fixe une fois le canvas mis à l'échelle, y compris la mise à
+l'échelle « cover » ajoutée juste au-dessus), donc rien ne peut jamais avoir besoin d'être
+régénéré.
 
 ## Correctif : la tâche partagée avec MainActivity coinçait `isForeground()` à vrai
 

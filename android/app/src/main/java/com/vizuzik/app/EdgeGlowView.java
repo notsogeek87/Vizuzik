@@ -192,11 +192,13 @@ final class EdgeGlowView extends View {
     // nothing sits behind it: over the music app's still cover, the label is what says "record"
     // at a glance, and at 13% of the radius it was too small to say it.
     private static final float VINYL_LABEL_FRACTION = 0.17f;
-    // How much of the screen's shorter side "vinyl"/"cassette" cover when standalone, centred —
-    // see artRect()'s standalone branch. Well under 1: the lock screen visualizer is upfront about
+    // How much of the screen's shorter side "vinyl" covers when standalone, centred — see
+    // artRect()'s standalone branch. Well under 1: the lock screen visualizer is upfront about
     // costing real battery for a fully-driven display (see the ADR), and the one thing this view
     // can still do about that is keep most of the screen actually black rather than lit, the way
-    // "bars"/"glow" already do just by being confined to a thin edge.
+    // "bars"/"glow" already do just by being confined to a thin edge. "cassette" does not use this
+    // — see drawCassette(), which fills the whole screen edge to edge like the web player's own
+    // .cassette rather than a centred icon.
     private static final float STANDALONE_ART_FRACTION = 0.62f;
     // The same two rates the web player's .cassette__reel/.cassette__reel--b use — see
     // drawCassette(). Kept as two so the reels visibly drift out of phase with each other, the way
@@ -1310,10 +1312,11 @@ final class EdgeGlowView extends View {
         if (screenW <= 0 || screenH <= 0) return null;
 
         // No Deezer layout to model here (see the ART_* constants' own comment above) — this view
-        // *is* the whole screen, so "vinyl"/"cassette" just centre themselves on it, sized off the
-        // shorter side so neither ever runs close to an edge in either orientation. No calibration
-        // to apply either: that corrects the *model* below for a phone it estimated wrong, and
-        // there is no model here to be wrong about.
+        // *is* the whole screen, so "vinyl" just centres itself on it, sized off the shorter side so
+        // it never runs close to an edge in either orientation. No calibration to apply either:
+        // that corrects the *model* below for a phone it estimated wrong, and there is no model
+        // here to be wrong about. "cassette" does not read this branch — see drawCassette(), which
+        // covers the whole screen instead of a centred icon.
         if (standalone) {
             float half = Math.min(screenW, screenH) * STANDALONE_ART_FRACTION * 0.5f;
             if (half <= 0) return null;
@@ -2003,8 +2006,16 @@ final class EdgeGlowView extends View {
     /**
      * "cassette": the lock screen's own dedicated style (see LockScreenVisualizerPreference and
      * activeStyle()) — a straight port of the web player's own .cassette illustration
-     * (index.html/style.css), coordinate for coordinate off its 320x200 viewBox, centred on the
-     * standalone screen the same way "vinyl" now is (see artRect()'s standalone branch).
+     * (index.html/style.css), coordinate for coordinate off its 320x200 viewBox.
+     *
+     * Unlike "vinyl" (see artRect()'s standalone branch), this does not shrink to a centred icon:
+     * it fills the whole screen edge to edge, cropped rather than letterboxed, exactly like the
+     * web player's own .cassette — the phone's screen reads as the cassette window either way. In
+     * landscape the (landscape-drawn) illustration needs no help; in portrait it is rotated 90°
+     * about the screen's centre and the cover-fit scale is measured against the swapped box
+     * (screen height as width, screen width as height) so the rotated art still runs edge to edge
+     * with no letterboxing — the same trick as the web version's own
+     * "@media (orientation: portrait) .cassette__art" rule.
      *
      * Deliberately simpler than the web version: no album art on the label (there is no bridge
      * for it to sit "printed" on the way it does over a plain CSS panel, and a photograph is
@@ -2015,19 +2026,24 @@ final class EdgeGlowView extends View {
      * playing (see advanceCassette()), exactly like "vinyl"'s own rotation.
      */
     private void drawCassette(Canvas canvas) {
-        ArtRect art = artRect();
-        if (art == null) return;
-        // art.half is calibrated as a *radius* for "vinyl" (a disc of that half-width); reused
-        // here as half the cassette's own width, so both styles claim the same visual weight on
-        // screen at the same STANDALONE_ART_FRACTION.
-        float scale = art.half / (CASSETTE_VIEWBOX_WIDTH * 0.5f);
+        if (displayWidth <= 0 || displayHeight <= 0) refreshDisplaySize();
+        float screenW = displayWidth > 0 ? displayWidth : getWidth();
+        float screenH = displayHeight > 0 ? displayHeight : getHeight();
+        if (screenW <= 0 || screenH <= 0) return;
+        refreshOrigin();
+        float cx = screenW * 0.5f - viewLocation[0];
+        float cy = screenH * 0.5f - viewLocation[1];
+
+        boolean rotate = screenH > screenW;
+        float boxW = rotate ? screenH : screenW;
+        float boxH = rotate ? screenW : screenH;
+        float scale = Math.max(boxW / CASSETTE_VIEWBOX_WIDTH, boxH / CASSETTE_VIEWBOX_HEIGHT);
 
         canvas.save();
-        canvas.translate(
-            art.cx - CASSETTE_VIEWBOX_WIDTH * 0.5f * scale,
-            art.cy - CASSETTE_VIEWBOX_HEIGHT * 0.5f * scale
-        );
+        canvas.translate(cx, cy);
+        if (rotate) canvas.rotate(90);
         canvas.scale(scale, scale);
+        canvas.translate(-CASSETTE_VIEWBOX_WIDTH * 0.5f, -CASSETTE_VIEWBOX_HEIGHT * 0.5f);
 
         vinylPaint.reset();
         vinylPaint.setAntiAlias(true);
