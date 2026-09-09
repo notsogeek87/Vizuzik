@@ -2318,29 +2318,18 @@ final class EdgeGlowView extends View {
             new float[] { 0f, 0.62f, 0.86f, 1f },
             Shader.TileMode.CLAMP
         );
-        // Desaturate, then apply contrast and brightness the way CSS's own filter()s actually do
-        // (see .cassette__art-image) — ColorMatrix has no separate contrast op, and an earlier
-        // version of this approximated contrast(c) as just another multiplicative scale. That's
-        // wrong: CSS contrast(c) for c<1 pulls values *toward* mid-grey (out = (in-0.5)*c+0.5),
-        // which lightens shadows, while a plain scale only ever darkens further. Compounding that
-        // wrong approximation with brightness() into one flat darkening multiply read fine on a
-        // bright album cover but crushed a dark one to near-black on this label — the actual
-        // report this fixes. contrast then brightness, applied in that order (matching the CSS
-        // filter list's own left-to-right order), collapse into one scale+offset pass here:
-        // out = brightness*contrast*in + brightness*127.5*(1-contrast).
+        // Two real-device reports in a row said the album art was barely visible on this label —
+        // first on a dark cover (an earlier version here darkened it a second time on top of its
+        // own already-dark colours), then, after cutting that darkening, on a washed-out/hazy
+        // cover (pulling contrast down toward mid-grey to fix the first report flattened this one
+        // further still). Any fixed contrast/brightness correction helps one of those two cases
+        // at the other's expense — there is no single number that makes both a near-black cover
+        // and an already-pale one equally legible. So this no longer tries to correct tone at
+        // all: only a light desaturation remains, for a bit of the "ink on paper" restraint the
+        // web version's own filter goes for, without ever pushing the actual cover further from
+        // how it really looks. Whatever the cover's own brightness is, it now reads as itself.
         ColorMatrix artMatrix = new ColorMatrix();
-        artMatrix.setSaturation(0.9f);
-        float artContrast = 0.88f;
-        float artBrightness = 1.05f;
-        float artScaleAmount = artContrast * artBrightness;
-        float artOffset = artBrightness * 127.5f * (1f - artContrast);
-        ColorMatrix artTone = new ColorMatrix(new float[] {
-            artScaleAmount, 0, 0, 0, artOffset,
-            0, artScaleAmount, 0, 0, artOffset,
-            0, 0, artScaleAmount, 0, artOffset,
-            0, 0, 0, 1, 0,
-        });
-        artMatrix.postConcat(artTone);
+        artMatrix.setSaturation(0.95f);
         cassetteArtColorFilter = new ColorMatrixColorFilter(artMatrix);
     }
 

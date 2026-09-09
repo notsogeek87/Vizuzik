@@ -303,12 +303,14 @@ body[data-state="playing"] .cassette__reel {
   fill: rgba(247, 248, 252, 0.14);
 }
 
-/* Muted rather than shown at full brightness/saturation — a glossy phone photo sitting on a
-   printed cassette label would look pasted on; this reads more like ink on paper. contrast()
-   below 1 pulls shadows toward mid-grey and brightness() above 1 lifts the whole image a touch,
-   together keeping a dark album cover legible on the label instead of crushing it toward black. */
+/* Two real-device reports in a row said the album art was barely visible on this label — first
+   on a dark cover (an earlier version here darkened it further with contrast()/brightness()),
+   then, after removing that, on an already washed-out cover (contrast() below 1 pulls toward
+   mid-grey, which flattens a hazy cover even more). Any fixed tone correction trades one of those
+   cases for the other, so only a light desaturation remains — the album cover now reads as
+   however it actually looks, rather than pushed darker or flatter than that. */
 .cassette__art-image {
-  filter: saturate(0.9) contrast(0.88) brightness(1.05);
+  filter: saturate(0.95);
 }
 
 .cassette__label-frame {
