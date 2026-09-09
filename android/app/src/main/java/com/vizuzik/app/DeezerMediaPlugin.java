@@ -635,6 +635,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("viewVisible", OverlayDiagnostics.viewVisible);
         result.put("foregroundKnown", OverlayDiagnostics.foregroundKnown);
         result.put("trackedAppOnScreen", OverlayDiagnostics.trackedAppOnScreen);
+        result.put("trackedAppConfirmed", OverlayDiagnostics.trackedAppConfirmed);
         result.put("foregroundPackage", OverlayDiagnostics.foregroundPackage);
         result.put("a11yEnabledInSettings", DeezerPlayerAccessibilityService.isEnabled(getContext()));
         result.put("a11yConnected", NowPlayerScreenState.isServiceConnected());

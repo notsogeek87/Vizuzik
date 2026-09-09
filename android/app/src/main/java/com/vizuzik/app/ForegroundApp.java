@@ -57,6 +57,10 @@ final class ForegroundApp {
     /** Until when the event stream counts as suspect — set by invalidate(), zero the rest of the
      *  time, which is when the events are simply believed. */
     private static long crossCheckUntilMs;
+    /** Whether the last isTrackedAppInForeground() answer rested on real evidence — the current
+     *  package positively observed to be the tracked one, or the fold cross-check's own coarser
+     *  source agreeing — rather than merely "nothing says otherwise". See isLastAnswerConfirmed(). */
+    private static boolean lastConfirmed;
 
     /** Whether the "usage access" special permission is currently granted to Vizuzik. */
     static boolean hasUsageAccess(Context context) {
@@ -101,13 +105,22 @@ final class ForegroundApp {
     }
 
     static synchronized boolean isTrackedAppInForeground(Context context) {
-        if (context == null) return true;
+        if (context == null) {
+            lastConfirmed = false;
+            return true;
+        }
         String tracked = MusicAppPreference.getPackage(context);
-        if (tracked == null) return true;
+        if (tracked == null) {
+            lastConfirmed = false;
+            return true;
+        }
         String current = currentPackage(context);
         if (current == null || current.equals(tracked)) {
             crossCheckedAgainst = null;
             overriding = false;
+            // current == null is the same fail-open as the two returns above — nothing has been
+            // observed yet, not "Deezer, observed". See isLastAnswerConfirmed().
+            lastConfirmed = current != null;
             return true;
         }
 
@@ -143,12 +156,14 @@ final class ForegroundApp {
             if (crossCheckUntilMs != 0 && now > crossCheckUntilMs) {
                 overriding = false;
                 crossCheckedAgainst = null;
+                lastConfirmed = false;
                 return false;
             }
             if (now - lastCrossCheckAtMs >= CROSS_CHECK_AGAIN_MS) {
                 lastCrossCheckAtMs = now;
                 overriding = recentlyUsedIsTracked(context, tracked);
             }
+            lastConfirmed = overriding;
             return overriding;
         }
 
@@ -161,14 +176,36 @@ final class ForegroundApp {
         // same wrongly-reported package, and nothing resumes to correct it while someone simply
         // keeps looking at the app they never left. The whole point of falling back to a coarser,
         // slower source is that it needs a moment to catch up; one shot at it defeated that.
-        if (crossCheckUntilMs == 0 || now > crossCheckUntilMs) return false;
+        if (crossCheckUntilMs == 0 || now > crossCheckUntilMs) {
+            lastConfirmed = false;
+            return false;
+        }
         if (current.equals(crossCheckedAgainst) && now - lastCrossCheckAtMs < CROSS_CHECK_AGAIN_MS) {
+            lastConfirmed = false;
             return false;
         }
         crossCheckedAgainst = current;
         lastCrossCheckAtMs = now;
         overriding = recentlyUsedIsTracked(context, tracked);
+        lastConfirmed = overriding;
         return overriding;
+    }
+
+    /**
+     * Whether the last isTrackedAppInForeground() answer was real evidence that the tracked app
+     * is the one on screen, as opposed to the fail-open default that method also returns true for
+     * when nothing is known yet (no context, no app chosen, or no usage event ever observed).
+     *
+     * isTrackedAppInForeground() is right to fail open: it decides whether to *hide* a decoration,
+     * and hiding on a guess is a worse failure than showing one too often. Drawing "vinyl"/"cocoon"
+     * is the opposite risk — an opaque disc placed over an app it was never measured for, blocking
+     * its content and, from Android 12, its touches — so EdgeGlowView.activeStyle() needs the
+     * stricter of the two answers this class can give, not the permissive one every other caller
+     * wants. Must be read right after isTrackedAppInForeground() in the same tick: it reports on
+     * that call's own verdict, not a fresh one.
+     */
+    static synchronized boolean isLastAnswerConfirmed() {
+        return lastConfirmed;
     }
 
     /**

@@ -76,6 +76,10 @@ final class OverlayDiagnostics {
     static volatile boolean suppressed;
     static volatile boolean foregroundKnown;
     static volatile boolean trackedAppOnScreen;
+    /** Stricter than trackedAppOnScreen: false whenever that one is only true because ForegroundApp
+     *  had no real evidence and fell back to "assume yes" — see EdgeGlowView.activeStyle() and
+     *  ForegroundApp.isLastAnswerConfirmed(). What actually gated "vinyl"/"cocoon" this tick. */
+    static volatile boolean trackedAppConfirmed;
     static volatile String foregroundPackage = "";
     static volatile boolean viewVisible;
     /** The two settings that decide when these styles are allowed at all. "Le disque est visible

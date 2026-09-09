@@ -1168,7 +1168,12 @@ const DIAGNOSTIC_ROWS = [
   [
     "avant",
     "App à l'écran",
-    (d) => (d.foregroundKnown ? `${d.foregroundPackage || "?"}${d.trackedAppOnScreen ? " (suivie)" : ""}` : "inconnue"),
+    (d) =>
+      d.foregroundKnown
+        ? `${d.foregroundPackage || "?"}${
+            d.trackedAppOnScreen ? (d.trackedAppConfirmed ? " (suivie, confirmée)" : " (suivie, supposée)") : ""
+          }`
+        : "inconnue",
   ],
   [
     "a11y",

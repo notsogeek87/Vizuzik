@@ -420,6 +420,10 @@ final class EdgeGlowView extends View {
     // established at all — the two are different answers and are acted on differently.
     private boolean foregroundKnown;
     private boolean trackedAppOnScreen = true;
+    /** Stricter than trackedAppOnScreen: true only when the tracked app being in front rests on
+     *  real evidence, not on ForegroundApp's own fail-open default — see activeStyle(), the one
+     *  place that needs this distinction rather than trackedAppOnScreen's permissive answer. */
+    private boolean trackedAppConfirmed;
     private long lastForegroundCheckAtMs;
     private long lastDisplayCheckAtMs;
     private long lastUsageAccessCheckAtMs;
@@ -827,7 +831,12 @@ final class EdgeGlowView extends View {
             lastUsageAccessCheckAtMs = now;
             foregroundKnown = context != null && ForegroundApp.hasUsageAccess(context);
         }
-        trackedAppOnScreen = !foregroundKnown || ForegroundApp.isTrackedAppInForeground(context);
+        boolean trackedInForeground = foregroundKnown && ForegroundApp.isTrackedAppInForeground(context);
+        trackedAppOnScreen = !foregroundKnown || trackedInForeground;
+        // isTrackedAppInForeground() fails open (answers "yes" when it simply doesn't know), which
+        // is right for suppression above but wrong for activeStyle() below — see
+        // ForegroundApp.isLastAnswerConfirmed() and the "vinyl"/"cocoon" comment there.
+        trackedAppConfirmed = trackedInForeground && ForegroundApp.isLastAnswerConfirmed();
         // Only asked when there is a list to check against — most installs pick nothing, and the
         // question costs the same incremental usage-event query onlyOverMusicApp's already does,
         // just wasted if there is nothing here for its answer to matter to.
@@ -886,7 +895,11 @@ final class EdgeGlowView extends View {
      * never measured for, hiding that app's own content and, from Android 12, stopping its
      * touches from being delivered at all. So without an answer they fall back to an edge style,
      * which is true over anything. That answer needs "usage access", which is what the settings
-     * panel says these two styles are for.
+     * panel says these two styles are for — and it is trackedAppConfirmed, not trackedAppOnScreen,
+     * that actually carries it: the latter also reads true whenever ForegroundApp simply hasn't
+     * observed a foreground app yet (its own deliberate fail-open, correct for suppression, wrong
+     * here), which is how the disc was seen spinning over an app that was neither Deezer nor
+     * anything measured for it. See ForegroundApp.isLastAnswerConfirmed().
      *
      * requirePlayerScreen narrows it a step further, past "the tracked app is in front" to "and
      * it's showing its own full-screen player" — Deezer can be in front while showing search, its
@@ -906,7 +919,7 @@ final class EdgeGlowView extends View {
         }
         boolean playerScreenKnown = requirePlayerScreen && NowPlayerScreenState.isServiceConnected();
         boolean onPlayerScreen = !playerScreenKnown || NowPlayerScreenState.isOnPlayerScreen();
-        if (foregroundKnown && trackedAppOnScreen && onPlayerScreen) return style;
+        if (foregroundKnown && trackedAppConfirmed && onPlayerScreen) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 
@@ -1382,6 +1395,27 @@ final class EdgeGlowView extends View {
     }
 
     /**
+     * Forces the next tick's updateWindowBounds() to re-apply the window's bounds even if they
+     * land on the exact same target as before, instead of taking the "nothing to do" shortcut —
+     * called on every track change (see OverlayEdgeGlowService.onNowPlayingChanged()).
+     *
+     * That shortcut compares only against the target *last asked for*, never against where the
+     * window actually, verifiably is. A window that starts out a few pixels short of the modelled
+     * anchor — a display-metrics read caught mid-settle right as this window was first added, the
+     * one moment nothing here waits for — computes an equally wrong target and then matches it
+     * forever after: every later tick derives the same modelled position from the same stable
+     * inputs, lands within closeEnough()'s 2px tolerance of that first, wrong value, and is
+     * therefore never re-sent to WindowManager. Reopening Deezer "fixes" it today only because
+     * that tears the whole service down and rebuilds the window from nothing. A track change is a
+     * far cheaper, far more frequent moment to give the anchor the same fresh start.
+     */
+    void invalidateWindowBounds() {
+        lastWantedCx = Float.NaN;
+        lastWantedCy = Float.NaN;
+        lastWantedHalf = Float.NaN;
+    }
+
+    /**
      * The one place "vinyl" and every other style actually disagree about what this window
      * should be. Bars/glow paint along the four screen edges — a large area, but one Deezer
      * doesn't put much of its own touch handling in. "Vinyl" sits squarely on the cover, exactly
@@ -1449,6 +1483,7 @@ final class EdgeGlowView extends View {
         OverlayDiagnostics.suppressed = suppressed;
         OverlayDiagnostics.foregroundKnown = foregroundKnown;
         OverlayDiagnostics.trackedAppOnScreen = trackedAppOnScreen;
+        OverlayDiagnostics.trackedAppConfirmed = trackedAppConfirmed;
         OverlayDiagnostics.foregroundPackage = lastForegroundPackage;
         OverlayDiagnostics.viewVisible = getVisibility() == VISIBLE;
     }

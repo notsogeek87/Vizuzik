@@ -588,6 +588,10 @@ public class OverlayEdgeGlowService extends Service
             } catch (Exception e) {
                 Log.w(TAG, "onNowPlayingChanged", e);
             }
+            // Gives "vinyl"'s window a fresh shot at the modelled anchor on every track — see
+            // EdgeGlowView.invalidateWindowBounds() for why the position can otherwise drift a
+            // few pixels off and stay that way for the rest of the session.
+            glowView.invalidateWindowBounds();
             glowView.pulse(1f);
         } else if (hasLastIsPlaying && nowPlaying.isPlaying != lastIsPlaying) {
             glowView.pulse(0.55f);
