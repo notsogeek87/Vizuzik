@@ -41,11 +41,24 @@
              singleTask so a second full-screen-intent trigger while it's already showing lands
              in the existing instance (onNewIntent) rather than stacking another one on top.
              excludeFromRecents: this screen is never something to switch back to from the
-             recents list, only ever reached by the system bringing the phone's display back on. -->
+             recents list, only ever reached by the system bringing the phone's display back on.
+
+             taskAffinity="" is not decorative: without it, this defaults to the same affinity as
+             MainActivity (also unset, so also the package name), and singleTask + NEW_TASK then
+             does not give it a task of its own — it gets pushed onto MainActivity's existing task
+             instead. finish()ing it (on unlock) then pops back to whatever's under it in that
+             *shared* stack, silently resurrecting MainActivity's own onResume() with no matching
+             onPause() to follow — MainActivity.isForeground() gets stuck true, and everything
+             gated on it (EdgeOverlayController, this very controller) stays blocked until the app
+             is manually reopened and left again. Reported as "Edge Visualizer's bars never come
+             back after unlocking, only a relaunch fixes it" — an empty affinity guarantees this
+             activity always gets its own isolated task, so finishing it can never touch
+             MainActivity's stack at all. -->
         <activity
             android:name=".LockScreenVisualizerActivity"
             android:exported="false"
             android:launchMode="singleTask"
+            android:taskAffinity=""
             android:excludeFromRecents="true"
             android:theme="@style/AppTheme.NoActionBar" />
 
