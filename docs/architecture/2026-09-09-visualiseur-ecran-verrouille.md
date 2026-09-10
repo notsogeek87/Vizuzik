@@ -120,6 +120,28 @@ ne pas réagir à un simple changement de piste), et si le réglage est désacti
 affichée (`LockScreenVisualizerController.onDisabled()` envoie une diffusion interne à l'app que
 cette Activity écoute).
 
+**Mise à jour : boutons précédent/lecture-pause/suivant.** Jusqu'ici, cet écran n'était que visuel
+— seul un double tap y faisait quoi que ce soit (le fermer). `buildTransportControls()` superpose
+désormais une rangée de trois `ImageButton` (cercle translucide, icônes `android.R.drawable.
+ic_media_*` — les mêmes que celles déjà utilisées pour la petite icône de la notification à
+intention plein écran dans `LockScreenVisualizerController`, donc aucune nouvelle ressource
+`drawable`) ancrée en bas de l'écran, dans un `FrameLayout` séparé plutôt que sur `EdgeGlowView`
+elle-même : chaque bouton consomme son propre appui (le comportement normal d'un `ImageButton`),
+qui n'atteint donc jamais le `GestureDetector` du double tap — pas de conflit entre « appuyer sur
+Suivant » et « appui simple accidentel qui ne doit rien faire ».
+
+Chaque bouton appelle directement `MediaController.TransportControls` — `skipToPrevious()`,
+`play()`/`pause()`, `skipToNext()` — via `DeezerMediaBridge.getInstance().getController()`, la même
+session média que le reste de cet écran écoute déjà (jamais un second `MediaController`). C'est le
+même mécanisme que `DeezerMediaPlugin.withTransportControls()` expose au lecteur web, mais appelé
+sans `PluginCall` : cette Activity n'a pas de webview à travers laquelle relayer un appel Capacitor,
+donc l'appel natif direct est plus simple qu'un aller-retour par le pont Capacitor pour, au final,
+retomber sur exactement le même `TransportControls`.
+
+Le bouton central bascule entre les icônes lecture/pause (`updatePlayPauseIcon()`), piloté par le
+même `lastIsPlaying` qu'`onNowPlayingChanged()` maintenait déjà pour la grâce de pause — aucun état
+supplémentaire à garder synchronisé, juste un rafraîchissement d'icône ajouté au passage.
+
 ### `EdgeGlowView` : mode `standalone`, additif
 
 Plutôt que dupliquer le moteur de rendu (barres/contour/particules/cocon/vinyle, dégradés,
@@ -315,6 +337,11 @@ correctif lui-même, ni les cycles répétés (plusieurs allers-retours AOD → 
   réellement une fois les deux permissions accordées (par opposition à un simple affichage en
   « heads-up ») ; le comportement sur écran plié/déplié ; l'interaction avec le vrai AOD du Z Fold8
   si l'utilisateur en a également un configuré (lequel l'emporte au réveil).
+- **Non vérifié non plus** (ajout des boutons de transport) : le placement de la rangée de boutons
+  au bas de l'écran par rapport à la zone de geste système (bord bas), qui varie d'un appareil à
+  l'autre ; que le double tap de fond continue de fonctionner normalement à côté des boutons plutôt
+  que d'entrer en conflit avec eux ; le rendu visuel réel des cercles translucides sur les trois
+  styles (Barres/Cassette/Disque).
 - À vérifier en priorité sur l'appareil cible avant de considérer cette fonctionnalité comme fiable.
 
 ## Pistes non retenues
