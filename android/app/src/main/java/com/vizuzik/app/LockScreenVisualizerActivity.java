@@ -6,14 +6,22 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.media.session.MediaController;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
@@ -23,6 +31,8 @@ import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+
+import java.util.function.Consumer;
 
 /**
  * The "fake AOD": a full-screen Activity shown over the lock screen, screen kept on, while music
@@ -51,6 +61,11 @@ import androidx.core.view.WindowInsetsControllerCompat;
  * own style picker (see setStandaloneStyle() below and LockScreenVisualizerPreference). Feeds it
  * directly from the same two bridges OverlayEdgeGlowService listens to — the app's one audio
  * source and one now-playing source, never a second capture of either.
+ *
+ * A précédent/lecture-pause/suivant row floats over the bottom of the glow view (see
+ * buildTransportControls()), driving the same MediaController DeezerMediaBridge already exposes —
+ * the direct TransportControls calls DeezerMediaPlugin.withTransportControls() makes for the web
+ * player, called here without a PluginCall since there is no webview in this Activity to relay one.
  */
 public class LockScreenVisualizerActivity extends AppCompatActivity
     implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
@@ -63,6 +78,9 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     private static final long PAUSE_GRACE_MS = 1_500;
 
     private EdgeGlowView glowView;
+    /** Toggled between play/pause artwork in updatePlayPauseIcon(), the only mutable thing about
+     *  the transport row built in buildTransportControls() below. */
+    private ImageButton playPauseButton;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable pauseGraceExpired = this::finishIfStillPaused;
     private String lastTrackKey;
@@ -163,7 +181,16 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             }
         );
         view.setOnTouchListener((v, event) -> doubleTapDetector.onTouchEvent(event));
-        setContentView(view);
+
+        // Transport row sits in its own FrameLayout on top of the glow view rather than on it
+        // directly: each button consumes its own touch (normal ImageButton click handling), so a
+        // tap on one never reaches doubleTapDetector above and is never mistaken for the
+        // background double-tap-to-dismiss gesture.
+        FrameLayout root = new FrameLayout(this);
+        root.addView(view, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(buildTransportControls());
+        setContentView(root);
         glowView = view;
 
         // Back press must not dismiss this screen either — only the double tap above or the
@@ -187,6 +214,84 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         } catch (Exception e) {
             Log.w(TAG, "cancel notification", e);
         }
+    }
+
+    /**
+     * Précédent/lecture-pause/suivant, superposés au bas de l'écran verrouillé. Piloté par la même
+     * session média que DeezerMediaBridge alimente déjà pour le reste de cet écran — jamais un
+     * second MediaController — via le même TransportControls que DeezerMediaPlugin.withTransportControls()
+     * utilise côté web, mais appelé directement puisqu'il n'y a pas de webview ici pour relayer un
+     * appel Capacitor.
+     */
+    private LinearLayout buildTransportControls() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+
+        ImageButton previous = circleButton(48, android.R.drawable.ic_media_previous);
+        previous.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToPrevious));
+        row.addView(previous, controlMargins(48));
+
+        playPauseButton = circleButton(64, android.R.drawable.ic_media_pause);
+        playPauseButton.setOnClickListener(v -> withTransportControls(
+            lastIsPlaying ? MediaController.TransportControls::pause : MediaController.TransportControls::play
+        ));
+        row.addView(playPauseButton, controlMargins(64));
+
+        ImageButton next = circleButton(48, android.R.drawable.ic_media_next);
+        next.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToNext));
+        row.addView(next, controlMargins(48));
+
+        FrameLayout.LayoutParams rowParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        float density = getResources().getDisplayMetrics().density;
+        rowParams.bottomMargin = Math.round(72 * density);
+        row.setLayoutParams(rowParams);
+        return row;
+    }
+
+    /** A translucent circle behind a framework media icon — no new drawable resources needed, the
+     *  same android.R.drawable.ic_media_* set LockScreenVisualizerController already uses for the
+     *  full-screen-intent notification's own small icon. */
+    private ImageButton circleButton(int diameterDp, int iconRes) {
+        float density = getResources().getDisplayMetrics().density;
+        int diameterPx = Math.round(diameterDp * density);
+
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(Color.argb(70, 255, 255, 255));
+
+        ImageButton button = new ImageButton(this);
+        button.setBackground(background);
+        button.setImageResource(iconRes);
+        button.setColorFilter(Color.WHITE);
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        int padding = Math.round(diameterPx * 0.28f);
+        button.setPadding(padding, padding, padding, padding);
+        button.setLayoutParams(new LinearLayout.LayoutParams(diameterPx, diameterPx));
+        return button;
+    }
+
+    private LinearLayout.LayoutParams controlMargins(int diameterDp) {
+        float density = getResources().getDisplayMetrics().density;
+        int diameterPx = Math.round(diameterDp * density);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(diameterPx, diameterPx);
+        params.leftMargin = params.rightMargin = Math.round(16 * density);
+        return params;
+    }
+
+    private void withTransportControls(Consumer<MediaController.TransportControls> action) {
+        MediaController controller = DeezerMediaBridge.getInstance().getController();
+        if (controller == null) return;
+        action.accept(controller.getTransportControls());
+    }
+
+    private void updatePlayPauseIcon() {
+        if (playPauseButton == null) return;
+        playPauseButton.setImageResource(
+            lastIsPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play
+        );
     }
 
     @Override
@@ -277,6 +382,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         }
         lastIsPlaying = nowPlaying.isPlaying;
         hasLastIsPlaying = true;
+        updatePlayPauseIcon();
 
         handler.removeCallbacks(pauseGraceExpired);
         if (!nowPlaying.isPlaying) {
