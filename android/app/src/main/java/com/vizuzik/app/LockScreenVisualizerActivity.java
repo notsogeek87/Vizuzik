@@ -262,11 +262,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      * floating above the case and the buttons pinned to the real screen's bottom edge the way
      * every other style keeps them.
      *
-     * Centred by wrapping the column in Gravity.CENTER (dead centre of the whole window) and then
-     * nudging it with a single translationY — the same distance drawBaladeur() itself shifts the
-     * case by (see EdgeGlowView.baladeurScreenCenterY()) — rather than a manually estimated
-     * topMargin: that keeps this correct regardless of how tall the title/artist block actually
-     * measures out to, without this method having to predict it.
+     * Centred with a plain Gravity.CENTER — dead centre of the whole window, the exact same point
+     * drawBaladeur() centres its case on (see artRect()'s standalone branch) — rather than a
+     * manually estimated topMargin: that keeps this correct regardless of how tall the
+     * title/artist block actually measures out to, without this method having to predict it.
      */
     private LinearLayout buildBaladeurOverlay(EdgeGlowView glowViewRef) {
         float density = getResources().getDisplayMetrics().density;
@@ -317,7 +316,6 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         outerParams.gravity = Gravity.CENTER;
         column.setLayoutParams(outerParams);
-        column.setTranslationY(glowViewRef.baladeurScreenCenterY() - glowViewRef.displayHeightPx() * 0.5f);
         return column;
     }
 

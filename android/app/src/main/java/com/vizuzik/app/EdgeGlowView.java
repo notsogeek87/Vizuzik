@@ -209,9 +209,6 @@ final class EdgeGlowView extends View {
     // sit *inside* its own screen circle (see LockScreenVisualizerActivity.buildBaladeurOverlay())
     // and need real room for that, not just a nice-looking disc.
     private static final float BALADEUR_ART_FRACTION = 0.78f;
-    // How far up off dead centre "baladeur" alone shifts its case (see artRect()'s standalone
-    // branch and baladeurScreenCenterY() below) — a fraction of the screen's own height.
-    private static final float BALADEUR_CENTER_Y_SHIFT = 0.09f;
     // The same two rates the web player's .cassette__reel/.cassette__reel--b use — see
     // drawCassette(). Kept as two so the reels visibly drift out of phase with each other, the way
     // tape actually winds from one to the other, rather than turning as a single locked unit.
@@ -1391,23 +1388,19 @@ final class EdgeGlowView extends View {
         // here to be wrong about. "cassette" does not read this branch — see drawCassette(), which
         // covers the whole screen instead of a centred icon.
         if (standalone) {
-            boolean isBaladeur = EdgeConfig.STYLE_BALADEUR.equals(standaloneStyle);
-            float artFraction = isBaladeur ? BALADEUR_ART_FRACTION : STANDALONE_ART_FRACTION;
+            // "baladeur" alone gets a bigger case (see BALADEUR_ART_FRACTION) — everything else
+            // about its position is the same dead-centre placement "vinyl" uses: its title/artist
+            // and transport row (see LockScreenVisualizerActivity.buildBaladeurOverlay()) are
+            // centred on this exact point too, via a plain Gravity.CENTER with no offset of its
+            // own, so the case and its own content stay on the same centre as the screen itself.
+            float artFraction = EdgeConfig.STYLE_BALADEUR.equals(standaloneStyle)
+                ? BALADEUR_ART_FRACTION
+                : STANDALONE_ART_FRACTION;
             float half = Math.min(screenW, screenH) * artFraction * 0.5f;
             if (half <= 0) return null;
             refreshOrigin();
             float screenCx = screenW * 0.5f;
             float screenCy = screenH * 0.5f;
-            // "baladeur" alone is shifted up off dead centre: its title/artist and transport row
-            // are meant to read as sitting inside the case (see drawBaladeur() and
-            // LockScreenVisualizerActivity.buildBaladeurOverlay()), and that group is centred on
-            // this same point via a fixed translationY rather than tied to wherever this square
-            // happens to land — dead centre put it too close to the screen's own bottom edge.
-            // "vinyl" keeps the plain centred position: nothing else is meant to read as part of
-            // the same object, so there's no group to balance around it.
-            if (isBaladeur) {
-                screenCy -= screenH * BALADEUR_CENTER_Y_SHIFT;
-            }
             return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
         }
 
@@ -1450,21 +1443,6 @@ final class EdgeGlowView extends View {
     float displayHeightPx() {
         if (displayHeight <= 0) refreshDisplaySize();
         return displayHeight > 0 ? displayHeight : getHeight();
-    }
-
-    /**
-     * The absolute screen-space vertical centre "baladeur"'s case lands at — see artRect()'s
-     * standalone branch, which applies this exact same shift. Exposed so
-     * LockScreenVisualizerActivity.buildBaladeurOverlay() can centre its own title/artist +
-     * transport row (a separate View group this class never draws into) on the same point,
-     * reading the screen's real height the same way artRect() itself does rather than risking a
-     * second, possibly different reading of it. Safe to call before this view has ever been laid
-     * out (unlike readArtAnchor(), it never touches getLocationOnScreen()) —
-     * buildBaladeurOverlay() needs an answer in onCreate(), before the first layout pass has
-     * necessarily run.
-     */
-    float baladeurScreenCenterY() {
-        return displayHeightPx() * (0.5f - BALADEUR_CENTER_Y_SHIFT);
     }
 
     /** The baladeur screen circle's own radius, in real screen pixels — see drawBaladeur()'s own
@@ -2405,17 +2383,17 @@ final class EdgeGlowView extends View {
      * and activeStyle()) — the native port of the web player's own "baladeur" display mode
      * (index.html's #baladeur, style.css's .baladeur__case/.baladeur__screen): a rounded-square
      * metallic case with a circular screen inset holding the current track's own (dimmed)
-     * artwork, sized and anchored the same way "vinyl" is (see artRect()'s standalone branch,
-     * shifted up a little for this style alone) rather than filling the screen edge to edge the
-     * way "cassette" does. There is no reel/tape mechanism here, so unlike drawCassette() this has
-     * no per-frame state to advance — the shape is static, only its size ever changes (a fold, a
-     * rotation), which is exactly what buildBaladeurShaders() below guards against rebuilding
+     * artwork, dead centred on the screen the same way "vinyl" is (see artRect()'s standalone
+     * branch), just bigger (BALADEUR_ART_FRACTION), rather than filling the screen edge to edge
+     * the way "cassette" does. There is no reel/tape mechanism here, so unlike drawCassette() this
+     * has no per-frame state to advance — the shape is static, only its size ever changes (a fold,
+     * a rotation), which is exactly what buildBaladeurShaders() below guards against rebuilding
      * every frame for.
      *
-     * The transport row floating over the bottom of the screen (see
-     * LockScreenVisualizerActivity.buildTransportControls()) is what actually answers "play/
-     * pause/skip" here, same as it does for every other lock-screen style — this method only
-     * paints the case and screen behind it, never the controls themselves.
+     * The title/artist and transport row floating over the same centre point (see
+     * LockScreenVisualizerActivity.buildBaladeurOverlay()) are what actually answer "play/
+     * pause/skip" here, same as the transport row does for every other lock-screen style — this
+     * method only paints the case and screen behind it, never the controls themselves.
      */
     private void drawBaladeur(Canvas canvas) {
         ArtRect art = artRect();
