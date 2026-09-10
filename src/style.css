@@ -32,6 +32,10 @@
   --ink: #f7f8fc;
   --ink-dim: rgba(247, 248, 252, 0.62);
   --void: #05050b;
+  /* How elongated (width:height) the box cassette mode's illustration is allowed to read as
+     before it stops cropping and letterboxes instead — see .cassette__art in the cassette mode
+     section below for why. */
+  --cassette-max-box-aspect: 1.7;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -213,29 +217,46 @@ body:not([data-mode="cover"]) .scrim {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.6s var(--ease-out);
+  /* Fills in around the illustration once CASSETTE_MAX_BOX_ASPECT below stops it short of the
+     edges on a narrow phone — the same near-black the illustration's own shell sits on, so the
+     margin reads as intentional letterboxing rather than a gap into whatever is behind it. */
+  background: var(--void);
 }
 
 body[data-mode="cassette"] .cassette {
   opacity: 1;
 }
 
-/* Edge-to-edge and cropped to fill rather than letterboxed: the phone's own screen is meant
-   to read as the cassette window, the way a Walkman's door frames the tape inside it. */
+/* Edge-to-edge and cropped to fill rather than letterboxed, up to a point: the phone's own
+   screen is meant to read as the cassette window, the way a Walkman's door frames the tape
+   inside it. But this illustration's viewBox is 320x200 (1.6:1), and a plain edge-to-edge crop
+   scales *that* to cover whatever the screen's own aspect ratio is — on a screen much more
+   elongated than 1.6:1 (every normal, non-folding phone; this was tuned on a Fold, whose own
+   screens all sit much closer to square), the crop eats past the shell's own edges (viewBox y
+   8-192) and takes the screws, notches and brand tab sitting right at that border with it (see
+   index.html's <g class="cassette__screw">, y="20"/"180"/"186") — leaving just the reels and
+   label floating with no case around them. 1.7 is the widest the effective box may read as
+   before that happens — comfortably past the Fold's own aspect ratios (where this still crops
+   edge-to-edge exactly as before), short of a typical phone's. Past that cap the illustration
+   simply stops growing and letterboxes into .cassette's own background instead of cropping
+   further. Kept in sync with EdgeGlowView.drawCassette()'s own CASSETTE_MAX_BOX_ASPECT on the
+   lock-screen's native port of this same illustration. */
 .cassette__art {
   display: block;
-  width: 100%;
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
   height: 100%;
 }
 
 /* The illustration is drawn cassette-side up, i.e. landscape. Held that way it needs no
    help; held upright, it's rotated 90° and re-measured against the swapped viewport
-   (100vh/100vw) so the rotated box still runs edge to edge instead of leaving letterboxing. */
+   (100vh/100vw, capped the same way as the base rule above) so the rotated box still runs
+   edge to edge instead of leaving letterboxing, short of that same aspect-ratio cap. */
 @media (orientation: portrait) {
   .cassette__art {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 100vh;
+    width: min(100vh, calc(var(--cassette-max-box-aspect) * 100vw));
     height: 100vw;
     transform: translate(-50%, -50%) rotate(90deg);
   }

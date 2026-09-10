@@ -212,6 +212,16 @@ final class EdgeGlowView extends View {
     // units onto however big artRect() says the shell should be here.
     private static final float CASSETTE_VIEWBOX_WIDTH = 320f;
     private static final float CASSETTE_VIEWBOX_HEIGHT = 200f;
+    // How elongated (long side : short side) the box drawCassette() fits the illustration into
+    // is allowed to read as before it stops cropping and lets the illustration letterbox into
+    // this view's own background instead — see the identical cap (and the full reasoning for it)
+    // on --cassette-max-box-aspect in style.css's own cassette mode section, kept in sync: a
+    // plain edge-to-edge crop against a phone screen much more elongated than the 320x200
+    // viewBox's own 1.6:1 (every normal, non-folding phone; this was tuned on a Fold, whose own
+    // screens all sit much closer to square) eats into the shell's own edges — the screws,
+    // notches and brand tab drawn near its border — leaving just the reels and label with no
+    // case around them.
+    private static final float CASSETTE_MAX_BOX_ASPECT = 1.7f;
     // Same --void CSS variable the web player's own .cover background sits on (#14141f).
     private static final int VINYL_VOID_COLOR = 0xFF14141F;
     /** How far past the record's own edge its shadow reaches, as a multiple of the radius. */
@@ -2055,12 +2065,15 @@ final class EdgeGlowView extends View {
      *
      * Unlike "vinyl" (see artRect()'s standalone branch), this does not shrink to a centred icon:
      * it fills the whole screen edge to edge, cropped rather than letterboxed, exactly like the
-     * web player's own .cassette — the phone's screen reads as the cassette window either way. In
-     * landscape the (landscape-drawn) illustration needs no help; in portrait it is rotated 90°
-     * about the screen's centre and the cover-fit scale is measured against the swapped box
-     * (screen height as width, screen width as height) so the rotated art still runs edge to edge
-     * with no letterboxing — the same trick as the web version's own
-     * "@media (orientation: portrait) .cassette__art" rule.
+     * web player's own .cassette — the phone's screen reads as the cassette window either way, up
+     * to CASSETTE_MAX_BOX_ASPECT: past that the box simply stops growing and the illustration
+     * letterboxes into this view's own background instead, so a phone screen much more elongated
+     * than the illustration's own 320x200 viewBox doesn't crop into the shell's own edges (see
+     * that constant's own doc). In landscape the (landscape-drawn) illustration needs no help; in
+     * portrait it is rotated 90° about the screen's centre and the cover-fit scale is measured
+     * against the swapped, capped box (screen height as width, screen width as height) so the
+     * rotated art still runs edge to edge short of that cap — the same trick as the web version's
+     * own "@media (orientation: portrait) .cassette__art" rule.
      *
      * The label carries the current track's own artwork, muted like ink on paper the same way
      * the web version's .cassette__art-image is (see cassetteArtColorFilter) — without it a
@@ -2083,6 +2096,7 @@ final class EdgeGlowView extends View {
         boolean rotate = screenH > screenW;
         float boxW = rotate ? screenH : screenW;
         float boxH = rotate ? screenW : screenH;
+        boxW = Math.min(boxW, boxH * CASSETTE_MAX_BOX_ASPECT);
         float scale = Math.max(boxW / CASSETTE_VIEWBOX_WIDTH, boxH / CASSETTE_VIEWBOX_HEIGHT);
 
         canvas.save();
