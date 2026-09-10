@@ -53,8 +53,18 @@
              is manually reopened and left again. Reported as "Edge Visualizer's bars never come
              back after unlocking, only a relaunch fixes it" — an empty affinity guarantees this
              activity always gets its own isolated task, so finishing it can never touch
-             MainActivity's stack at all. -->
+             MainActivity's stack at all.
+
+             configChanges matches MainActivity's own — without it, a rotation while this screen
+             is showing (screen off, phone moved to a different orientation) makes the system
+             destroy and relaunch the activity by default. That relaunch runs onStop() on the old
+             instance along the way, and onStop() there unconditionally finish()es (see its own
+             doc: it can't otherwise tell a config change apart from a real dismissal), which
+             cancels the relaunch outright instead of recreating the screen — the fake AOD just
+             disappears mid-rotation and the real keyguard shows through. Declaring these here
+             keeps the activity alive across rotation exactly like MainActivity already does. -->
         <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".LockScreenVisualizerActivity"
             android:exported="false"
             android:launchMode="singleTask"
