@@ -15,7 +15,7 @@ import android.content.SharedPreferences;
  * ships on by default (style "vinyl"/Disque), same as Edge Visualizer — see the 2026-09-10 update
  * to docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. It still costs meaningfully
  * more battery than a real AOD, which is why it's the one setting the first-launch flow always
- * asks the required grants for up front (see runFirstLaunchSetup()/askLockScreenVisualizerPermissionsOnce()
+ * asks the required grants for up front (see runFirstLaunchSetup()/askLockScreenVisualizerPermissions()
  * in main.js) rather than leaving it to be discovered in the settings panel.
  */
 final class LockScreenVisualizerPreference {

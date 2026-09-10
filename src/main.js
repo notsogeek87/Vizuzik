@@ -531,7 +531,9 @@ function rememberUsageAccessAsked() {
  * Strictly one screen at a time. Both of these open a system Settings activity, and firing them
  * together would stack one on the other; the overlay grant goes first because without it the
  * feature cannot exist at all, and coming back to Vizuzik runs this again and picks up where it
- * left off. Every step is remembered, so nothing is ever asked twice on its own.
+ * left off. The overlay/usage-access steps are each remembered so they're only ever offered
+ * unprompted once; the lock-screen visualizer's own two grants below are asked every pass
+ * instead, for the reasons on askLockScreenVisualizerPermissions() itself.
  */
 async function runFirstLaunchSetup() {
   if (els.player.hidden) return;
@@ -552,7 +554,7 @@ async function runFirstLaunchSetup() {
   // time" rule everywhere in this file exists to avoid. Coming back to Vizuzik re-runs this whole
   // function (see the visibilitychange listener) and picks up wherever it left off.
   if (await askUsageAccessOnce()) return;
-  await askLockScreenVisualizerPermissionsOnce();
+  await askLockScreenVisualizerPermissions();
 }
 
 // Asked on the same first-launch pass as the rest, now that the lock-screen visualizer defaults
@@ -560,48 +562,35 @@ async function runFirstLaunchSetup() {
 // Visualizer's own overlay/usage-access grants above — this belongs here instead of waiting to
 // be discovered in the settings panel.
 //
-// Notifications first, requested every pass the same way requestAudioPermission() is (a plain
-// runtime dialog, never a system Settings screen, so Android itself decides not to show it again
-// once permanently denied — nothing here needs its own "asked once" bookkeeping for it). Full
-// screen intent second, and only ever offered once unprompted: it opens a system Settings screen
-// like the overlay/usage-access grants, and reopening one of those on its own on every single
-// launch is exactly what the comments on those two warn against.
-const LOCKSCREEN_FULLSCREEN_ASKED_KEY = "vizuzik:lockScreenFullScreenAsked";
-
-function hasAskedLockScreenFullScreen() {
-  try {
-    return localStorage.getItem(LOCKSCREEN_FULLSCREEN_ASKED_KEY) === "on";
-  } catch (err) {
-    return false;
-  }
-}
-
-function rememberLockScreenFullScreenAsked() {
-  try {
-    localStorage.setItem(LOCKSCREEN_FULLSCREEN_ASKED_KEY, "on");
-  } catch (err) {
-    /* see hasAskedLockScreenFullScreen() */
-  }
-}
-
-async function askLockScreenVisualizerPermissionsOnce() {
+// Unlike the overlay/usage-access grants, *both* of these are asked again every pass rather than
+// just once: notifications the same way requestAudioPermission() is (a plain runtime dialog,
+// never a system Settings screen, so Android itself decides not to show it again once
+// permanently denied). Full-screen intent used to be offered unprompted only once, same as the
+// overlay/usage-access grants — but unlike those, missing it doesn't just narrow the feature
+// (an overlay that never appears, say), it leaves the *whole* lock-screen visualizer silently
+// inert, discoverable only via the passive toast remindMissingPermissions() shows pointing at the
+// settings panel. Reopening its system Settings screen unprompted on every launch until it's
+// actually granted is worth that repetition for a feature this all-or-nothing about its one
+// remaining grant.
+async function askLockScreenVisualizerPermissions() {
   if (!lockScreenVisualizerEnabled) return;
   if (!lockScreenNotificationGranted) {
     await DeezerMedia.requestNotificationPermission().catch(() => {});
   }
   await syncLockScreenPermissions();
-  if (lockScreenFullScreenGranted || hasAskedLockScreenFullScreen()) return;
-  rememberLockScreenFullScreenAsked();
+  if (lockScreenFullScreenGranted) return;
   DeezerMedia.requestFullScreenIntentPermission().catch(() => {});
 }
 
 /**
  * A soft, passive nudge for whatever is still missing once the automatic asks above have each had
- * their one shot — never itself opens a system dialog or Settings screen. Several of the grants
- * involved are deliberately offered unprompted only once (see the comments on askUsageAccessOnce()
- * and askLockScreenVisualizerPermissionsOnce()), so without this, declining or backing out of one
- * of those screens the first time would leave it missing silently forever, discoverable only by
- * someone who happens to reopen the settings panel. Purely informative: the toast fades on its own,
+ * their shot — never itself opens a system dialog or Settings screen. The overlay/usage-access
+ * grants are deliberately offered unprompted only once (see the comment on askUsageAccessOnce()),
+ * so without this, declining or backing out of one of those screens the first time would leave it
+ * missing silently forever, discoverable only by someone who happens to reopen the settings
+ * panel. (Full-screen intent doesn't need this the same way — askLockScreenVisualizerPermissions()
+ * keeps reopening its own Settings screen on every pass until it's actually granted — but still
+ * gets a mention below alongside the others.) Purely informative: the toast fades on its own,
  * and the gear icon in the topbar is where to actually act on it.
  */
 function remindMissingPermissions() {
@@ -693,7 +682,7 @@ function updatePlayerScreenAccessHint() {
    default, same as Edge Visualizer: it keeps the screen genuinely on while music plays, which
    costs meaningfully more battery than a real AOD ever would, but that trade-off is now made for
    everyone up front rather than left to be discovered in the settings panel — see
-   askLockScreenVisualizerPermissionsOnce() below for the grants this needs. */
+   askLockScreenVisualizerPermissions() below for the grants this needs. */
 
 const LOCKSCREEN_VISUALIZER_ENABLED_KEY = "vizuzik:lockScreenVisualizer";
 
