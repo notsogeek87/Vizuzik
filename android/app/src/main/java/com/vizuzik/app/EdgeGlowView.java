@@ -203,6 +203,12 @@ final class EdgeGlowView extends View {
     // — see drawCassette(), which fills the whole screen edge to edge like the web player's own
     // .cassette rather than a centred icon.
     private static final float STANDALONE_ART_FRACTION = 0.62f;
+    // "baladeur" alone gets a bigger case than STANDALONE_ART_FRACTION — see artRect()'s
+    // standalone branch. Unlike "vinyl" (a decoration alongside a transport row anchored to the
+    // real screen edge, free to be whatever size reads well), "baladeur"'s row and title/artist
+    // sit *inside* its own screen circle (see LockScreenVisualizerActivity.buildBaladeurOverlay())
+    // and need real room for that, not just a nice-looking disc.
+    private static final float BALADEUR_ART_FRACTION = 0.78f;
     // How far up off dead centre "baladeur" alone shifts its case (see artRect()'s standalone
     // branch and baladeurScreenCenterY() below) — a fraction of the screen's own height.
     private static final float BALADEUR_CENTER_Y_SHIFT = 0.09f;
@@ -1385,19 +1391,21 @@ final class EdgeGlowView extends View {
         // here to be wrong about. "cassette" does not read this branch — see drawCassette(), which
         // covers the whole screen instead of a centred icon.
         if (standalone) {
-            float half = Math.min(screenW, screenH) * STANDALONE_ART_FRACTION * 0.5f;
+            boolean isBaladeur = EdgeConfig.STYLE_BALADEUR.equals(standaloneStyle);
+            float artFraction = isBaladeur ? BALADEUR_ART_FRACTION : STANDALONE_ART_FRACTION;
+            float half = Math.min(screenW, screenH) * artFraction * 0.5f;
             if (half <= 0) return null;
             refreshOrigin();
             float screenCx = screenW * 0.5f;
             float screenCy = screenH * 0.5f;
-            // "baladeur" alone is shifted up off dead centre: its transport row is meant to read
-            // as sitting inside the case (see drawBaladeur()), but that row is pinned to a fixed
-            // bottomMargin near the *screen's* own bottom edge (see
-            // LockScreenVisualizerActivity.buildTransportControls()), not to wherever this square
-            // happens to land — dead centre left a wide, unexplained gap between the case and the
-            // buttons underneath it. "vinyl" keeps the plain centred position: nothing below it is
-            // meant to read as part of the same object, so there's no gap to close.
-            if (EdgeConfig.STYLE_BALADEUR.equals(standaloneStyle)) {
+            // "baladeur" alone is shifted up off dead centre: its title/artist and transport row
+            // are meant to read as sitting inside the case (see drawBaladeur() and
+            // LockScreenVisualizerActivity.buildBaladeurOverlay()), and that group is centred on
+            // this same point via a fixed translationY rather than tied to wherever this square
+            // happens to land — dead centre put it too close to the screen's own bottom edge.
+            // "vinyl" keeps the plain centred position: nothing else is meant to read as part of
+            // the same object, so there's no group to balance around it.
+            if (isBaladeur) {
                 screenCy -= screenH * BALADEUR_CENTER_Y_SHIFT;
             }
             return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
@@ -1447,15 +1455,24 @@ final class EdgeGlowView extends View {
     /**
      * The absolute screen-space vertical centre "baladeur"'s case lands at — see artRect()'s
      * standalone branch, which applies this exact same shift. Exposed so
-     * LockScreenVisualizerActivity.buildTransportControls() can centre its own transport row (a
-     * separate View this class never draws into) on the same point, reading the screen's real
-     * height the same way artRect() itself does rather than risking a second, possibly different
-     * reading of it. Safe to call before this view has ever been laid out (unlike readArtAnchor(),
-     * it never touches getLocationOnScreen()) — buildTransportControls() needs an answer in
-     * onCreate(), before the first layout pass has necessarily run.
+     * LockScreenVisualizerActivity.buildBaladeurOverlay() can centre its own title/artist +
+     * transport row (a separate View group this class never draws into) on the same point,
+     * reading the screen's real height the same way artRect() itself does rather than risking a
+     * second, possibly different reading of it. Safe to call before this view has ever been laid
+     * out (unlike readArtAnchor(), it never touches getLocationOnScreen()) —
+     * buildBaladeurOverlay() needs an answer in onCreate(), before the first layout pass has
+     * necessarily run.
      */
     float baladeurScreenCenterY() {
         return displayHeightPx() * (0.5f - BALADEUR_CENTER_Y_SHIFT);
+    }
+
+    /** The baladeur screen circle's own radius, in real screen pixels — see drawBaladeur()'s own
+     *  `screenRadius` local, computed the exact same way. Exposed so
+     *  LockScreenVisualizerActivity.buildBaladeurOverlay() can cap its title/artist text width to
+     *  fit inside the circle rather than running past its edge. */
+    float baladeurScreenRadiusPx() {
+        return Math.min(displayWidthPx(), displayHeightPx()) * BALADEUR_ART_FRACTION * 0.5f * 0.84f;
     }
 
     /** The anchor as it stands, in screen coordinates: {centre x, centre y, half-size}. How

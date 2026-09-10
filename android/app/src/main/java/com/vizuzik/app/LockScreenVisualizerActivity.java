@@ -6,13 +6,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.media.session.MediaController;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -22,6 +25,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
@@ -63,9 +67,11 @@ import java.util.function.Consumer;
  * source and one now-playing source, never a second capture of either.
  *
  * A précédent/lecture-pause/suivant row floats over the bottom of the glow view (see
- * buildTransportControls()), driving the same MediaController DeezerMediaBridge already exposes —
- * the direct TransportControls calls DeezerMediaPlugin.withTransportControls() makes for the web
- * player, called here without a PluginCall since there is no webview in this Activity to relay one.
+ * buildTransportControls()) — or, for "baladeur" alone, that same row plus a title/artist card
+ * centred inside its own screen circle instead (see buildBaladeurOverlay()) — driving the same
+ * MediaController DeezerMediaBridge already exposes: the direct TransportControls calls
+ * DeezerMediaPlugin.withTransportControls() makes for the web player, called here without a
+ * PluginCall since there is no webview in this Activity to relay one.
  */
 public class LockScreenVisualizerActivity extends AppCompatActivity
     implements DeezerMediaBridge.Listener, AudioLevelsBridge.Listener {
@@ -81,6 +87,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     /** Toggled between play/pause artwork in updatePlayPauseIcon(), the only mutable thing about
      *  the transport row built in buildTransportControls() below. */
     private ImageButton playPauseButton;
+    /** "baladeur" only (see buildBaladeurOverlay()) — null for every other style, so
+     *  onNowPlayingChanged() below guards every write to them. */
+    private TextView titleView;
+    private TextView artistView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable pauseGraceExpired = this::finishIfStillPaused;
     private String lastTrackKey;
@@ -190,10 +200,14 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         root.addView(view, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         // Read once here, ahead of onStart()'s own read for glowView.setStandaloneStyle() below —
-        // buildTransportControls() needs to know the style now, while this row is still being
-        // built, to decide where it belongs; a plain SharedPreferences read has nothing worth
-        // sharing between the two call sites.
-        root.addView(buildTransportControls(LockScreenVisualizerPreference.getStyle(this), view));
+        // this decides which overlay to build now, while it's still being put together; a plain
+        // SharedPreferences read has nothing worth sharing between the two call sites.
+        String standaloneStyle = LockScreenVisualizerPreference.getStyle(this);
+        root.addView(
+            LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)
+                ? buildBaladeurOverlay(view)
+                : buildTransportControls()
+        );
         setContentView(root);
         glowView = view;
 
@@ -221,52 +235,113 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     }
 
     /**
-     * Précédent/lecture-pause/suivant, superposés à l'écran verrouillé. Piloté par la même
+     * Précédent/lecture-pause/suivant, superposés au bas de l'écran verrouillé. Piloté par la même
      * session média que DeezerMediaBridge alimente déjà pour le reste de cet écran — jamais un
      * second MediaController — via le même TransportControls que DeezerMediaPlugin.withTransportControls()
      * utilise côté web, mais appelé directement puisqu'il n'y a pas de webview ici pour relayer un
      * appel Capacitor.
      *
-     * Pinned near the bottom of the real screen for every style except "baladeur": the reference
-     * photo that style is modelled on (see EdgeGlowView.drawBaladeur()) has this row sitting
-     * inside the device's own screen circle, not floating below the case underneath it — so for
-     * that style alone the row is centred on the same point drawBaladeur() centres its case on
-     * (see EdgeGlowView.baladeurScreenCenterY()) instead.
+     * Every style but "baladeur" — see buildBaladeurOverlay() for that one, which needs this same
+     * row built smaller and centred inside its own screen circle instead of pinned to the real
+     * screen's bottom edge.
      */
-    private LinearLayout buildTransportControls(String standaloneStyle, EdgeGlowView glowViewRef) {
+    private LinearLayout buildTransportControls() {
+        LinearLayout row = buildTransportRow(48, 64, 16);
+        FrameLayout.LayoutParams rowParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        rowParams.bottomMargin = Math.round(72 * getResources().getDisplayMetrics().density);
+        row.setLayoutParams(rowParams);
+        return row;
+    }
+
+    /**
+     * "baladeur" only: the title/artist and the transport row, stacked as one column and centred
+     * as a group — the reference photo this style is modelled on (see EdgeGlowView.
+     * drawBaladeur()) has both sitting inside the device's own screen circle, not the title card
+     * floating above the case and the buttons pinned to the real screen's bottom edge the way
+     * every other style keeps them.
+     *
+     * Centred by wrapping the column in Gravity.CENTER (dead centre of the whole window) and then
+     * nudging it with a single translationY — the same distance drawBaladeur() itself shifts the
+     * case by (see EdgeGlowView.baladeurScreenCenterY()) — rather than a manually estimated
+     * topMargin: that keeps this correct regardless of how tall the title/artist block actually
+     * measures out to, without this method having to predict it.
+     */
+    private LinearLayout buildBaladeurOverlay(EdgeGlowView glowViewRef) {
+        float density = getResources().getDisplayMetrics().density;
+
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        // Roughly 68% of the screen circle's own diameter — narrower than the circle itself so a
+        // long title/artist still ellipsizes well short of its edge rather than running up to it.
+        int maxTextWidthPx = Math.round(glowViewRef.baladeurScreenRadiusPx() * 2f * 0.68f);
+
+        titleView = new TextView(this);
+        titleView.setTextColor(Color.WHITE);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(TextUtils.TruncateAt.END);
+        titleView.setGravity(Gravity.CENTER_HORIZONTAL);
+        titleView.setMaxWidth(maxTextWidthPx);
+        titleView.setShadowLayer(10f * density, 0, 2f * density, Color.argb(160, 0, 0, 0));
+        column.addView(titleView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        artistView = new TextView(this);
+        artistView.setTextColor(Color.argb(190, 255, 255, 255));
+        artistView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        artistView.setSingleLine(true);
+        artistView.setEllipsize(TextUtils.TruncateAt.END);
+        artistView.setGravity(Gravity.CENTER_HORIZONTAL);
+        artistView.setMaxWidth(maxTextWidthPx);
+        artistView.setAllCaps(true);
+        artistView.setLetterSpacing(0.09f);
+        LinearLayout.LayoutParams artistParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        artistParams.topMargin = Math.round(3 * density);
+        column.addView(artistView, artistParams);
+
+        // Smaller and tighter than buildTransportControls()'s own 48/64/16dp: this row has to fit
+        // inside the screen circle rather than spread out over the whole bottom of the phone.
+        LinearLayout row = buildTransportRow(44, 58, 8);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = Math.round(22 * density);
+        column.addView(row, rowParams);
+
+        FrameLayout.LayoutParams outerParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        outerParams.gravity = Gravity.CENTER;
+        column.setLayoutParams(outerParams);
+        column.setTranslationY(glowViewRef.baladeurScreenCenterY() - glowViewRef.displayHeightPx() * 0.5f);
+        return column;
+    }
+
+    /** The three transport buttons alone, shared by buildTransportControls() and
+     *  buildBaladeurOverlay() above — only their size and spacing differ between the two. */
+    private LinearLayout buildTransportRow(int secondaryDiameterDp, int primaryDiameterDp, int gapDp) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER);
 
-        ImageButton previous = circleButton(48, android.R.drawable.ic_media_previous);
+        ImageButton previous = circleButton(secondaryDiameterDp, android.R.drawable.ic_media_previous);
         previous.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToPrevious));
-        row.addView(previous, controlMargins(48));
+        row.addView(previous, controlMargins(secondaryDiameterDp, gapDp));
 
-        playPauseButton = circleButton(64, android.R.drawable.ic_media_pause);
+        playPauseButton = circleButton(primaryDiameterDp, android.R.drawable.ic_media_pause);
         playPauseButton.setOnClickListener(v -> withTransportControls(
             lastIsPlaying ? MediaController.TransportControls::pause : MediaController.TransportControls::play
         ));
-        row.addView(playPauseButton, controlMargins(64));
+        row.addView(playPauseButton, controlMargins(primaryDiameterDp, gapDp));
 
-        ImageButton next = circleButton(48, android.R.drawable.ic_media_next);
+        ImageButton next = circleButton(secondaryDiameterDp, android.R.drawable.ic_media_next);
         next.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToNext));
-        row.addView(next, controlMargins(48));
+        row.addView(next, controlMargins(secondaryDiameterDp, gapDp));
 
-        FrameLayout.LayoutParams rowParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        float density = getResources().getDisplayMetrics().density;
-        if (LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)) {
-            rowParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            // 64dp: the play button is the tallest child in this row, so it's what the row's own
-            // measured height comes out to — used here, ahead of that measurement actually
-            // happening, to centre the row rather than merely align its top edge.
-            float rowHeightPx = 64 * density;
-            rowParams.topMargin = Math.round(glowViewRef.baladeurScreenCenterY() - rowHeightPx / 2f);
-        } else {
-            rowParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-            rowParams.bottomMargin = Math.round(72 * density);
-        }
-        row.setLayoutParams(rowParams);
         return row;
     }
 
@@ -292,11 +367,11 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         return button;
     }
 
-    private LinearLayout.LayoutParams controlMargins(int diameterDp) {
+    private LinearLayout.LayoutParams controlMargins(int diameterDp, int marginDp) {
         float density = getResources().getDisplayMetrics().density;
         int diameterPx = Math.round(diameterDp * density);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(diameterPx, diameterPx);
-        params.leftMargin = params.rightMargin = Math.round(16 * density);
+        params.leftMargin = params.rightMargin = Math.round(marginDp * density);
         return params;
     }
 
@@ -389,6 +464,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         boolean isNewTrack = !trackKey.equals(lastTrackKey);
         if (isNewTrack) {
             lastTrackKey = trackKey;
+            // Null everywhere but "baladeur" (see buildBaladeurOverlay()) — every other style
+            // keeps title/artist off the lock screen entirely, same as before.
+            if (titleView != null) titleView.setText(nowPlaying.title);
+            if (artistView != null) artistView.setText(nowPlaying.artist);
             try {
                 glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
                 glowView.setAlbumArt(nowPlaying.albumArt);
