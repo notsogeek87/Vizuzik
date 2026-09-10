@@ -203,6 +203,9 @@ final class EdgeGlowView extends View {
     // — see drawCassette(), which fills the whole screen edge to edge like the web player's own
     // .cassette rather than a centred icon.
     private static final float STANDALONE_ART_FRACTION = 0.62f;
+    // How far up off dead centre "baladeur" alone shifts its case (see artRect()'s standalone
+    // branch and baladeurScreenCenterY() below) — a fraction of the screen's own height.
+    private static final float BALADEUR_CENTER_Y_SHIFT = 0.09f;
     // The same two rates the web player's .cassette__reel/.cassette__reel--b use — see
     // drawCassette(). Kept as two so the reels visibly drift out of phase with each other, the way
     // tape actually winds from one to the other, rather than turning as a single locked unit.
@@ -1395,7 +1398,7 @@ final class EdgeGlowView extends View {
             // buttons underneath it. "vinyl" keeps the plain centred position: nothing below it is
             // meant to read as part of the same object, so there's no gap to close.
             if (EdgeConfig.STYLE_BALADEUR.equals(standaloneStyle)) {
-                screenCy -= screenH * 0.09f;
+                screenCy -= screenH * BALADEUR_CENTER_Y_SHIFT;
             }
             return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
         }
@@ -1439,6 +1442,20 @@ final class EdgeGlowView extends View {
     float displayHeightPx() {
         if (displayHeight <= 0) refreshDisplaySize();
         return displayHeight > 0 ? displayHeight : getHeight();
+    }
+
+    /**
+     * The absolute screen-space vertical centre "baladeur"'s case lands at — see artRect()'s
+     * standalone branch, which applies this exact same shift. Exposed so
+     * LockScreenVisualizerActivity.buildTransportControls() can centre its own transport row (a
+     * separate View this class never draws into) on the same point, reading the screen's real
+     * height the same way artRect() itself does rather than risking a second, possibly different
+     * reading of it. Safe to call before this view has ever been laid out (unlike readArtAnchor(),
+     * it never touches getLocationOnScreen()) — buildTransportControls() needs an answer in
+     * onCreate(), before the first layout pass has necessarily run.
+     */
+    float baladeurScreenCenterY() {
+        return displayHeightPx() * (0.5f - BALADEUR_CENTER_Y_SHIFT);
     }
 
     /** The anchor as it stands, in screen coordinates: {centre x, centre y, half-size}. How

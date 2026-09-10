@@ -189,7 +189,11 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         FrameLayout root = new FrameLayout(this);
         root.addView(view, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        root.addView(buildTransportControls());
+        // Read once here, ahead of onStart()'s own read for glowView.setStandaloneStyle() below —
+        // buildTransportControls() needs to know the style now, while this row is still being
+        // built, to decide where it belongs; a plain SharedPreferences read has nothing worth
+        // sharing between the two call sites.
+        root.addView(buildTransportControls(LockScreenVisualizerPreference.getStyle(this), view));
         setContentView(root);
         glowView = view;
 
@@ -217,13 +221,19 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     }
 
     /**
-     * Précédent/lecture-pause/suivant, superposés au bas de l'écran verrouillé. Piloté par la même
+     * Précédent/lecture-pause/suivant, superposés à l'écran verrouillé. Piloté par la même
      * session média que DeezerMediaBridge alimente déjà pour le reste de cet écran — jamais un
      * second MediaController — via le même TransportControls que DeezerMediaPlugin.withTransportControls()
      * utilise côté web, mais appelé directement puisqu'il n'y a pas de webview ici pour relayer un
      * appel Capacitor.
+     *
+     * Pinned near the bottom of the real screen for every style except "baladeur": the reference
+     * photo that style is modelled on (see EdgeGlowView.drawBaladeur()) has this row sitting
+     * inside the device's own screen circle, not floating below the case underneath it — so for
+     * that style alone the row is centred on the same point drawBaladeur() centres its case on
+     * (see EdgeGlowView.baladeurScreenCenterY()) instead.
      */
-    private LinearLayout buildTransportControls() {
+    private LinearLayout buildTransportControls(String standaloneStyle, EdgeGlowView glowViewRef) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER);
@@ -244,9 +254,18 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
 
         FrameLayout.LayoutParams rowParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         float density = getResources().getDisplayMetrics().density;
-        rowParams.bottomMargin = Math.round(72 * density);
+        if (LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)) {
+            rowParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            // 64dp: the play button is the tallest child in this row, so it's what the row's own
+            // measured height comes out to — used here, ahead of that measurement actually
+            // happening, to centre the row rather than merely align its top edge.
+            float rowHeightPx = 64 * density;
+            rowParams.topMargin = Math.round(glowViewRef.baladeurScreenCenterY() - rowHeightPx / 2f);
+        } else {
+            rowParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            rowParams.bottomMargin = Math.round(72 * density);
+        }
         row.setLayoutParams(rowParams);
         return row;
     }
