@@ -936,7 +936,10 @@ function setOverlayBadge(status, label) {
 }
 
 function updateOverlayStatusBadge() {
-  if (els.player.hidden || !overlaySupported) {
+  // els.topbar.hidden, not els.player.hidden: the badge and settings gear live in the topbar,
+  // which now stays up on the "empty" screen too (see showScreen()) — gating on the player
+  // itself would hide them again the moment Deezer/Spotify isn't actively playing.
+  if (els.topbar.hidden || !overlaySupported) {
     els.overlayStatus.hidden = true;
     els.edgeSettingsOpen.hidden = true;
     return;
@@ -1706,7 +1709,14 @@ els.player.addEventListener("pointercancel", (event) => endGesture(event, true))
 
 function showScreen(screen) {
   els.player.hidden = screen !== "player";
-  els.topbar.hidden = screen !== "player";
+  // Kept up on "empty" too (Deezer/Spotify not currently open) so the Edge Visualizer settings
+  // gear — the only thing in here still meaningful with no track playing — stays reachable
+  // without having to relaunch the music app first. "permission" is the one screen where it
+  // still hides: notification access isn't granted yet at that point, and Edge Visualizer needs
+  // that same access to do anything. The mode-toggle style picker has no track to style,
+  // though, so it hides on its own whenever "player" isn't showing — see below.
+  els.topbar.hidden = screen === "permission";
+  els.modeToggle.hidden = screen !== "player";
   els.empty.hidden = screen !== "empty";
   els.permission.hidden = screen !== "permission";
 
