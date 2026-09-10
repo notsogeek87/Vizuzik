@@ -176,16 +176,19 @@ body:not([data-mode="cover"]) .fx {
   opacity: 1;
 }
 
-/* Cassette mode replaces the canvas scene and the disc with one fixed full-screen
-   illustration — nothing here reacts to the beat, on purpose (see .cassette below). */
-body[data-mode="cassette"] .fx {
+/* Cassette and baladeur mode replace the canvas scene and the disc with one fixed
+   full-screen illustration — nothing here reacts to the beat, on purpose (see .cassette and
+   .baladeur below). */
+body[data-mode="cassette"] .fx,
+body[data-mode="baladeur"] .fx {
   opacity: 0;
 }
 
 /* No spacer kept for it either way (unlike the other modes' disc, which shrinks but keeps
-   its footprint): the cassette artwork already fills the screen behind everything, so a
+   its footprint): the illustration already fills the screen behind everything, so a
    reserved square here would only ever push the title/controls off-centre under it. */
-body[data-mode="cassette"] .stage {
+body[data-mode="cassette"] .stage,
+body[data-mode="baladeur"] .stage {
   display: none;
 }
 
@@ -631,7 +634,8 @@ body[data-mode="radial"] .mode-toggle .icon-radial,
 body[data-mode="aurora"] .mode-toggle .icon-aurora,
 body[data-mode="nebula"] .mode-toggle .icon-nebula,
 body[data-mode="cocoon"] .mode-toggle .icon-cocoon,
-body[data-mode="cassette"] .mode-toggle .icon-cassette {
+body[data-mode="cassette"] .mode-toggle .icon-cassette,
+body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   display: block;
   animation: icon-pop 0.45s var(--ease-spring);
 }
@@ -1482,6 +1486,155 @@ body[data-mode="cassette"] .progress {
     width: min(70vw, 460px);
     padding: 12px 16px 8px;
   }
+}
+
+/* ============================================================ baladeur mode */
+
+/* A fixed illustration of a portable player: a rounded-square metallic case — a colour fixed to
+   the case material itself, same reasoning as cassette's own shell, not palette-driven — with a
+   circular "screen" inset that the real title/artist and transport controls sit inside (see
+   body[data-mode="baladeur"] .meta/.controls/.progress below; the album's own accents still show
+   up there, on the play button). Given the same padding as .player itself so both are centred
+   within the same box: .player's own padding is deliberately top-heavy (room for the fixed
+   topbar), and without matching it here the case and the controls sitting inside .player would
+   centre on two different points instead of lining up. */
+.baladeur {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 72px) 24px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s var(--ease-out);
+  background: var(--void);
+}
+
+body[data-mode="baladeur"] .baladeur {
+  opacity: 1;
+}
+
+.baladeur__case {
+  position: relative;
+  width: min(84vw, 68vh, 430px);
+  aspect-ratio: 1 / 1;
+  border-radius: 15%;
+  background:
+    radial-gradient(120% 130% at 20% 12%, rgba(255, 255, 255, 0.3), transparent 46%),
+    linear-gradient(155deg, #79c2b8 0%, #3f938c 42%, #235a55 100%);
+  box-shadow:
+    0 28px 64px rgba(0, 0, 0, 0.55),
+    inset 0 2px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -20px 34px rgba(0, 0, 0, 0.3);
+}
+
+/* A small sparkle in the corner — the one piece of "branding" the reference photo has, kept
+   here purely as a material detail, the same spirit as cassette's screws. */
+.baladeur__mark {
+  position: absolute;
+  top: 6%;
+  left: 7%;
+  width: 9%;
+  aspect-ratio: 1 / 1;
+  background: rgba(255, 255, 255, 0.55);
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+}
+
+.baladeur__screen {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(120% 120% at 50% 18%, #1c3038 0%, #0a1016 55%, #05070b 100%);
+  box-shadow:
+    inset 0 0 0 9px rgba(0, 0, 0, 0.32),
+    inset 0 16px 30px rgba(0, 0, 0, 0.65),
+    0 2px 0 rgba(255, 255, 255, 0.22);
+}
+
+/* No scrub bar in this mode — the reference photo has none, and hiding it (rather than just
+   leaving it at its usual opacity 0) keeps its reserved padding from opening a gap between the
+   title and the controls now that .stage no longer holds that space either. */
+body[data-mode="baladeur"] .progress {
+  display: none;
+}
+
+/* Narrower than the usual min(88vw, 520px): the screen circle itself is nowhere near that wide,
+   and a long title otherwise ran past its edge instead of triggering the existing marquee
+   scroll (see .marquee__text/.title .marquee__text.is-scrolling) the way every other mode
+   already relies on for a title that doesn't fit. */
+body[data-mode="baladeur"] .title,
+body[data-mode="baladeur"] .artist {
+  max-width: min(58vw, 240px);
+}
+
+body[data-mode="baladeur"] .title {
+  font-size: clamp(1.05rem, 4.6vw, 1.35rem);
+}
+
+body[data-mode="baladeur"] .artist {
+  font-size: clamp(0.72rem, 3vw, 0.85rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.72;
+}
+
+/* Tighter than the usual 1.9rem: the screen circle is a good deal narrower than .stage ever
+   was, and the default gap left the row wider than the screen on a typical phone width. */
+body[data-mode="baladeur"] .controls {
+  gap: 1.3rem;
+}
+
+/* Thin outlined transport buttons over the dark screen instead of the usual frosted-white
+   chips — the play button keeps the album's own accent (--c2) rather than the reference photo's
+   fixed pink, the one place this mode still answers to the current track. */
+body[data-mode="baladeur"] .control--secondary {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+body[data-mode="baladeur"] .control--primary {
+  background: linear-gradient(155deg, rgb(var(--c2)), rgb(var(--c1)));
+  color: #fff;
+  border-color: transparent;
+  box-shadow:
+    0 12px 28px rgba(var(--c2), 0.45),
+    0 0 calc(14px + var(--beat) * 40px) rgba(var(--c2), calc(0.35 + var(--beat) * 0.4));
+}
+
+/* The repeat/favourite/timer row under the controls — hidden everywhere but this mode. Purely
+   decorative (see the markup's own comment in index.html): Vizuzik has no such settings to back
+   them, so these are plain spans, never buttons pretending to do something they don't. */
+.baladeur-utility {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  flex: none;
+}
+
+body[data-mode="baladeur"] .baladeur-utility {
+  display: flex;
+}
+
+.baladeur-utility__chip {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.baladeur-utility__chip svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 
 /* ============================================================ empty / permission */

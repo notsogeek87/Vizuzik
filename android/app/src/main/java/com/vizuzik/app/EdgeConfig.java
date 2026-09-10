@@ -43,6 +43,10 @@ final class EdgeConfig {
     // branch). Chosen instead from LockScreenVisualizerPreference's own, shorter style list — see
     // that class and LockScreenVisualizerActivity.
     static final String STYLE_CASSETTE = "cassette";
+    // See EdgeGlowView.drawBaladeur() — same reasoning and the same shorter picker as
+    // STYLE_CASSETTE above: a screen-centred portable-player case+screen illustration, the
+    // native port of the web player's own "baladeur" display mode.
+    static final String STYLE_BALADEUR = "baladeur";
 
     static final String BAND_FULL = "full";
     static final String BAND_BASS = "bass";

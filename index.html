@@ -239,6 +239,22 @@
       </svg>
     </div>
 
+    <!-- Baladeur mode: a fixed illustration of a portable player — a rounded-square metallic
+         case with a circular "screen" inset. Unlike cassette (a full illustration with the real
+         controls floated on top as their own frosted card) this one is just the case + screen
+         shell: the real #title/#artist and #previous/#play-pause/#next stay exactly where they
+         already are in the DOM and are simply restyled to sit inside the screen circle (see
+         body[data-mode="baladeur"] .meta/.controls in style.css) — .player's own centred flex
+         layout is what lines them up with .baladeur__screen, itself centred the same way, so
+         nothing here has to compute their position by hand the way drawBaladeur() has to on the
+         native lock-screen port of this same illustration (EdgeGlowView.java). -->
+    <div id="baladeur" class="baladeur" aria-hidden="true">
+      <div class="baladeur__case">
+        <span class="baladeur__mark"></span>
+        <div class="baladeur__screen"></div>
+      </div>
+    </div>
+
     <div class="scrim" aria-hidden="true"></div>
 
     <header id="topbar" class="topbar" hidden>
@@ -274,6 +290,11 @@
           <ellipse cx="12" cy="4.6" rx="2.1" ry="3.4" transform="rotate(300 12 12)" />
         </svg>
         <svg class="icon icon-cassette" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zm5.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM9 16h6v1.4H9z" /></svg>
+        <svg class="icon icon-baladeur" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <circle cx="12" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4" />
+          <path d="M10.4 9.6v4.8l4.2-2.4z" />
+        </svg>
       </button>
     </header>
 
@@ -320,6 +341,22 @@
         <button id="next" type="button" class="control control--secondary" aria-label="Suivant">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z" /></svg>
         </button>
+      </div>
+
+      <!-- Baladeur mode only (see #baladeur's own comment above): three chips under the transport
+           row, same spirit as cassette's screws and capstans — chrome the reference photo has,
+           not a promise of a répétition/favoris/minuterie feature Vizuzik doesn't actually have,
+           so these are plain decorative spans rather than buttons that would imply otherwise. -->
+      <div class="baladeur-utility" aria-hidden="true">
+        <span class="baladeur-utility__chip">
+          <svg viewBox="0 0 24 24"><path d="M7 7h9v2.6l4-3.6-4-3.6V5H6a1 1 0 0 0-1 1v4.5h2V7zm10 10H8v-2.6l-4 3.6 4 3.6V19h11a1 1 0 0 0 1-1v-4.5h-2V17z" /></svg>
+        </span>
+        <span class="baladeur-utility__chip">
+          <svg viewBox="0 0 24 24"><path d="M12 21.3 10.6 20C5.4 15.3 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.75 0 3.4.8 4.5 2.1C13.1 3.8 14.75 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.8-8.6 11.5z" /></svg>
+        </span>
+        <span class="baladeur-utility__chip">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5.4l4.2 2.5-1 1.65-5.2-3.1V7z" /></svg>
+        </span>
       </div>
     </main>
 
@@ -394,12 +431,13 @@
         <label class="edge-settings__row">
           <span>
             Style de l'écran verrouillé
-            <small>Barres, Cassette ou Disque — centré sur l'écran, le reste reste noir pour limiter la casse côté batterie.</small>
+            <small>Barres, Cassette, Disque ou Baladeur — centré sur l'écran, le reste reste noir pour limiter la casse côté batterie.</small>
           </span>
           <select id="edge-lockscreen-style">
             <option value="bars">Barres (spectre)</option>
             <option value="cassette">Cassette</option>
             <option value="vinyl">Disque (vinyle qui tourne)</option>
+            <option value="baladeur">Baladeur</option>
           </select>
         </label>
 

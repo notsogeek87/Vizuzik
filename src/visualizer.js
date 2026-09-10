@@ -10,7 +10,7 @@
 // impulses left are pulse() calls for events that really happened (a track change, play/pause,
 // a swipe, a mode change).
 //
-// One analysis pass feeds seven scenes:
+// One analysis pass feeds eight scenes:
 //   cover    - a restrained halo around the artwork (the art stays the hero)
 //   bars     - a mirrored spectrum stage, bass at the centre, treble at the edges
 //   radial   - a reactive corona ringing the spinning disc
@@ -21,11 +21,14 @@
 //   cassette - a fixed full-screen illustration, drawn once in CSS/HTML rather than here (see
 //              index.html and style.css): the counterpoint to the spinning disc, so it never
 //              reacts to the beat and this engine draws nothing for it
+//   baladeur - a portable-player illustration around the real transport controls, drawn once in
+//              CSS/HTML rather than here (see index.html and style.css), same reasoning as
+//              cassette: this engine draws nothing for it either
 //
 // Everything is drawn additively and then bloomed by blitting the frame back over itself
 // through a blur, which is what gives the neon "lit from within" look at almost no cost.
 
-export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette"];
+export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette", "baladeur"];
 
 // Matches TrackedSessionAudioSource's BAND_COUNT on the native side so live levels map 1:1 with
 // no interpolation needed.
@@ -455,7 +458,13 @@ export class Visualizer {
   }
 
   _burstParticles() {
-    if (this.style === "cover" || this.style === "aurora" || this.style === "cocoon" || this.style === "cassette")
+    if (
+      this.style === "cover" ||
+      this.style === "aurora" ||
+      this.style === "cocoon" ||
+      this.style === "cassette" ||
+      this.style === "baladeur"
+    )
       return;
     const count = Math.round((this.style === "nebula" ? 10 : 6) * this.quality);
     const max = this.style === "nebula" ? 220 : 120;
@@ -516,8 +525,10 @@ export class Visualizer {
         this._drawCocoon(ctx);
         break;
       case "cassette":
-        // Nothing to draw: the CSS layer carries the whole scene, and .fx is hidden in this
-        // mode anyway (see body[data-mode="cassette"] .fx in style.css).
+      case "baladeur":
+        // Nothing to draw: the CSS layer carries the whole scene, and .fx is hidden in these
+        // modes anyway (see body[data-mode="cassette"], body[data-mode="baladeur"] .fx in
+        // style.css).
         break;
       default:
         this._drawCoverHalo(ctx);

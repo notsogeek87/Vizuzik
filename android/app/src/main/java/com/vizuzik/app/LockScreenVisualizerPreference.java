@@ -31,6 +31,7 @@ final class LockScreenVisualizerPreference {
     static final String STYLE_BARS = EdgeConfig.STYLE_BARS;
     static final String STYLE_CASSETTE = EdgeConfig.STYLE_CASSETTE;
     static final String STYLE_VINYL = EdgeConfig.STYLE_VINYL;
+    static final String STYLE_BALADEUR = EdgeConfig.STYLE_BALADEUR;
 
     // Default style: "vinyl" ("Disque"), not "bars" — see the class doc.
     private static final String DEFAULT_STYLE = STYLE_VINYL;
@@ -57,7 +58,8 @@ final class LockScreenVisualizerPreference {
     }
 
     private static boolean isKnownStyle(String style) {
-        return STYLE_BARS.equals(style) || STYLE_CASSETTE.equals(style) || STYLE_VINYL.equals(style);
+        return STYLE_BARS.equals(style) || STYLE_CASSETTE.equals(style) || STYLE_VINYL.equals(style)
+            || STYLE_BALADEUR.equals(style);
     }
 
     private static SharedPreferences prefs(Context context) {

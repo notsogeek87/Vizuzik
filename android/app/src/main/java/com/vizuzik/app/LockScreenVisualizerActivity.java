@@ -298,7 +298,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         glowView.applyConfig(EdgeConfig.read(this));
-        // Its own, shorter style choice (Barres/Cassette/Disque) rather than EdgeConfig's own
+        // Its own, shorter style choice (Barres/Cassette/Disque/Baladeur) rather than EdgeConfig's own
         // "style" field the line above just read — the two pickers are deliberately separate, see
         // LockScreenVisualizerPreference and EdgeGlowView.setStandaloneStyle().
         glowView.setStandaloneStyle(LockScreenVisualizerPreference.getStyle(this));

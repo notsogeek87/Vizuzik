@@ -49,10 +49,11 @@ import java.util.Set;
  * in the same spot — see drawCocoon() and drawVinyl() below for why and how those two aren't
  * edge-only like the first three.
  *
- * A sixth, "cassette" (see drawCassette()), is never offered in that same settings panel: it has
- * no album art to redraw and no Deezer layout to anchor itself against, so it only ever appears
- * as one of the three choices (alongside "bars" and "vinyl") on LockScreenVisualizerActivity's own
- * screen — see setStandalone()/setStandaloneStyle() and LockScreenVisualizerPreference.
+ * A sixth and seventh, "cassette" (see drawCassette()) and "baladeur" (see drawBaladeur()), are
+ * never offered in that same settings panel: neither has any album art to redraw or Deezer
+ * layout to anchor itself against, so they only ever appear among the four choices (alongside
+ * "bars" and "vinyl") on LockScreenVisualizerActivity's own screen — see
+ * setStandalone()/setStandaloneStyle() and LockScreenVisualizerPreference.
  */
 final class EdgeGlowView extends View {
 
@@ -291,6 +292,12 @@ final class EdgeGlowView extends View {
     // on a printed cassette label would look pasted on rather than printed. Built once alongside
     // the shaders above, reused on the vinylPaint whenever the label draws the album art.
     private ColorMatrixColorFilter cassetteArtColorFilter;
+    // "baladeur"'s own case + screen shaders — built once per disc size and reused, same reasoning
+    // as buildVinylShaders() (unlike the cassette shaders above, these are keyed to `half` in
+    // *screen* pixels, since drawBaladeur() has no fixed viewBox of its own to scale into).
+    private Shader baladeurCaseShader;
+    private Shader baladeurScreenShader;
+    private float baladeurShadersForHalf = -1f;
     // One Path per brightness tier, each holding several strands as subpaths. Allocated once and
     // rebuilt in place: allocating Paths per frame would be pure waste.
     private final Path[] cocoonTiers = new Path[COCOON_TIERS];
@@ -1074,6 +1081,8 @@ final class EdgeGlowView extends View {
                 drawVinyl(canvas);
             } else if (EdgeConfig.STYLE_CASSETTE.equals(active)) {
                 drawCassette(canvas);
+            } else if (EdgeConfig.STYLE_BALADEUR.equals(active)) {
+                drawBaladeur(canvas);
             } else {
                 drawGlow(canvas);
             }
@@ -2345,6 +2354,89 @@ final class EdgeGlowView extends View {
         ColorMatrix artMatrix = new ColorMatrix();
         artMatrix.setSaturation(0.95f);
         cassetteArtColorFilter = new ColorMatrixColorFilter(artMatrix);
+    }
+
+    /**
+     * "baladeur": the lock screen's own portable-player style (see LockScreenVisualizerPreference
+     * and activeStyle()) — the native port of the web player's own "baladeur" display mode
+     * (index.html's #baladeur, style.css's .baladeur__case/.baladeur__screen): a rounded-square
+     * metallic case with a circular dark screen inset, centred on the screen the same way "vinyl"
+     * is (see artRect()'s standalone branch) rather than filling it edge to edge the way
+     * "cassette" does. There is no reel/tape mechanism here, so unlike drawCassette() this has no
+     * per-frame state to advance — the shape is static, only its size ever changes (a fold, a
+     * rotation), which is exactly what buildBaladeurShaders() below guards against rebuilding
+     * every frame for.
+     *
+     * The transport row floating over the bottom of the screen (see
+     * LockScreenVisualizerActivity.buildTransportControls()) is what actually answers "play/
+     * pause/skip" here, same as it does for every other lock-screen style — this method only
+     * paints the case and screen behind it, never the controls themselves.
+     */
+    private void drawBaladeur(Canvas canvas) {
+        ArtRect art = artRect();
+        if (art == null) return;
+        float half = art.half;
+        buildBaladeurShaders(half);
+
+        canvas.save();
+        canvas.translate(art.cx, art.cy);
+
+        // The case: a rounded square, a fixed material colour rather than palette-driven — same
+        // reasoning as drawCassette()'s own shell colour.
+        vinylPaint.reset();
+        vinylPaint.setAntiAlias(true);
+        vinylPaint.setStyle(Paint.Style.FILL);
+        float caseRadius = half * 0.3f;
+        vinylPaint.setShader(baladeurCaseShader);
+        canvas.drawRoundRect(-half, -half, half, half, caseRadius, caseRadius, vinylPaint);
+        vinylPaint.setShader(null);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(Math.max(1f, density * 1.1f));
+        vinylPaint.setColor(withAlpha(Color.WHITE, 46));
+        canvas.drawRoundRect(-half, -half, half, half, caseRadius, caseRadius, vinylPaint);
+
+        // The screen: a dark circle inset. It carries no artwork or text of its own — the real
+        // title/artist stay off the lock screen entirely, same as every other style here — just
+        // the depth that sells it as a recessed display rather than a flat disc of colour.
+        float screenRadius = half * 0.84f;
+        vinylPaint.setStyle(Paint.Style.FILL);
+        vinylPaint.setShader(baladeurScreenShader);
+        canvas.drawCircle(0, 0, screenRadius, vinylPaint);
+        vinylPaint.setShader(null);
+        vinylPaint.setStyle(Paint.Style.STROKE);
+        vinylPaint.setStrokeWidth(Math.max(1f, density * 0.8f));
+        vinylPaint.setColor(withAlpha(Color.BLACK, 130));
+        canvas.drawCircle(0, 0, screenRadius, vinylPaint);
+        vinylPaint.setStrokeWidth(Math.max(0.6f, density * 0.5f));
+        vinylPaint.setColor(withAlpha(Color.WHITE, 36));
+        canvas.drawCircle(0, 0, screenRadius - density * 1.2f, vinylPaint);
+
+        canvas.restore();
+    }
+
+    /** Rebuilt only when the disc's own screen-pixel size changes (a fold, a calibration) — same
+     *  guard as buildVinylShaders(), and for the same reason: unlike buildCassetteShaders()'s
+     *  fixed-viewBox shaders, these are sized in screen pixels via `half`. */
+    private void buildBaladeurShaders(float half) {
+        if (baladeurCaseShader != null && Math.abs(half - baladeurShadersForHalf) < 0.5f) return;
+        baladeurShadersForHalf = half;
+        // The case's own top-left highlight sweeping down to a darker teal, the same idea as
+        // .baladeur__case's linear-gradient in the web version.
+        baladeurCaseShader = new LinearGradient(
+            -half, -half, half * 0.35f, half,
+            new int[] { 0xFF79C2B8, 0xFF3F938C, 0xFF235A55 },
+            new float[] { 0f, 0.5f, 1f },
+            Shader.TileMode.CLAMP
+        );
+        // Top-weighted, the same idea as .baladeur__screen's own "radial-gradient(... at 50% 18%,
+        // ...)": the centre of the gradient sits above the screen's own centre so the upper half
+        // reads a little lighter, like a display catching ambient light from above.
+        baladeurScreenShader = new RadialGradient(
+            0, -half * 0.5f, half * 1.6f,
+            new int[] { 0xFF1C3038, 0xFF0A1016, 0xFF05070B },
+            new float[] { 0f, 0.55f, 1f },
+            Shader.TileMode.CLAMP
+        );
     }
 
     private static float squircle(float angle) {

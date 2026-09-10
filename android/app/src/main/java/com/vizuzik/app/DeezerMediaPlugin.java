@@ -441,7 +441,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Mirrors the web layer's own lock-screen style pick (Barres/Cassette/Disque) into
+     * Mirrors the web layer's own lock-screen style pick (Barres/Cassette/Disque/Baladeur) into
      * LockScreenVisualizerPreference — a separate preference from EdgeConfig.style, and read only
      * once, by LockScreenVisualizerActivity.onStart(). Unlike setLockScreenVisualizerEnabled()
      * above, a change here has nothing to act on immediately: it takes effect the next time that
