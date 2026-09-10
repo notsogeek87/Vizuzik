@@ -1387,6 +1387,16 @@ final class EdgeGlowView extends View {
             refreshOrigin();
             float screenCx = screenW * 0.5f;
             float screenCy = screenH * 0.5f;
+            // "baladeur" alone is shifted up off dead centre: its transport row is meant to read
+            // as sitting inside the case (see drawBaladeur()), but that row is pinned to a fixed
+            // bottomMargin near the *screen's* own bottom edge (see
+            // LockScreenVisualizerActivity.buildTransportControls()), not to wherever this square
+            // happens to land — dead centre left a wide, unexplained gap between the case and the
+            // buttons underneath it. "vinyl" keeps the plain centred position: nothing below it is
+            // meant to read as part of the same object, so there's no gap to close.
+            if (EdgeConfig.STYLE_BALADEUR.equals(standaloneStyle)) {
+                screenCy -= screenH * 0.09f;
+            }
             return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
         }
 
@@ -2360,10 +2370,11 @@ final class EdgeGlowView extends View {
      * "baladeur": the lock screen's own portable-player style (see LockScreenVisualizerPreference
      * and activeStyle()) — the native port of the web player's own "baladeur" display mode
      * (index.html's #baladeur, style.css's .baladeur__case/.baladeur__screen): a rounded-square
-     * metallic case with a circular dark screen inset, centred on the screen the same way "vinyl"
-     * is (see artRect()'s standalone branch) rather than filling it edge to edge the way
-     * "cassette" does. There is no reel/tape mechanism here, so unlike drawCassette() this has no
-     * per-frame state to advance — the shape is static, only its size ever changes (a fold, a
+     * metallic case with a circular screen inset holding the current track's own (dimmed)
+     * artwork, sized and anchored the same way "vinyl" is (see artRect()'s standalone branch,
+     * shifted up a little for this style alone) rather than filling the screen edge to edge the
+     * way "cassette" does. There is no reel/tape mechanism here, so unlike drawCassette() this has
+     * no per-frame state to advance — the shape is static, only its size ever changes (a fold, a
      * rotation), which is exactly what buildBaladeurShaders() below guards against rebuilding
      * every frame for.
      *
@@ -2395,13 +2406,36 @@ final class EdgeGlowView extends View {
         vinylPaint.setColor(withAlpha(Color.WHITE, 46));
         canvas.drawRoundRect(-half, -half, half, half, caseRadius, caseRadius, vinylPaint);
 
-        // The screen: a dark circle inset. It carries no artwork or text of its own — the real
-        // title/artist stay off the lock screen entirely, same as every other style here — just
-        // the depth that sells it as a recessed display rather than a flat disc of colour.
+        // The screen: the current track's own artwork, cropped to fill the circle — the same
+        // bitmap "vinyl" already has on hand (setAlbumArt() is called on every track change
+        // regardless of which style is active) — dimmed under the same dark gradient this used to
+        // paint on its own, the same "ambient backdrop" treatment the web version's own blurred
+        // background gives the cover (see .ambient__art's brightness(0.5) in style.css) rather
+        // than a bright, sharp photo competing with the transport row sitting over it. A plain
+        // dark screen shows through until the first track's art arrives, same as cassette's label.
         float screenRadius = half * 0.84f;
         vinylPaint.setStyle(Paint.Style.FILL);
-        vinylPaint.setShader(baladeurScreenShader);
-        canvas.drawCircle(0, 0, screenRadius, vinylPaint);
+        Bitmap screenArt = vinylBitmap;
+        BitmapShader screenArtShader = vinylShader;
+        if (screenArt != null && screenArtShader != null && !screenArt.isRecycled()) {
+            float artScale = 2f * screenRadius / Math.min(screenArt.getWidth(), screenArt.getHeight());
+            vinylMatrix.setScale(artScale, artScale);
+            vinylMatrix.postTranslate(
+                -screenArt.getWidth() * artScale * 0.5f,
+                -screenArt.getHeight() * artScale * 0.5f
+            );
+            screenArtShader.setLocalMatrix(vinylMatrix);
+            vinylPaint.setShader(screenArtShader);
+            vinylPaint.setAlpha(255);
+            canvas.drawCircle(0, 0, screenRadius, vinylPaint);
+            vinylPaint.setShader(baladeurScreenShader);
+            vinylPaint.setAlpha(130);
+            canvas.drawCircle(0, 0, screenRadius, vinylPaint);
+            vinylPaint.setAlpha(255);
+        } else {
+            vinylPaint.setShader(baladeurScreenShader);
+            canvas.drawCircle(0, 0, screenRadius, vinylPaint);
+        }
         vinylPaint.setShader(null);
         vinylPaint.setStyle(Paint.Style.STROKE);
         vinylPaint.setStrokeWidth(Math.max(1f, density * 0.8f));
