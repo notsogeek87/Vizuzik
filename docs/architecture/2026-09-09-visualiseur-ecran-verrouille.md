@@ -258,14 +258,40 @@ de `MainActivity`. Avec ce correctif, l'overlay ne s'arrête même plus pendant 
 son propre chemin de décision (`EdgeOverlayController`) ne dépend de cette Activity, donc il
 continue de tourner sans interruption du début à la fin — il n'y a plus rien à faire « revenir ».
 
+## Mise à jour (2026-09-10) : activé par défaut, style « Disque », permissions demandées au premier lancement
+
+Revenu sur la décision documentée plus bas (« pas de séquence d'accueil dédiée ») : le visualiseur
+écran verrouillé est maintenant **activé par défaut**, avec le style « Disque » (`STYLE_VINYL`) au
+lieu de « Barres » — `LockScreenVisualizerPreference.isEnabled()`/`getStyle()` (natif) et
+`isLockScreenVisualizerEnabled()`/`readLockScreenVisualizerStyle()` (`src/main.js`) changent tous
+les quatre de valeur par défaut, en gardant la même logique « absent dans les préférences » plutôt
+que d'écrire une valeur au premier lancement.
+
+Conséquence directe : les deux autorisations dont ce mode a besoin (notifications, puis plein écran
+sur Android 14+) rejoignent désormais la séquence de premier lancement
+(`runFirstLaunchSetup()`/`askLockScreenVisualizerPermissionsOnce()` dans `main.js`), au même rang
+que celles d'Edge Visualizer (superposition, accès aux données d'utilisation) — toujours une seule
+autorisation/écran système à la fois, jamais deux empilés. Les notifications sont redemandées à
+chaque lancement tant qu'elles ne sont pas accordées (une simple boîte de dialogue in-app, comme
+`requestAudioPermission()` — Android lui-même arrête de la montrer une fois le refus permanent) ;
+le plein écran, qui ouvre un écran Réglages, garde la règle « une seule fois sans y être invité »
+des autres autorisations de ce type.
+
+Une nouvelle fonction, `remindMissingPermissions()`, tourne à chaque ouverture de l'app (et à
+chaque retour au premier plan) : purement informative, elle n'ouvre jamais elle-même un système
+d'autorisation, mais affiche un toast quand une autorisation nécessaire à une fonctionnalité déjà
+activée manque encore — le seul moyen de le savoir, avant, était de rouvrir le panneau de réglages.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.
-- **Pas de séquence d'accueil dédiée** (sheet d'explication, permissions demandées automatiquement
-  au premier lancement) comme pour Edge Visualizer : contrairement à ce dernier, cette
-  fonctionnalité est expérimentale, plus intrusive, et **désactivée par défaut** — elle vit
-  entièrement dans le panneau de réglages, sur le même modèle que « Seulement sur l'écran du
-  lecteur » (un interrupteur + un bouton d'autorisation qui n'apparaît que si le nécessaire manque).
+- **Pas de séquence d'accueil dédiée** (sheet d'explication) comme pour Edge Visualizer : contrairement
+  à ce dernier, cette fonctionnalité reste expérimentale et plus intrusive, mais rejoint désormais
+  Edge Visualizer sur les deux points qui comptaient le plus — activée par défaut et permissions
+  demandées au premier lancement (voir la mise à jour ci-dessus) — sans sheet d'explication dédiée
+  pour autant : elle vit dans le panneau de réglages, sur le même modèle que « Seulement sur l'écran
+  du lecteur » (un interrupteur + un bouton d'autorisation qui n'apparaît que si le nécessaire
+  manque).
 - **Pas d'ancrage « Cocon » recentré sur l'écran.** Contrairement à « Vinyle »/« Cassette » (voir la
   mise à jour ci-dessus), « Cocon » continue de retomber sur Barres/Contour plutôt que de se centrer
   — non fait ici pour garder ce changement contenu à ce que le picker de cet écran propose

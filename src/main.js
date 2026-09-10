@@ -547,17 +547,95 @@ async function runFirstLaunchSetup() {
     openOverlaySheet();
     return;
   }
-  await askUsageAccessOnce();
+  // Stop here if that just opened the usage-access Settings screen: colliding it with another
+  // screen (the full-screen-intent grant below can open one too) is exactly what the "one at a
+  // time" rule everywhere in this file exists to avoid. Coming back to Vizuzik re-runs this whole
+  // function (see the visibilitychange listener) and picks up wherever it left off.
+  if (await askUsageAccessOnce()) return;
+  await askLockScreenVisualizerPermissionsOnce();
 }
 
+// Asked on the same first-launch pass as the rest, now that the lock-screen visualizer defaults
+// to on: without these two grants it silently does nothing, so — same reasoning as Edge
+// Visualizer's own overlay/usage-access grants above — this belongs here instead of waiting to
+// be discovered in the settings panel.
+//
+// Notifications first, requested every pass the same way requestAudioPermission() is (a plain
+// runtime dialog, never a system Settings screen, so Android itself decides not to show it again
+// once permanently denied — nothing here needs its own "asked once" bookkeeping for it). Full
+// screen intent second, and only ever offered once unprompted: it opens a system Settings screen
+// like the overlay/usage-access grants, and reopening one of those on its own on every single
+// launch is exactly what the comments on those two warn against.
+const LOCKSCREEN_FULLSCREEN_ASKED_KEY = "vizuzik:lockScreenFullScreenAsked";
+
+function hasAskedLockScreenFullScreen() {
+  try {
+    return localStorage.getItem(LOCKSCREEN_FULLSCREEN_ASKED_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function rememberLockScreenFullScreenAsked() {
+  try {
+    localStorage.setItem(LOCKSCREEN_FULLSCREEN_ASKED_KEY, "on");
+  } catch (err) {
+    /* see hasAskedLockScreenFullScreen() */
+  }
+}
+
+async function askLockScreenVisualizerPermissionsOnce() {
+  if (!lockScreenVisualizerEnabled) return;
+  if (!lockScreenNotificationGranted) {
+    await DeezerMedia.requestNotificationPermission().catch(() => {});
+  }
+  await syncLockScreenPermissions();
+  if (lockScreenFullScreenGranted || hasAskedLockScreenFullScreen()) return;
+  rememberLockScreenFullScreenAsked();
+  DeezerMedia.requestFullScreenIntentPermission().catch(() => {});
+}
+
+/**
+ * A soft, passive nudge for whatever is still missing once the automatic asks above have each had
+ * their one shot — never itself opens a system dialog or Settings screen. Several of the grants
+ * involved are deliberately offered unprompted only once (see the comments on askUsageAccessOnce()
+ * and askLockScreenVisualizerPermissionsOnce()), so without this, declining or backing out of one
+ * of those screens the first time would leave it missing silently forever, discoverable only by
+ * someone who happens to reopen the settings panel. Purely informative: the toast fades on its own,
+ * and the gear icon in the topbar is where to actually act on it.
+ */
+function remindMissingPermissions() {
+  // Never compete with a sheet already open — either one already surfaces its own grant buttons
+  // and hints, so a toast on top of it would only be noise.
+  if (!els.overlaySheet.hidden || !els.edgeSettingsSheet.hidden) return;
+  const missing = [];
+  if (edgeOverlayEnabled && overlaySupported && !overlayPermissionGranted) {
+    missing.push("l'affichage par-dessus les autres apps");
+  }
+  if (lockScreenVisualizerEnabled && !lockScreenNotificationGranted) {
+    missing.push("les notifications");
+  } else if (lockScreenVisualizerEnabled && !lockScreenFullScreenGranted) {
+    missing.push("le plein écran");
+  }
+  if (!missing.length) return;
+  showToast(
+    `Autorisation${missing.length > 1 ? "s" : ""} manquante${missing.length > 1 ? "s" : ""} : ${missing.join(", ")} — réglages ⚙️`,
+    4500
+  );
+}
+
+/** Returns whether this call just opened the usage-access Settings screen, so callers chaining
+ *  another screen-opening step after this one (see runFirstLaunchSetup()) know to stop instead of
+ *  stacking one on top of it. */
 async function askUsageAccessOnce() {
-  if (hasAskedUsageAccess()) return;
+  if (hasAskedUsageAccess()) return false;
   await syncUsageAccess();
-  if (usageAccessGranted) return;
+  if (usageAccessGranted) return false;
   // Stamped before opening the screen, not after: whether they grant it or back out, this was
   // their one unprompted ask.
   rememberUsageAccessAsked();
   DeezerMedia.requestUsageAccess().catch(() => {});
+  return true;
 }
 
 async function syncUsageAccess() {
@@ -611,19 +689,22 @@ function updatePlayerScreenAccessHint() {
 /* --- lock-screen visualizer: a "fake AOD" — the display kept lit, showing the same styles as
    Edge Visualizer, in place of the phone's own screen-off/Always-On Display while music plays.
    There is no public API on Android or One UI for a third-party app to draw on the real AOD
-   hardware panel — see docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. Off by
-   default: unlike Edge Visualizer, this keeps the screen genuinely on, which costs meaningfully
-   more battery than a real AOD ever would. */
+   hardware panel — see docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. On by
+   default, same as Edge Visualizer: it keeps the screen genuinely on while music plays, which
+   costs meaningfully more battery than a real AOD ever would, but that trade-off is now made for
+   everyone up front rather than left to be discovered in the settings panel — see
+   askLockScreenVisualizerPermissionsOnce() below for the grants this needs. */
 
 const LOCKSCREEN_VISUALIZER_ENABLED_KEY = "vizuzik:lockScreenVisualizer";
 
 function isLockScreenVisualizerEnabled() {
   try {
-    // Opposite default from Edge Visualizer's own key: absent means *off* here — this is the
-    // more intrusive of the two features, and starts off until someone deliberately turns it on.
-    return localStorage.getItem(LOCKSCREEN_VISUALIZER_ENABLED_KEY) === "on";
+    // Same default as Edge Visualizer's own key: absent means *on* — only an explicit "off"
+    // (someone turning the switch off in the settings panel) disables it.
+    const stored = localStorage.getItem(LOCKSCREEN_VISUALIZER_ENABLED_KEY);
+    return stored === null ? true : stored === "on";
   } catch (err) {
-    return false;
+    return true;
   }
 }
 
@@ -655,6 +736,8 @@ function setLockScreenVisualizerEnabled(enabled) {
 // keeping its own localStorage key rather than folding it into readEdgeSettingsFromForm().
 const LOCKSCREEN_VISUALIZER_STYLE_KEY = "vizuzik:lockScreenVisualizerStyle";
 const LOCKSCREEN_VISUALIZER_STYLES = ["bars", "cassette", "vinyl"];
+// "vinyl" ("Disque"): the default style once the lock-screen visualizer itself defaults to on.
+const LOCKSCREEN_VISUALIZER_DEFAULT_STYLE = "vinyl";
 
 function isLockScreenVisualizerStyle(value) {
   return LOCKSCREEN_VISUALIZER_STYLES.includes(value);
@@ -663,9 +746,9 @@ function isLockScreenVisualizerStyle(value) {
 function readLockScreenVisualizerStyle() {
   try {
     const stored = localStorage.getItem(LOCKSCREEN_VISUALIZER_STYLE_KEY);
-    return isLockScreenVisualizerStyle(stored) ? stored : "bars";
+    return isLockScreenVisualizerStyle(stored) ? stored : LOCKSCREEN_VISUALIZER_DEFAULT_STYLE;
   } catch (err) {
-    return "bars";
+    return LOCKSCREEN_VISUALIZER_DEFAULT_STYLE;
   }
 }
 
@@ -1857,7 +1940,9 @@ document.addEventListener("visibilitychange", () => {
     // step of the first-launch flow should happen, if there is one left.
     syncOverlayPermission()
       .then(syncUsageAccess)
+      .then(syncLockScreenPermissions)
       .then(runFirstLaunchSetup)
+      .then(remindMissingPermissions)
       .catch(() => {});
   } else {
     // Nothing to animate against a hidden screen; rAF would be throttled anyway, but this
@@ -1892,7 +1977,9 @@ applyDisplayMode(false);
   // pre-check default and offer the explainer to someone who granted it long ago.
   await syncOverlayPermission();
   await syncUsageAccess();
-  runFirstLaunchSetup();
+  await syncLockScreenPermissions();
+  await runFirstLaunchSetup();
+  remindMissingPermissions();
   loadEdgeConfig();
   // Cold-start mirror: EdgeOverlayPreference only remembers what setEdgeOverlayEnabled() last
   // wrote, and until now that only ever happened inside toggleEdgeOverlay() — someone who turned

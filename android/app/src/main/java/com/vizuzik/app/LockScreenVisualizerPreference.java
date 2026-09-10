@@ -11,10 +11,12 @@ import android.content.SharedPreferences;
  * alive, independently of whether Vizuzik's own Activity/webview has ever been launched this
  * session. DeezerMediaPlugin.setLockScreenVisualizerEnabled() is the only writer.
  *
- * Unlike EdgeOverlayPreference, absent means *off*: this feature takes over the lock screen and
- * keeps the display lit instead of letting it sleep, a materially bigger cost and a more
- * intrusive thing to show than a border drawn over another app — it only ever runs once someone
- * has explicitly turned it on.
+ * Unlike EdgeOverlayPreference's original reasoning, this no longer defaults to off: the feature
+ * ships on by default (style "vinyl"/Disque), same as Edge Visualizer — see the 2026-09-10 update
+ * to docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. It still costs meaningfully
+ * more battery than a real AOD, which is why it's the one setting the first-launch flow always
+ * asks the required grants for up front (see runFirstLaunchSetup()/askLockScreenVisualizerPermissionsOnce()
+ * in main.js) rather than leaving it to be discovered in the settings panel.
  */
 final class LockScreenVisualizerPreference {
 
@@ -30,8 +32,11 @@ final class LockScreenVisualizerPreference {
     static final String STYLE_CASSETTE = EdgeConfig.STYLE_CASSETTE;
     static final String STYLE_VINYL = EdgeConfig.STYLE_VINYL;
 
+    // Default style: "vinyl" ("Disque"), not "bars" — see the class doc.
+    private static final String DEFAULT_STYLE = STYLE_VINYL;
+
     static boolean isEnabled(Context context) {
-        return prefs(context).getBoolean(KEY_ENABLED, false);
+        return prefs(context).getBoolean(KEY_ENABLED, true);
     }
 
     static void setEnabled(Context context, boolean enabled) {
@@ -40,15 +45,15 @@ final class LockScreenVisualizerPreference {
 
     /** Read once by LockScreenVisualizerActivity.onStart(), the same moment it reads the rest of
      *  EdgeConfig — see EdgeGlowView.setStandaloneStyle(). An unrecognised or missing value falls
-     *  back to "bars" rather than being passed through, since activeStyle() trusts this value
-     *  completely (unlike EdgeConfig.style, it is never checked against a fallback there). */
+     *  back to DEFAULT_STYLE rather than being passed through, since activeStyle() trusts this
+     *  value completely (unlike EdgeConfig.style, it is never checked against a fallback there). */
     static String getStyle(Context context) {
-        String stored = prefs(context).getString(KEY_STYLE, STYLE_BARS);
-        return isKnownStyle(stored) ? stored : STYLE_BARS;
+        String stored = prefs(context).getString(KEY_STYLE, DEFAULT_STYLE);
+        return isKnownStyle(stored) ? stored : DEFAULT_STYLE;
     }
 
     static void setStyle(Context context, String style) {
-        prefs(context).edit().putString(KEY_STYLE, isKnownStyle(style) ? style : STYLE_BARS).apply();
+        prefs(context).edit().putString(KEY_STYLE, isKnownStyle(style) ? style : DEFAULT_STYLE).apply();
     }
 
     private static boolean isKnownStyle(String style) {

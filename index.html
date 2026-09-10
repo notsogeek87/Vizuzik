@@ -372,8 +372,9 @@
              the lock screen and keeps the display lit while music plays, instead of letting the
              phone sleep or show its own Always-On Display — there is no public API that lets a
              third-party app draw on the real one. See
-             docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. Off by default, and
-             needs its own permission(s) before it can do anything at all. -->
+             docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. On by default (style
+             "Disque") — its two grants are asked for on first launch, same as the ones above; this
+             switch is only for turning it back off. -->
         <label class="edge-settings__row edge-settings__row--switch">
           <span>
             Visualiseur écran verrouillé (expérimental)
