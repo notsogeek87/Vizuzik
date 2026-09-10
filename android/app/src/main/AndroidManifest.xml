@@ -62,9 +62,16 @@
              doc: it can't otherwise tell a config change apart from a real dismissal), which
              cancels the relaunch outright instead of recreating the screen — the fake AOD just
              disappears mid-rotation and the real keyguard shows through. Declaring these here
-             keeps the activity alive across rotation exactly like MainActivity already does. -->
+             keeps the activity alive across rotation exactly like MainActivity already does.
+
+             screenOrientation="portrait" on top of that: configChanges alone stops the destroy/
+             relaunch, but the window would otherwise still rotate its layout to match the
+             physical orientation, the same way MainActivity's web UI does. A real lock screen on
+             a phone never rotates with the device, and this screen is standing in for one — it
+             stays portrait no matter how the phone is held while it's showing. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:screenOrientation="portrait"
             android:name=".LockScreenVisualizerActivity"
             android:exported="false"
             android:launchMode="singleTask"
