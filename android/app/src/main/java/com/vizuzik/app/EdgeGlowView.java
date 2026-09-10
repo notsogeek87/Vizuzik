@@ -233,10 +233,15 @@ final class EdgeGlowView extends View {
     private static final int VINYL_VOID_COLOR = 0xFF14141F;
     /** How far past the record's own edge its shadow reaches, as a multiple of the radius. */
     private static final float VINYL_SHADOW_REACH = 1.09f;
+    // How far past the record's own edge the beat-triggered colour glow in drawVinyl() reaches —
+    // kept at or under VINYL_WINDOW_MARGIN below on purpose: this style is also drawn over
+    // Deezer itself (EdgeConfig's own "vinyl"), where the overlay window shrinks to exactly that
+    // margin for touch pass-through, and a glow reaching past it would simply be clipped there.
+    private static final float VINYL_BEAT_GLOW_REACH = 1.16f;
     // How much bigger than the record's own radius the shrunk window has to be, as a multiple —
-    // it has to hold the shadow (VINYL_SHADOW_REACH), the beat-driven lift in drawVinyl() (up to
-    // 2%), and the rim's own stroke width, with a little left over rather than clipping any of
-    // them exactly at the edge.
+    // it has to hold the shadow (VINYL_SHADOW_REACH), the beat glow (VINYL_BEAT_GLOW_REACH), the
+    // beat-driven lift in drawVinyl() (up to 2%), and the rim's own stroke width, with a little
+    // left over rather than clipping any of them exactly at the edge.
     private static final float VINYL_WINDOW_MARGIN = 1.18f;
 
     // Everything about the ribbon that depends only on where you are around it, computed once at
@@ -1944,6 +1949,32 @@ final class EdgeGlowView extends View {
         vinylPaint.setShader(vinylShadow);
         canvas.drawCircle(0, 0, half * VINYL_SHADOW_REACH, vinylPaint);
 
+        // A soft, palette-coloured halo flaring out past the disc's own edge on each detected
+        // beat — colours "at the rhythm of the music", the literal ask this answers: nothing here
+        // otherwise visibly answers the music beyond the small scale "lift" a few lines down (the
+        // web player's own .disc drives an equivalent glow off --beat, see its box-shadow in
+        // style.css). Rebuilt fresh rather than cached by buildVinylShaders()'s own guard: unlike
+        // the pure-black shadow above, this has to track the travelling palette colour too, not
+        // just the disc's screen-pixel size — and it only ever actually draws on the handful of
+        // frames beatEnergy hasn't yet decayed past (see PULSE_DECAY_MS), so that cost is rare.
+        float beatPulse = clamp01(beatEnergy);
+        if (beatPulse > 0.01f) {
+            int glowColor = saturate(paletteColorAt(0f));
+            Shader beatGlow = new RadialGradient(
+                0, 0, half * VINYL_BEAT_GLOW_REACH,
+                new int[] {
+                    withAlpha(glowColor, 0),
+                    withAlpha(glowColor, clamp255((int) (beatPulse * 190))),
+                    withAlpha(glowColor, 0),
+                },
+                new float[] { 0f, 1f / VINYL_BEAT_GLOW_REACH, 1f },
+                Shader.TileMode.CLAMP
+            );
+            vinylPaint.setShader(beatGlow);
+            canvas.drawCircle(0, 0, half * VINYL_BEAT_GLOW_REACH, vinylPaint);
+            vinylPaint.setShader(null);
+        }
+
         canvas.rotate(vinylAngleDeg);
         // A small beat-driven lift, same spirit as the web player's own disc scaling up on an
         // impulse — the one bit of this style that answers the music rather than just turning at
@@ -2023,7 +2054,10 @@ final class EdgeGlowView extends View {
     }
 
     /** The centre label and spindle hole — what turns a circle of artwork into a record rather
-     *  than a coaster. Coloured from the same travelling palette as the rest of the overlay.
+     *  than a coaster. Coloured from the same travelling palette as the rest of the overlay, its
+     *  two accent stops lifted toward white on each detected beat (see the outer glow in
+     *  drawVinyl() for the same idea, drawn larger and further out) — a second, closer-in place
+     *  the record's own colour actually answers the rhythm rather than just travelling on its own.
      *
      *  Every colour here carries its own alpha and the paint's is reset first: sharing one Paint
      *  with the grooves above is what once left this drawn at their alpha of 26, i.e. all but
@@ -2031,11 +2065,12 @@ final class EdgeGlowView extends View {
      */
     private void drawVinylLabel(Canvas canvas, float half) {
         float labelRadius = half * VINYL_LABEL_FRACTION;
+        float labelPulse = clamp01(beatEnergy) * 0.4f;
         int[] colors = {
             withAlpha(VINYL_VOID_COLOR, 255),
             withAlpha(VINYL_VOID_COLOR, 255),
-            withAlpha(saturate(paletteColorAt(0f)), 255),
-            withAlpha(saturate(paletteColorAt(1f)), 255),
+            withAlpha(lit(saturate(paletteColorAt(0f)), labelPulse), 255),
+            withAlpha(lit(saturate(paletteColorAt(1f)), labelPulse), 255),
             withAlpha(dim(paletteColorAt(1f), 0.35f), 255),
         };
         float[] stops = { 0f, 0.30f, 0.42f, 0.86f, 1f };

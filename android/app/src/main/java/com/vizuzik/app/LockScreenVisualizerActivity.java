@@ -87,7 +87,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     /** Toggled between play/pause artwork in updatePlayPauseIcon(), the only mutable thing about
      *  the transport row built in buildTransportControls() below. */
     private ImageButton playPauseButton;
-    /** "baladeur" only (see buildBaladeurOverlay()) — null for every other style, so
+    /** "baladeur" and "vinyl" only (see buildMetaColumn()) — null for "bars"/"cassette", so
      *  onNowPlayingChanged() below guards every write to them. */
     private TextView titleView;
     private TextView artistView;
@@ -203,11 +203,18 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         // this decides which overlay to build now, while it's still being put together; a plain
         // SharedPreferences read has nothing worth sharing between the two call sites.
         String standaloneStyle = LockScreenVisualizerPreference.getStyle(this);
-        root.addView(
-            LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)
-                ? buildBaladeurOverlay(view)
-                : buildTransportControls()
-        );
+        if (LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)) {
+            root.addView(buildBaladeurOverlay(view));
+        } else {
+            root.addView(buildTransportControls());
+            // "vinyl" ("Disque") alone also gets a title/artist card, pinned near the top of the
+            // real screen rather than tucked inside the record the way "baladeur"'s own is (see
+            // buildBaladeurOverlay()) — the record has no screen of its own to hold it, and "bars"/
+            // "cassette" keep the lock screen text-free entirely, same as before this was added.
+            if (LockScreenVisualizerPreference.STYLE_VINYL.equals(standaloneStyle)) {
+                root.addView(buildDiscMeta());
+            }
+        }
         setContentView(root);
         glowView = view;
 
@@ -270,13 +277,57 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     private LinearLayout buildBaladeurOverlay(EdgeGlowView glowViewRef) {
         float density = getResources().getDisplayMetrics().density;
 
-        LinearLayout column = new LinearLayout(this);
-        column.setOrientation(LinearLayout.VERTICAL);
-        column.setGravity(Gravity.CENTER_HORIZONTAL);
-
         // Roughly 68% of the screen circle's own diameter — narrower than the circle itself so a
         // long title/artist still ellipsizes well short of its edge rather than running up to it.
         int maxTextWidthPx = Math.round(glowViewRef.baladeurScreenRadiusPx() * 2f * 0.68f);
+        LinearLayout column = buildMetaColumn(maxTextWidthPx);
+
+        // Smaller and tighter than buildTransportControls()'s own 48/64/16dp: this row has to fit
+        // inside the screen circle rather than spread out over the whole bottom of the phone.
+        LinearLayout row = buildTransportRow(44, 58, 8);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = Math.round(22 * density);
+        column.addView(row, rowParams);
+
+        FrameLayout.LayoutParams outerParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        outerParams.gravity = Gravity.CENTER;
+        column.setLayoutParams(outerParams);
+        return column;
+    }
+
+    /**
+     * "vinyl" ("Disque") only: a title/artist card pinned near the top of the real screen, above
+     * the record itself — unlike "baladeur" (see buildBaladeurOverlay()) the record has no screen
+     * of its own for this to sit inside, so it floats over the top of the lock screen instead, the
+     * same way the web player's own cassette mode floats its title/artist card near the top of the
+     * screen over the illustration underneath (see body[data-mode="cassette"] .meta in style.css).
+     */
+    private LinearLayout buildDiscMeta() {
+        // A fraction of the real screen width rather than of the record's own size: this card
+        // isn't tied to the disc the way "baladeur"'s is to its screen circle, so it can afford to
+        // run as wide as the screen comfortably allows.
+        int maxTextWidthPx = Math.round(getResources().getDisplayMetrics().widthPixels * 0.78f);
+        LinearLayout column = buildMetaColumn(maxTextWidthPx);
+
+        FrameLayout.LayoutParams outerParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        outerParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        outerParams.topMargin = Math.round(56 * getResources().getDisplayMetrics().density);
+        column.setLayoutParams(outerParams);
+        return column;
+    }
+
+    /** The title/artist pair alone, shared by buildBaladeurOverlay() and buildDiscMeta() above —
+     *  only maxTextWidthPx and where the caller positions the returned column differ between the
+     *  two. Populated on every track change by onNowPlayingChanged() below. */
+    private LinearLayout buildMetaColumn(int maxTextWidthPx) {
+        float density = getResources().getDisplayMetrics().density;
+
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
 
         titleView = new TextView(this);
         titleView.setTextColor(Color.WHITE);
@@ -304,18 +355,6 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         artistParams.topMargin = Math.round(3 * density);
         column.addView(artistView, artistParams);
 
-        // Smaller and tighter than buildTransportControls()'s own 48/64/16dp: this row has to fit
-        // inside the screen circle rather than spread out over the whole bottom of the phone.
-        LinearLayout row = buildTransportRow(44, 58, 8);
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.topMargin = Math.round(22 * density);
-        column.addView(row, rowParams);
-
-        FrameLayout.LayoutParams outerParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        outerParams.gravity = Gravity.CENTER;
-        column.setLayoutParams(outerParams);
         return column;
     }
 
@@ -462,8 +501,8 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         boolean isNewTrack = !trackKey.equals(lastTrackKey);
         if (isNewTrack) {
             lastTrackKey = trackKey;
-            // Null everywhere but "baladeur" (see buildBaladeurOverlay()) — every other style
-            // keeps title/artist off the lock screen entirely, same as before.
+            // Null for "bars"/"cassette" (see buildMetaColumn()) — those two keep title/artist
+            // off the lock screen entirely, same as before either of the others got one.
             if (titleView != null) titleView.setText(nowPlaying.title);
             if (artistView != null) artistView.setText(nowPlaying.artist);
             try {
