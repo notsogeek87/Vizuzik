@@ -86,6 +86,21 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     // every single screen of an unfolded Fold, which is the one device this was written for.
     private static final float WIDE_ARTWORK_CENTER_X_FRACTION = 0.25f;
 
+    // A docked mini-player sits pinned to the very bottom of the screen, its own progress hairline
+    // included — that hairline is exactly the "styled thin" SeekBar the WIDE_MIN_SEEKBAR_WIDTH_FRACTION
+    // comment above already knew could pass the width floor. What it didn't yet guard against: a
+    // *browse* screen (a playlist, an album) whose header carries a large, centred cover of its own —
+    // clearing MIN_ARTWORK_HEIGHT_FRACTION on a completely different widget than the one clearing the
+    // seekbar floor, the two meeting only because both thresholds were checked in isolation. Reported
+    // directly (a Bibliothèque playlist screen, full-width mini-player bar, disc drawn over the
+    // playlist's own header): both fractions passed, the player screen was not showing. The real
+    // full-screen player never has this shape — its scrubber sits with the transport controls, still
+    // well above the screen's bottom edge (see EdgeGlowView's ART_TALL_TOP_FRACTION/
+    // ART_TALL_MAX_HEIGHT_FRACTION: the cover alone already reaches ~50% down, and the scrubber comes
+    // after it) — so a scrubber found in the bottom band reserved for a docked bar is that docked
+    // bar's, never the full player's, however wide it measures.
+    private static final float DOCKED_BAR_ZONE_TOP_FRACTION = 0.82f;
+
     private long lastCheckAtMs;
 
     @Override
@@ -149,7 +164,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             Rect window = new Rect();
             root.getBoundsInScreen(window);
             if (window.width() <= 0 || window.height() <= 0) return false;
-            Scan scan = new Scan(window.width(), window.height(), window.left);
+            Scan scan = new Scan(window.width(), window.height(), window.left, window.top);
             scan.walk(root, 0);
             // What the walk actually saw, thresholds aside — a heuristic that is merely mis-tuned
             // (a cover at 30% against a 32% floor) and one looking at a tree with no SeekBar and no
@@ -174,6 +189,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     private static final class Scan {
         final int windowWidth;
         final int windowHeight;
+        final int windowTop;
         /** Where the cover is allowed to sit: the middle always, plus the left pane's own centre
          *  when the window is wide enough to be the two-pane layout. */
         final int[] artworkCenterXs;
@@ -189,15 +205,26 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         float tallestImageFraction = -1f;
         float tallestImageOffsetFraction = -1f;
 
-        Scan(int windowWidth, int windowHeight, int windowLeft) {
+        Scan(int windowWidth, int windowHeight, int windowLeft, int windowTop) {
             this.windowWidth = windowWidth;
             this.windowHeight = windowHeight;
+            this.windowTop = windowTop;
             int middle = windowLeft + windowWidth / 2;
             boolean wide = windowWidth > windowHeight;
             this.artworkCenterXs = wide
                 ? new int[] { middle, windowLeft + Math.round(windowWidth * WIDE_ARTWORK_CENTER_X_FRACTION) }
                 : new int[] { middle };
             this.minSeekBarWidthFraction = wide ? WIDE_MIN_SEEKBAR_WIDTH_FRACTION : MIN_SEEKBAR_WIDTH_FRACTION;
+        }
+
+        /** Whether bounds sit inside the bottom band reserved for a docked bar — see
+         *  DOCKED_BAR_ZONE_TOP_FRACTION. Tested on the top edge, not the centre: a scrubber that
+         *  merely reaches into the band from above (the real player's, sitting close to it on a
+         *  short screen) must not be excluded — only one that starts inside it, which a docked bar's
+         *  own hairline always does. */
+        boolean startsInDockedBarZone(Rect bounds) {
+            float topFraction = (bounds.top - windowTop) / (float) windowHeight;
+            return topFraction >= DOCKED_BAR_ZONE_TOP_FRACTION;
         }
 
         /** How far the given centre sits from the nearest allowed one, as a fraction of the
@@ -244,7 +271,9 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                     if (isScrubber(node, name)) {
                         float widthFraction = bounds.width() / (float) windowWidth;
                         if (widthFraction > widestSeekBarFraction) widestSeekBarFraction = widthFraction;
-                        if (widthFraction >= minSeekBarWidthFraction) hasWideSeekBar = true;
+                        if (widthFraction >= minSeekBarWidthFraction && !startsInDockedBarZone(bounds)) {
+                            hasWideSeekBar = true;
+                        }
                     }
                     if (name.contains("Image")) {
                         float heightFraction = bounds.height() / (float) windowHeight;
