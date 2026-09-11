@@ -502,138 +502,192 @@ let edgeOverlayRunning = false;
 // degrades to "off" rather than to an overlay that never appears.
 let usageAccessGranted = false;
 
-// Asked once, on the first launch that actually reaches the player, so it sits alongside the
-// microphone and notification-access grants instead of hiding inside the settings panel. The
-// answer is never re-asked automatically: a system screen reopening itself every launch is what
-// makes people uninstall things. The panel keeps its own button for changing one's mind.
-const USAGE_ACCESS_ASKED_KEY = "vizuzik:usageAccessAsked";
+// Notification access (the notification-listener grant that lets Vizuzik read what's playing at
+// all). Kept here with the other grants rather than next to refresh(), since the sweep below
+// treats it as the first of them; refresh() reads the same flag through syncNotificationAccess()
+// so there is only ever one answer in play.
+let notificationAccessGranted = false;
 
-function hasAskedUsageAccess() {
+async function syncNotificationAccess() {
   try {
-    return localStorage.getItem(USAGE_ACCESS_ASKED_KEY) === "on";
+    const state = await DeezerMedia.checkPermission();
+    notificationAccessGranted = !!(state && state.granted);
   } catch (err) {
-    return false;
+    // Same rule as every other check here: a failed call is not a grant.
+    notificationAccessGranted = false;
   }
+  return notificationAccessGranted;
 }
 
-function rememberUsageAccessAsked() {
-  try {
-    localStorage.setItem(USAGE_ACCESS_ASKED_KEY, "on");
-  } catch (err) {
-    /* see hasAskedUsageAccess() */
-  }
-}
+/* --- the permission sweep -------------------------------------------------------------------
 
-/**
- * The permissions Edge Visualizer and the lock-screen visualizer need, asked as soon as the app
- * opens — the same moment the microphone and notification-access grants are handled, rather than
- * left to be discovered in a settings panel.
- *
- * Deliberately not gated on the player screen being up: someone opening Vizuzik with nothing
- * currently playing in Deezer/Spotify (screen "empty"), or who hasn't yet granted notification
- * access (screen "permission"), still gets asked for all of these up front — they're independent
- * grants, unrelated to whichever of those two screens happens to be showing, and gating this
- * behind "player" meant a launch that never reached it (no track playing yet, or the
- * notification-access screen still up) skipped every one of them silently. That was the whole
- * point of asking everything on first launch instead of waiting on a settings panel nobody would
- * think to open.
- *
- * Strictly one screen at a time. Both of these open a system Settings activity, and firing them
- * together would stack one on the other; the overlay grant goes first because without it the
- * feature cannot exist at all, and coming back to Vizuzik runs this again and picks up where it
- * left off. The overlay/usage-access steps are each remembered so they're only ever offered
- * unprompted once; the lock-screen visualizer's own two grants below are asked every pass
- * instead, for the reasons on askLockScreenVisualizerPermissions() itself.
- */
-async function runFirstLaunchSetup() {
-  if (
-    edgeOverlayEnabled &&
-    overlaySupported &&
-    !overlayPermissionGranted &&
-    !hasOverlaySheetBeenSeen()
-  ) {
-    // The explainer, not the system screen: "display over other apps" is a generic and slightly
-    // alarming permission name, and this sheet is what tells someone why a music display wants
-    // it. Its "Continuer" opens the system screen; "Plus tard" leaves it alone.
-    openOverlaySheet();
-    return;
-  }
-  // Stop here if that just opened the usage-access Settings screen: colliding it with another
-  // screen (the full-screen-intent grant below can open one too) is exactly what the "one at a
-  // time" rule everywhere in this file exists to avoid. Coming back to Vizuzik re-runs this whole
-  // function (see the visibilitychange listener) and picks up wherever it left off.
-  if (await askUsageAccessOnce()) return;
-  await askLockScreenVisualizerPermissions();
-}
+   Every grant Vizuzik can use is re-checked each time the app opens, and every one still missing
+   is asked for — with a track playing or not, whichever screen is up, however many earlier
+   launches it was already declined on. Nothing here is "offered once and never again": a
+   permission refused in January is asked for again in February, because each of these features is
+   silently inert without its grant and a settings panel nobody thinks to open is not a way to
+   find that out.
 
-// Asked on the same first-launch pass as the rest, now that the lock-screen visualizer defaults
-// to on: without these two grants it silently does nothing, so — same reasoning as Edge
-// Visualizer's own overlay/usage-access grants above — this belongs here instead of waiting to
-// be discovered in the settings panel.
-//
-// Unlike the overlay/usage-access grants, *both* of these are asked again every pass rather than
-// just once: notifications the same way requestAudioPermission() is (a plain runtime dialog,
-// never a system Settings screen, so Android itself decides not to show it again once
-// permanently denied). Full-screen intent used to be offered unprompted only once, same as the
-// overlay/usage-access grants — but unlike those, missing it doesn't just narrow the feature
-// (an overlay that never appears, say), it leaves the *whole* lock-screen visualizer silently
-// inert, discoverable only via the passive toast remindMissingPermissions() shows pointing at the
-// settings panel. Reopening its system Settings screen unprompted on every launch until it's
-// actually granted is worth that repetition for a feature this all-or-nothing about its one
-// remaining grant.
-async function askLockScreenVisualizerPermissions() {
-  if (!lockScreenVisualizerEnabled) return;
-  if (!lockScreenNotificationGranted) {
-    await DeezerMedia.requestNotificationPermission().catch(() => {});
-  }
+   What *is* remembered — and only for as long as this opening lasts, see askedThisOpening — is
+   that a permission has already had its ask this time round. Without that the sweep would trap
+   someone: backing out of a system Settings screen brings Vizuzik to the foreground, which runs
+   the sweep again, which reopens the screen just dismissed, with no way back into the app. One
+   ask per permission per opening; the next opening asks again for whatever is still missing.
+
+   Strictly one system screen at a time. Most of these open a Settings activity, and firing two
+   together stacks one on the other — so a step that opens one ends the pass, and coming back to
+   Vizuzik runs the sweep again and picks up at the next one still missing. The two plain runtime
+   dialogs don't leave the app and are awaited in place, letting the pass carry on. */
+
+// Plain module state, so a cold start clears it — which is the intent: "this opening" is the unit
+// these asks are rationed by, and nothing about them is worth persisting across launches.
+const askedThisOpening = new Set();
+
+// Every grant, in the order they matter: what reads the music first, then what the visualizer
+// needs to hear the audio, then each surface it can draw on. `missing()` is only ever consulted
+// after syncAllPermissions() has refreshed the flags it reads.
+const PERMISSION_STEPS = [
+  {
+    // Nothing works at all without this one — it is what reads the now-playing notification. Its
+    // own screen has a button for the same request; this is that request, made without waiting
+    // for anyone to find the button.
+    id: "notificationAccess",
+    label: "l'accès aux notifications",
+    opensScreen: true,
+    missing: () => !notificationAccessGranted,
+    ask: () => DeezerMedia.requestPermission().catch(() => {}),
+  },
+  {
+    // A plain runtime dialog, and one Android itself stops showing once it has been permanently
+    // denied — so re-asking every opening costs nothing and quietly becomes a no-op past that
+    // point. Asked whenever it isn't known to be granted, including when the check itself failed
+    // (an older native build with no getAudioPermission()), since the request answers that too.
+    id: "audio",
+    label: "le micro (pour capter le son)",
+    opensScreen: false,
+    missing: () => audioPermissionGranted !== true,
+    ask: () => requestAudioPermission(),
+  },
+  {
+    // The other runtime dialog: without it the lock-screen visualizer's notification is never
+    // even posted, so the whole feature is a no-op.
+    id: "notifications",
+    label: "les notifications",
+    opensScreen: false,
+    missing: () => lockScreenVisualizerEnabled && !lockScreenNotificationGranted,
+    ask: () => DeezerMedia.requestNotificationPermission().catch(() => {}),
+  },
+  {
+    id: "overlay",
+    label: "l'affichage par-dessus les autres apps",
+    // Counts as opening a screen even when it only opens the explainer sheet: that sheet's own
+    // "Continuer" goes on to the system screen, and stacking anything behind it would land there.
+    opensScreen: true,
+    missing: () => edgeOverlayEnabled && overlaySupported && !overlayPermissionGranted,
+    ask: () => {
+      // The explainer first, but only until it has actually been read: "display over other apps"
+      // is a generic and slightly alarming permission name, and this sheet is what says why a
+      // music display wants it. Someone who has already tapped through it gets the system screen
+      // straight away on later openings instead of the same explanation again.
+      if (!hasOverlaySheetBeenSeen()) {
+        overlaySheetOpenedBySweep = true;
+        openOverlaySheet();
+        return;
+      }
+      DeezerMedia.requestOverlayPermission().catch(() => {});
+    },
+  },
+  {
+    id: "usageAccess",
+    label: "l'accès aux données d'utilisation",
+    opensScreen: true,
+    missing: () => !usageAccessGranted,
+    ask: () => DeezerMedia.requestUsageAccess().catch(() => {}),
+  },
+  {
+    id: "fullScreenIntent",
+    label: "le plein écran",
+    opensScreen: true,
+    missing: () => lockScreenVisualizerEnabled && !lockScreenFullScreenGranted,
+    ask: () => DeezerMedia.requestFullScreenIntentPermission().catch(() => {}),
+  },
+  {
+    // Last, and on purpose: an accessibility service is the most sensitive thing asked for here,
+    // and the only feature it serves — telling the music app's own player apart from its browse
+    // screens — is a refinement rather than a prerequisite for anything else.
+    id: "playerScreenAccess",
+    label: "l'accès à l'écran du lecteur (Accessibilité)",
+    opensScreen: true,
+    missing: () => !playerScreenAccessGranted,
+    ask: () => DeezerMedia.requestPlayerScreenAccess().catch(() => {}),
+  },
+];
+
+/** Re-reads every grant from the native side and prompts for nothing: this only ever answers
+ *  "what is missing right now". runPermissionSweep() is what acts on the answer. */
+async function syncAllPermissions() {
+  await syncNotificationAccess();
+  await syncAudioPermission();
+  await syncOverlayPermission();
+  await syncUsageAccess();
   await syncLockScreenPermissions();
-  if (lockScreenFullScreenGranted) return;
-  DeezerMedia.requestFullScreenIntentPermission().catch(() => {});
+  await syncPlayerScreenAccess();
+}
+
+// Whether a pass is mid-flight. A pass yields at every await — the runtime dialogs it waits on,
+// the re-check after each — and a resume landing in one of those gaps would otherwise start a
+// second pass that walks past the step the first one is still inside, so two Settings screens
+// open at once: precisely the collision the one-at-a-time rule exists to prevent.
+let permissionSweepRunning = false;
+
+/** Walks PERMISSION_STEPS in order, asking for the first thing still missing that hasn't already
+ *  had its ask this opening, and stopping there if that opened a system screen. Safe to call on
+ *  every resume: the askedThisOpening guard is what keeps it from reopening what was just
+ *  dismissed. */
+async function runPermissionSweep() {
+  if (permissionSweepRunning) return;
+  permissionSweepRunning = true;
+  try {
+    await sweepPermissionSteps();
+  } finally {
+    permissionSweepRunning = false;
+  }
+}
+
+async function sweepPermissionSteps() {
+  for (const step of PERMISSION_STEPS) {
+    if (!step.missing()) continue;
+    if (askedThisOpening.has(step.id)) continue;
+    // Marked before asking, not after: whether it is granted, declined, or backed out of, that
+    // was this opening's ask for it.
+    askedThisOpening.add(step.id);
+    await step.ask();
+    if (step.opensScreen) return;
+    // A runtime dialog leaves an answer behind worth having before judging the next step.
+    await syncAllPermissions();
+  }
 }
 
 /**
- * A soft, passive nudge for whatever is still missing once the automatic asks above have each had
- * their shot — never itself opens a system dialog or Settings screen. The overlay/usage-access
- * grants are deliberately offered unprompted only once (see the comment on askUsageAccessOnce()),
- * so without this, declining or backing out of one of those screens the first time would leave it
- * missing silently forever, discoverable only by someone who happens to reopen the settings
- * panel. (Full-screen intent doesn't need this the same way — askLockScreenVisualizerPermissions()
- * keeps reopening its own Settings screen on every pass until it's actually granted — but still
- * gets a mention below alongside the others.) Purely informative: the toast fades on its own,
- * and the gear icon in the topbar is where to actually act on it.
+ * A soft, passive nudge listing whatever is still missing once the sweep has run — never itself
+ * opens a system dialog or Settings screen. It covers the gap the sweep deliberately leaves: a
+ * permission that already had its one ask this opening isn't asked again until the next one, and
+ * without this the rest of the session would say nothing at all about it. Purely informative: the
+ * toast fades on its own, and the gear icon in the topbar is where to actually act on it.
  */
 function remindMissingPermissions() {
   // Never compete with a sheet already open — either one already surfaces its own grant buttons
   // and hints, so a toast on top of it would only be noise.
   if (!els.overlaySheet.hidden || !els.edgeSettingsSheet.hidden) return;
-  const missing = [];
-  if (edgeOverlayEnabled && overlaySupported && !overlayPermissionGranted) {
-    missing.push("l'affichage par-dessus les autres apps");
-  }
-  if (lockScreenVisualizerEnabled && !lockScreenNotificationGranted) {
-    missing.push("les notifications");
-  } else if (lockScreenVisualizerEnabled && !lockScreenFullScreenGranted) {
-    missing.push("le plein écran");
-  }
+  const missing = PERMISSION_STEPS.filter((step) => step.missing()).map((step) => step.label);
   if (!missing.length) return;
+  // Named in full up to three; past that the toast stops being something anyone reads at a
+  // glance, and the settings panel it points at lists them all anyway.
+  const shown = missing.slice(0, 3).join(", ") + (missing.length > 3 ? "…" : "");
   showToast(
-    `Autorisation${missing.length > 1 ? "s" : ""} manquante${missing.length > 1 ? "s" : ""} : ${missing.join(", ")} — réglages ⚙️`,
+    `Autorisation${missing.length > 1 ? "s" : ""} manquante${missing.length > 1 ? "s" : ""} : ${shown} — réglages ⚙️`,
     4500
   );
-}
-
-/** Returns whether this call just opened the usage-access Settings screen, so callers chaining
- *  another screen-opening step after this one (see runFirstLaunchSetup()) know to stop instead of
- *  stacking one on top of it. */
-async function askUsageAccessOnce() {
-  if (hasAskedUsageAccess()) return false;
-  await syncUsageAccess();
-  if (usageAccessGranted) return false;
-  // Stamped before opening the screen, not after: whether they grant it or back out, this was
-  // their one unprompted ask.
-  rememberUsageAccessAsked();
-  DeezerMedia.requestUsageAccess().catch(() => {});
-  return true;
 }
 
 async function syncUsageAccess() {
@@ -690,8 +744,8 @@ function updatePlayerScreenAccessHint() {
    hardware panel — see docs/architecture/2026-09-09-visualiseur-ecran-verrouille.md. On by
    default, same as Edge Visualizer: it keeps the screen genuinely on while music plays, which
    costs meaningfully more battery than a real AOD ever would, but that trade-off is now made for
-   everyone up front rather than left to be discovered in the settings panel — see
-   askLockScreenVisualizerPermissions() below for the grants this needs. */
+   everyone up front rather than left to be discovered in the settings panel — its two grants
+   are steps of the permission sweep above like every other one. */
 
 const LOCKSCREEN_VISUALIZER_ENABLED_KEY = "vizuzik:lockScreenVisualizer";
 
@@ -784,10 +838,10 @@ async function syncLockScreenPermissions() {
   updateLockScreenHint();
 }
 
-/** One button covers both grants, one at a time — same "strictly sequential" rule
- *  runFirstLaunchSetup() follows for Edge Visualizer's own two permissions: notifications first
- *  (without it the whole feature is silently a no-op), then the Android 14+ full-screen-intent
- *  special access, since asking for both at once would stack one system screen on the other. */
+/** One button covers both grants, one at a time — same "strictly sequential" rule the permission
+ *  sweep follows: notifications first (without it the whole feature is silently a no-op), then
+ *  the Android 14+ full-screen-intent special access, since asking for both at once would stack
+ *  one system screen on the other. */
 function updateLockScreenHint() {
   if (!els.edgeLockscreenHint) return;
   if (!lockScreenNotificationGranted) {
@@ -889,6 +943,9 @@ function setEdgeOverlayEnabled(enabled) {
     // button unreachable, and the switch left on for an overlay that can never run.
     closeEdgeSettingsSheet();
     if (!hasOverlaySheetBeenSeen()) {
+      // Deliberate, from the settings panel — dismissing it must not walk on into the rest of the
+      // sweep. See overlaySheetOpenedBySweep.
+      overlaySheetOpenedBySweep = false;
       openOverlaySheet();
     } else {
       DeezerMedia.requestOverlayPermission().catch(() => {});
@@ -909,6 +966,11 @@ function toggleEdgeOverlay() {
 /* --- the explainer sheet (edge overlay only) --- */
 
 let overlaySheetCloseTimer = null;
+// Whether this sheet is currently standing in for one step of the permission sweep, rather than
+// having been opened by someone flipping the Edge Visualizer switch themselves. Only in the first
+// case does dismissing it carry on to the next permission: a sheet opened from the settings panel
+// is an answer about that one feature, not consent to be walked through every remaining grant.
+let overlaySheetOpenedBySweep = false;
 
 function openOverlaySheet() {
   clearTimeout(overlaySheetCloseTimer);
@@ -979,7 +1041,10 @@ const EDGE_SETTINGS_DEFAULTS = {
   // has been set, and the panel's own fallback when a fresh install's first getEdgeConfig() call
   // fails outright — either way, GitHub is hidden from without anyone having to find the picker.
   hiddenPackages: "com.github.android",
-  requirePlayerScreen: false,
+  // Mirrors EdgeConfig's own default, on for the same reason: it costs nothing while the
+  // accessibility grant is missing (the native side treats "no service connected" as no
+  // restriction at all), and stops the record sitting on top of a playlist once it is there.
+  requirePlayerScreen: true,
 };
 
 // The source of truth for "cacher automatiquement" while the panel is open — there is no single
@@ -1461,11 +1526,23 @@ els.overlayStatus.addEventListener("click", toggleEdgeOverlay);
 els.overlayAccept.addEventListener("click", () => {
   closeOverlaySheet();
   rememberOverlaySheetSeen();
+  // No sweep continuation needed: this opens a system screen, and coming back from it is itself
+  // what runs the sweep again.
+  overlaySheetOpenedBySweep = false;
   DeezerMedia.requestOverlayPermission().catch(() => {});
 });
-els.overlayLater.addEventListener("click", closeOverlaySheet);
+/** "Plus tard", or a tap on the backdrop. Declining this one grant is not declining the rest, and
+ *  nothing else would resume a sweep that stopped on this sheet — the app never left the
+ *  foreground, so there is no return to Vizuzik to pick it back up. */
+function dismissOverlaySheet() {
+  closeOverlaySheet();
+  if (!overlaySheetOpenedBySweep) return;
+  overlaySheetOpenedBySweep = false;
+  runPermissionSweep().catch(() => {});
+}
+els.overlayLater.addEventListener("click", dismissOverlaySheet);
 els.overlaySheet.addEventListener("click", (event) => {
-  if (event.target === els.overlaySheet) closeOverlaySheet();
+  if (event.target === els.overlaySheet) dismissOverlaySheet();
 });
 
 els.edgeSettingsOpen.addEventListener("click", () => {
@@ -1857,7 +1934,7 @@ setInterval(() => {
 let notificationAccessKnownGranted = false;
 
 async function refresh() {
-  const { granted } = await DeezerMedia.checkPermission();
+  const granted = await syncNotificationAccess();
   if (!granted) {
     notificationAccessKnownGranted = false;
     showScreen("permission");
@@ -1943,13 +2020,10 @@ document.addEventListener("visibilitychange", () => {
     // the app was backgrounded, with levels still arriving and nothing drawing them.
     if (!els.player.hidden) visualizer.start();
     refresh().catch(() => {});
-    syncAudioPermission();
     // Chained rather than parallel: coming back from one system screen is exactly when the next
-    // step of the first-launch flow should happen, if there is one left.
-    syncOverlayPermission()
-      .then(syncUsageAccess)
-      .then(syncLockScreenPermissions)
-      .then(runFirstLaunchSetup)
+    // step of the permission sweep should happen, if there is one left.
+    syncAllPermissions()
+      .then(runPermissionSweep)
       .then(remindMissingPermissions)
       .catch(() => {});
   } else {
@@ -1978,15 +2052,13 @@ applyDisplayMode(false);
     await DeezerMedia.setMusicAppTarget({ app }).catch(() => {});
   }
   await refresh().catch(() => {});
-  // Awaited so the two never collide: this one shows a system dialog, and the usage-access ask
-  // below opens a system screen.
-  await requestAudioPermission();
-  // Awaited: runFirstLaunchSetup() decides from the overlay grant, and would read its
-  // pre-check default and offer the explainer to someone who granted it long ago.
-  await syncOverlayPermission();
-  await syncUsageAccess();
-  await syncLockScreenPermissions();
-  await runFirstLaunchSetup();
+  // Awaited, and in this order: the sweep decides what to ask for from these flags, so reading
+  // them first is what keeps it from offering the overlay explainer to someone who granted it
+  // long ago — or from skipping a grant that was withdrawn from Android's own Settings since.
+  // The microphone dialog is one of the sweep's own steps now rather than a separate ask ahead
+  // of it, so it can't collide with a Settings screen opening in the same breath.
+  await syncAllPermissions();
+  await runPermissionSweep();
   remindMissingPermissions();
   loadEdgeConfig();
   // Cold-start mirror: EdgeOverlayPreference only remembers what setEdgeOverlayEnabled() last

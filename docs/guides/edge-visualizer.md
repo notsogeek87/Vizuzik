@@ -19,11 +19,17 @@ exactement comme s'il n'était pas là.
 
 Edge Visualizer est **actif par défaut à l'installation** : c'est ce que fait l'app quand elle
 n'est pas celle à l'écran, l'avoir éteint au départ revenait à la cacher. Ses deux autorisations
-sont donc demandées au premier lancement qui atteint l'écran lecteur, **une à la fois** : les deux
-ouvrent un écran système, et les déclencher ensemble empilerait l'un sur l'autre. L'affichage
-par-dessus passe en premier — sans lui la fonctionnalité n'existe pas — et le retour dans Vizuzik
-enchaîne sur l'accès aux données d'utilisation s'il manque encore. Chaque étape est mémorisée :
-rien n'est redemandé tout seul.
+font partie du **balayage des autorisations** (`PERMISSION_STEPS`/`runPermissionSweep()` dans
+`main.js`), qui rejoue **à chaque ouverture de l'app** : chaque autorisation encore manquante est
+redemandée, qu'un titre soit en cours de lecture ou non, quel que soit l'écran affiché, et quel
+qu'ait été le refus des lancements précédents. Rien n'est « proposé une fois puis plus jamais ».
+
+**Une à la fois** : la plupart ouvrent un écran système, et les déclencher ensemble empilerait
+l'un sur l'autre — l'étape qui en ouvre un termine la passe, et le retour dans Vizuzik relance le
+balayage sur la suivante encore manquante. Une même autorisation n'est demandée qu'une fois par
+ouverture (`askedThisOpening`) : sans cette limite, sortir d'un écran système ramènerait Vizuzik
+au premier plan, ce qui rouvrirait aussitôt l'écran qu'on vient de quitter, sans retour possible
+dans l'app.
 
 Le badge reste le chemin manuel :
 
@@ -201,12 +207,10 @@ Une fenêtre de superposition ne voit pas ce qu'il y a en dessous, et la session
 rien de l'app affichée — un Deezer en pause en arrière-plan y ressemble trait pour trait à un
 Deezer au premier plan. La seule façon de le savoir sans service d'accessibilité est
 `UsageStatsManager`, qui demande l'autorisation spéciale **« Accès aux données d'utilisation »**
-(voir `ForegroundApp.java`). Elle est accordée dans un écran système, comme les deux autres autorisations spéciales de l'app,
-et elle est demandée **une fois, au premier lancement qui atteint l'écran lecteur** — donc au
-même moment que le micro et l'accès aux notifications, et non plus seulement depuis le panneau.
-Une seule fois : un écran système qui se rouvre à chaque lancement est ce qui fait désinstaller
-une app. La réponse est mémorisée sous `vizuzik:usageAccessAsked`, et le bouton du panneau reste
-là pour changer d'avis.
+(voir `ForegroundApp.java`). Elle est accordée dans un écran système, comme les autres autorisations spéciales de l'app, et
+elle est demandée par le balayage décrit plus haut : **à chaque ouverture tant qu'elle manque**,
+au même rang que le micro et l'accès aux notifications, et non plus seulement depuis le panneau.
+Le bouton du panneau reste là pour changer d'avis à tout moment.
 
 Tant qu'elle n'est pas accordée, rien ne peut répondre à la question : le contour **reste visible
 partout** et le Cocon ne bascule sur rien, plutôt que de se cacher ou de se dégrader au jugé. Le

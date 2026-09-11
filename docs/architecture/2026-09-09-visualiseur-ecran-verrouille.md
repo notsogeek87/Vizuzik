@@ -290,19 +290,46 @@ les quatre de valeur par défaut, en gardant la même logique « absent dans les
 que d'écrire une valeur au premier lancement.
 
 Conséquence directe : les deux autorisations dont ce mode a besoin (notifications, puis plein écran
-sur Android 14+) rejoignent désormais la séquence de premier lancement
-(`runFirstLaunchSetup()`/`askLockScreenVisualizerPermissionsOnce()` dans `main.js`), au même rang
-que celles d'Edge Visualizer (superposition, accès aux données d'utilisation) — toujours une seule
-autorisation/écran système à la fois, jamais deux empilés. Les notifications sont redemandées à
-chaque lancement tant qu'elles ne sont pas accordées (une simple boîte de dialogue in-app, comme
-`requestAudioPermission()` — Android lui-même arrête de la montrer une fois le refus permanent) ;
-le plein écran, qui ouvre un écran Réglages, garde la règle « une seule fois sans y être invité »
-des autres autorisations de ce type.
+sur Android 14+) rejoignent la séquence de premier lancement, au même rang que celles d'Edge
+Visualizer (superposition, accès aux données d'utilisation) — toujours une seule autorisation/écran
+système à la fois, jamais deux empilés.
 
 Une nouvelle fonction, `remindMissingPermissions()`, tourne à chaque ouverture de l'app (et à
 chaque retour au premier plan) : purement informative, elle n'ouvre jamais elle-même un système
 d'autorisation, mais affiche un toast quand une autorisation nécessaire à une fonctionnalité déjà
 activée manque encore — le seul moyen de le savoir, avant, était de rouvrir le panneau de réglages.
+
+## Mise à jour (2026-09-11) : un balayage complet à chaque ouverture
+
+La « séquence de premier lancement » ci-dessus n'en est plus une : elle est devenue le **balayage
+des autorisations** (`PERMISSION_STEPS`/`syncAllPermissions()`/`runPermissionSweep()` dans
+`main.js`), qui rejoue **à chaque ouverture de l'app**, musique en cours ou non.
+
+Deux défauts l'empêchaient de tenir sa promesse :
+
+- Elle ne s'exécutait pas du tout tant que l'écran lecteur n'était pas affiché — c'est-à-dire à
+  chaque ouverture sans titre en cours de lecture (écran « empty ») ou avant l'accès aux
+  notifications (écran « permission »), soit les deux états les plus courants d'une installation
+  neuve.
+- La superposition et l'accès aux données d'utilisation n'étaient proposés **qu'une seule fois
+  dans la vie de l'installation** (`vizuzik:overlaySheetSeen`, `vizuzik:usageAccessAsked`). Une
+  fois cette unique occasion passée — refus, ou simple retour en arrière — plus rien n'était
+  jamais redemandé.
+
+Désormais : toutes les autorisations que l'app sait utiliser sont revérifiées à chaque ouverture
+(`syncAllPermissions()`), et chacune qui manque encore est redemandée, y compris celles refusées
+lors de lancements précédents. Ce qui reste mémorisé — et seulement le temps de cette ouverture,
+`askedThisOpening` — c'est qu'une autorisation a déjà eu sa demande cette fois-ci : sans cette
+limite, sortir d'un écran système ramène Vizuzik au premier plan, ce qui relance le balayage, qui
+rouvre l'écran qu'on vient de quitter, indéfiniment.
+
+L'accès d'accessibilité (`requestPlayerScreenAccess()`, « Seulement sur l'écran du lecteur »)
+rejoint la liste, en dernier — c'est la demande la plus sensible, et la seule fonctionnalité
+qu'elle sert est un raffinement, pas un prérequis. Corollaire : `edgeRequirePlayerScreen` passe à
+**activé par défaut** (`EdgeConfig`, `DeezerMediaPlugin.setEdgeConfig()`, `EDGE_SETTINGS_DEFAULTS`),
+sans quoi l'autorisation qu'on vient de demander ne servirait à rien. C'est sans effet tant qu'elle
+manque : `EdgeGlowView.activeStyle()` ne restreint quoi que ce soit qu'une fois
+`DeezerPlayerAccessibilityService` réellement connecté.
 
 ## Ce qui n'a pas été fait, et pourquoi
 

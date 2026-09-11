@@ -101,8 +101,12 @@ final class EdgeConfig {
     // nested-scroll view that turned out fragile to the touch-occlusion workaround in
     // OverlayEdgeGlowService, on at least one device tested against.
     private static final String DEFAULT_HIDDEN_PACKAGES = "com.github.android";
-    // Off by default: unlike everything else this file stores, honouring it at all depends on a
-    // grant nobody has unless they went looking for it — see DeezerPlayerAccessibilityService.
+    // On by default, and harmless while the grant it depends on is missing: EdgeGlowView's
+    // activeStyle() only narrows anything once DeezerPlayerAccessibilityService is actually
+    // connected, so with no grant this reads exactly as "off". It was off by default back when
+    // nobody was ever asked for that grant; the permission sweep in main.js now asks for it on
+    // every opening, and a record drawn over a playlist someone is browsing is the thing this
+    // setting exists to stop.
     private static final String KEY_REQUIRE_PLAYER_SCREEN = "edgeRequirePlayerScreen";
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
@@ -212,7 +216,7 @@ final class EdgeConfig {
             prefs.getString(KEY_COCOON_FALLBACK, STYLE_BARS),
             parseArtCalibrations(prefs.getString(KEY_ART_CALIBRATIONS, null)),
             parsePackages(prefs.getString(KEY_HIDDEN_PACKAGES, DEFAULT_HIDDEN_PACKAGES)),
-            prefs.getBoolean(KEY_REQUIRE_PLAYER_SCREEN, false)
+            prefs.getBoolean(KEY_REQUIRE_PLAYER_SCREEN, true)
         );
     }
 

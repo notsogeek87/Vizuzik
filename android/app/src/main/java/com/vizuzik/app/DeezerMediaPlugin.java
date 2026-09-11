@@ -822,7 +822,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
             data.optBoolean("onlyOverMusicApp", false),
             call.getString("cocoonFallback", EdgeConfig.STYLE_BARS),
             call.getString("hiddenPackages", ""),
-            data.optBoolean("requirePlayerScreen", false)
+            data.optBoolean("requirePlayerScreen", true)
         );
         call.resolve();
     }
