@@ -1045,8 +1045,18 @@ final class EdgeGlowView extends View {
      * it's showing its own full-screen player" — Deezer can be in front while showing search, its
      * home tab, or a playlist, with a track still playing behind a docked mini-player, and both
      * of these styles are measured against where the *full* player keeps its cover, not any of
-     * those. Same rule as the app-level check: acted on only once NowPlayerScreenState actually
-     * has an answer (its service connected), never on a guess in either direction.
+     * those.
+     *
+     * It fails *closed*, and that is the whole point of it. It used to be acted on only once
+     * NowPlayerScreenState had a service connected to answer with, and to wave the styles through
+     * otherwise — which meant the one setting whose entire job is "don't put the record on a
+     * screen it wasn't measured for" did nothing at all until a separate accessibility grant
+     * existed, and the record went on covering Deezer's home tab exactly as if the setting were
+     * off. Reported three times, from three different Deezer screens. So: asked for means
+     * enforced. No connected service is no answer, no answer is not a yes, and anything short of
+     * a yes gets the fallback — an edge style, which is true over any screen. The cost of being
+     * wrong that way is a decoration missed; the cost of the other way is an opaque disc over
+     * someone's app, which from Android 12 also stops their touches from being delivered at all.
      */
     private String activeStyle() {
         // The lock screen's own style choice, set once by LockScreenVisualizerActivity — see
@@ -1067,8 +1077,9 @@ final class EdgeGlowView extends View {
         if (standalone) {
             return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
         }
-        boolean playerScreenKnown = requirePlayerScreen && NowPlayerScreenState.isServiceConnected();
-        boolean onPlayerScreen = !playerScreenKnown || NowPlayerScreenState.isOnPlayerScreen();
+        // isOnPlayerScreen() is already "the service is connected *and* it last reported the
+        // player" — so this reads as: either the restriction is off, or there is a real yes.
+        boolean onPlayerScreen = !requirePlayerScreen || NowPlayerScreenState.isOnPlayerScreen();
         if (foregroundKnown && trackedAppConfirmed && onPlayerScreen) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }

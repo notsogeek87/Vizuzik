@@ -101,13 +101,22 @@ final class EdgeConfig {
     // nested-scroll view that turned out fragile to the touch-occlusion workaround in
     // OverlayEdgeGlowService, on at least one device tested against.
     private static final String DEFAULT_HIDDEN_PACKAGES = "com.github.android";
-    // On by default, and harmless while the grant it depends on is missing: EdgeGlowView's
-    // activeStyle() only narrows anything once DeezerPlayerAccessibilityService is actually
-    // connected, so with no grant this reads exactly as "off". It was off by default back when
-    // nobody was ever asked for that grant; the permission sweep in main.js now asks for it on
-    // every opening, and a record drawn over a playlist someone is browsing is the thing this
-    // setting exists to stop.
+    // On by default: a record drawn over a home tab or a playlist someone is browsing is the thing
+    // this setting exists to stop, and that is what it was doing on every screen of the tracked app
+    // while this defaulted to off. It was off back when nobody was ever asked for the accessibility
+    // grant it leans on; the permission sweep in main.js now asks for that grant on every opening.
+    // Note that with it on, EdgeGlowView.activeStyle() falls back to an edge style until that grant
+    // exists — see the fail-closed reasoning there. That is the trade deliberately made here:
+    // "Vinyle"/"Cocon" wait for an answer rather than being painted over a screen nobody measured.
     private static final String KEY_REQUIRE_PLAYER_SCREEN = "edgeRequirePlayerScreen";
+    // Bumped when a stored KEY_REQUIRE_PLAYER_SCREEN should be dropped rather than honoured, same
+    // idea as KEY_STYLE_VERSION above and needed for the same reason: write() persists every
+    // setting on every edit, so any install whose settings panel has ever been touched already has
+    // "false" on disk from back when that was the default — and an absent-value default can never
+    // reach it. Version 2 is the flip to on. Someone who deliberately turns it off afterwards
+    // writes both the value and this version, and keeps their choice.
+    private static final String KEY_REQUIRE_PLAYER_SCREEN_VERSION = "edgeRequirePlayerScreenVersion";
+    private static final int REQUIRE_PLAYER_SCREEN_VERSION = 2;
 
     /** Immutable snapshot handed to EdgeGlowView — read once per change rather than hitting
      *  SharedPreferences on every one of its ~24 ticks per second. */
@@ -190,6 +199,7 @@ final class EdgeConfig {
     static Snapshot read(Context context) {
         SharedPreferences prefs = prefs(context);
         migrateStyle(prefs);
+        migrateRequirePlayerScreen(prefs);
         migrateArtCalibration(prefs);
         String colorMode = prefs.getString(KEY_COLOR_MODE, COLOR_AUTO);
         int[][] customPalette = COLOR_CUSTOM.equals(colorMode)
@@ -396,6 +406,9 @@ final class EdgeConfig {
             .putString(KEY_COCOON_FALLBACK, cocoonFallback)
             .putString(KEY_HIDDEN_PACKAGES, hiddenPackagesCsv != null ? hiddenPackagesCsv : "")
             .putBoolean(KEY_REQUIRE_PLAYER_SCREEN, requirePlayerScreen)
+            // Stamped alongside the value, so a deliberate "off" set from the panel from now on is
+            // never mistaken for the pre-flip default and dropped by migrateRequirePlayerScreen().
+            .putInt(KEY_REQUIRE_PLAYER_SCREEN_VERSION, REQUIRE_PLAYER_SCREEN_VERSION)
             .apply();
     }
 
@@ -440,6 +453,18 @@ final class EdgeConfig {
     private static void migrateStyle(SharedPreferences prefs) {
         if (prefs.getInt(KEY_STYLE_VERSION, 1) >= STYLE_VERSION) return;
         prefs.edit().remove(KEY_STYLE).putInt(KEY_STYLE_VERSION, STYLE_VERSION).apply();
+    }
+
+    /** Drops a stored "off" written before this setting defaulted to on — see
+     *  KEY_REQUIRE_PLAYER_SCREEN_VERSION. Removing the key rather than writing "true" is what
+     *  keeps this a default and not an override: the absent-value default in read() below is then
+     *  the single place that says what it is. */
+    private static void migrateRequirePlayerScreen(SharedPreferences prefs) {
+        if (prefs.getInt(KEY_REQUIRE_PLAYER_SCREEN_VERSION, 1) >= REQUIRE_PLAYER_SCREEN_VERSION) return;
+        prefs.edit()
+            .remove(KEY_REQUIRE_PLAYER_SCREEN)
+            .putInt(KEY_REQUIRE_PLAYER_SCREEN_VERSION, REQUIRE_PLAYER_SCREEN_VERSION)
+            .apply();
     }
 
     private static SharedPreferences prefs(Context context) {

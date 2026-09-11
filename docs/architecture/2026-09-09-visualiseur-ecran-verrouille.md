@@ -327,9 +327,29 @@ L'accès d'accessibilité (`requestPlayerScreenAccess()`, « Seulement sur l'éc
 rejoint la liste, en dernier — c'est la demande la plus sensible, et la seule fonctionnalité
 qu'elle sert est un raffinement, pas un prérequis. Corollaire : `edgeRequirePlayerScreen` passe à
 **activé par défaut** (`EdgeConfig`, `DeezerMediaPlugin.setEdgeConfig()`, `EDGE_SETTINGS_DEFAULTS`),
-sans quoi l'autorisation qu'on vient de demander ne servirait à rien. C'est sans effet tant qu'elle
-manque : `EdgeGlowView.activeStyle()` ne restreint quoi que ce soit qu'une fois
-`DeezerPlayerAccessibilityService` réellement connecté.
+sans quoi l'autorisation qu'on vient de demander ne servirait à rien.
+
+## Mise à jour (2026-09-11, suite) : « Seulement sur l'écran du lecteur » échoue désormais fermé
+
+Le disque continuait d'apparaître par-dessus l'accueil de Deezer malgré tout ce qui précède. Deux
+causes, aucune dans l'heuristique d'accessibilité elle-même :
+
+1. **`EdgeGlowView.activeStyle()` échouait ouvert.** `requirePlayerScreen` n'était pris en compte
+   qu'une fois `DeezerPlayerAccessibilityService` connecté ; sans l'autorisation, le réglage dont
+   tout le rôle est « ne pose pas le disque sur un écran qui n'a pas été mesuré » ne faisait
+   strictement rien, et le disque se posait partout exactement comme si le réglage était éteint.
+   Désormais : demandé veut dire appliqué. Pas de service connecté = pas de réponse, pas de réponse
+   ≠ oui, et tout ce qui n'est pas un oui franc retombe sur le style de repli (un style de bord,
+   vrai par-dessus n'importe quel écran). Se tromper dans ce sens coûte une décoration ; se tromper
+   dans l'autre pose un disque opaque sur l'app de quelqu'un — et depuis Android 12, empêche aussi
+   ses touchers d'être délivrés.
+2. **La valeur par défaut ne pouvait atteindre aucune installation existante.** `write()` persiste
+   *tous* les réglages à chaque édition du panneau : `edgeRequirePlayerScreen=false` était donc déjà
+   sur le disque, et une valeur par défaut « en cas d'absence » ne l'atteint jamais. D'où
+   `KEY_REQUIRE_PLAYER_SCREEN_VERSION`/`migrateRequirePlayerScreen()`, sur le modèle exact de
+   `KEY_STYLE_VERSION`/`migrateStyle()` : la clé stockée est supprimée une fois, la valeur par
+   défaut reprend la main. `write()` estampille la version en même temps que la valeur, pour qu'un
+   « éteint » choisi délibérément après coup ne soit pas repris pour l'ancien défaut et effacé.
 
 ## Ce qui n'a pas été fait, et pourquoi
 

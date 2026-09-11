@@ -735,7 +735,10 @@ function updatePlayerScreenAccessHint() {
   els.edgePlayerScreenGrant.hidden = playerScreenAccessGranted;
   els.edgePlayerScreenHint.textContent = playerScreenAccessGranted
     ? "N'affiche « Cocon »/« Vinyle » que lorsque Deezer montre son propre lecteur plein écran, pas sa recherche, son accueil ou une playlist."
-    : "Nécessite une permission d'accessibilité séparée (elle lit l'écran de Deezer/Spotify, rien d'autre) — sans elle, ce réglage reste sans effet.";
+    // Not "sans effet" any more: the native side fails closed, so with this on and the grant
+    // missing, those two styles wait rather than being painted over an unmeasured screen. Someone
+    // wondering where their record went has to be able to read why here.
+    : "Nécessite une permission d'accessibilité séparée (elle lit l'écran de Deezer/Spotify, rien d'autre). Tant qu'elle manque, « Cocon » et « Vinyle » laissent la place au style de repli plutôt que de se poser sur un écran qui n'est pas le lecteur.";
 }
 
 /* --- lock-screen visualizer: a "fake AOD" — the display kept lit, showing the same styles as
