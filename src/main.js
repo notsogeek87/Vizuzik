@@ -525,9 +525,18 @@ function rememberUsageAccessAsked() {
 }
 
 /**
- * The permissions Edge Visualizer needs, asked on the first launch that reaches the player —
- * the same moment the microphone and notification-access grants are handled, rather than left
- * to be discovered in a settings panel.
+ * The permissions Edge Visualizer and the lock-screen visualizer need, asked as soon as the app
+ * opens — the same moment the microphone and notification-access grants are handled, rather than
+ * left to be discovered in a settings panel.
+ *
+ * Deliberately not gated on the player screen being up: someone opening Vizuzik with nothing
+ * currently playing in Deezer/Spotify (screen "empty"), or who hasn't yet granted notification
+ * access (screen "permission"), still gets asked for all of these up front — they're independent
+ * grants, unrelated to whichever of those two screens happens to be showing, and gating this
+ * behind "player" meant a launch that never reached it (no track playing yet, or the
+ * notification-access screen still up) skipped every one of them silently. That was the whole
+ * point of asking everything on first launch instead of waiting on a settings panel nobody would
+ * think to open.
  *
  * Strictly one screen at a time. Both of these open a system Settings activity, and firing them
  * together would stack one on the other; the overlay grant goes first because without it the
@@ -537,7 +546,6 @@ function rememberUsageAccessAsked() {
  * instead, for the reasons on askLockScreenVisualizerPermissions() itself.
  */
 async function runFirstLaunchSetup() {
-  if (els.player.hidden) return;
   if (
     edgeOverlayEnabled &&
     overlaySupported &&
