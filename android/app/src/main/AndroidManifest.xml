@@ -196,5 +196,16 @@
     <queries>
         <package android:name="deezer.android.app" />
         <package android:name="com.spotify.music" />
+
+        <!-- Without this <intent> signature, Android 11+ package-visibility filtering hides most
+             third-party apps from PackageManager#queryIntentActivities(ACTION_MAIN/CATEGORY_
+             LAUNCHER) — only this app itself, apps signed with the same cert, and the two
+             <package> entries above stay visible. That's what made DeezerMediaPlugin
+             .listInstalledApps() (the "cacher automatiquement" picker's app list) show only a
+             handful of preinstalled/OEM apps instead of everything with a launcher icon. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 </manifest>
