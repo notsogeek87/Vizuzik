@@ -111,3 +111,8 @@ Voir [`docs/`](docs/README.md) : décisions d'architecture, API interne (`Visual
 ## Licence
 
 GNU General Public License v3.0 (GPL-3.0) — voir [`LICENSE`](LICENSE).
+
+Exception : les deux polices manuscrites des modes K7, dans `public/fonts/`, sont des œuvres
+tierces qui gardent leur propre licence — Permanent Marker (Apache 2.0) et Reenie Beanie (SIL Open
+Font License 1.1). Leurs fichiers de licence les accompagnent jusque dans l'APK ; voir
+[`public/fonts/README.md`](public/fonts/README.md) pour ce que ces licences impliquent.

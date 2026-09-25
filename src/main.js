@@ -1899,8 +1899,10 @@ function setScrollingText(span, text) {
 
 // The K7 modes write the title/artist on the cassette's paper strip, in SVG text. SVG text
 // neither wraps nor ellipsises on its own, so each line is fitted by hand to the strip's width:
-// first shrunk a little, then cut with an ellipsis if it still doesn't fit.
-const K7_TEXT_MAX_WIDTH = 238;
+// first shrunk a little, then cut with an ellipsis if it still doesn't fit. Étiquette's text
+// starts further left (no side letter there), so it gets a little more room.
+const K7_TEXT_MAX_WIDTH_ETIQUETTE = 252;
+const K7_TEXT_MAX_WIDTH_CLASSIQUE = 238;
 const K7_TEXT_MIN_SCALE = 0.75;
 let k7Text = { title: "", artist: "" };
 
@@ -1929,14 +1931,24 @@ function setK7Text(title, artist) {
 }
 
 function refitK7Text() {
-  for (const [titleEl, artistEl] of [
-    [els.k7TitleEtiquette, els.k7ArtistEtiquette],
-    [els.k7TitleClassique, els.k7ArtistClassique],
+  for (const [titleEl, artistEl, maxWidth] of [
+    [els.k7TitleEtiquette, els.k7ArtistEtiquette, K7_TEXT_MAX_WIDTH_ETIQUETTE],
+    [els.k7TitleClassique, els.k7ArtistClassique, K7_TEXT_MAX_WIDTH_CLASSIQUE],
   ]) {
-    fitSvgText(titleEl, k7Text.title, K7_TEXT_MAX_WIDTH);
-    fitSvgText(artistEl, k7Text.artist, K7_TEXT_MAX_WIDTH);
+    fitSvgText(titleEl, k7Text.title, maxWidth);
+    fitSvgText(artistEl, k7Text.artist, maxWidth);
   }
 }
+
+// Text measured before its handwriting font has arrived would be fitted to the fallback's widths.
+// A @font-face only starts loading once something visible uses it, so both are asked for up front
+// and the label refitted once they're in.
+Promise.all([
+  document.fonts.load('12px "Permanent Marker"'),
+  document.fonts.load('17px "Reenie Beanie"'),
+])
+  .then(refitK7Text)
+  .catch(() => {});
 
 function setNowPlaying(state) {
   if (!state || !state.active) {

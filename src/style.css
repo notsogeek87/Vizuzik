@@ -649,6 +649,11 @@ body[data-mode="k7-classique"] .k7__writing--classique {
   fill: #ece6d8;
 }
 
+.k7__band {
+  fill: #fff;
+  fill-opacity: 0.38;
+}
+
 /* K7 Classique's label: a muted grey-blue, like the reference cassette's, pulled a little toward
    the album's own main colour so each record gets its own tint. The plain fill first is what an
    older WebView without color-mix() keeps. */
@@ -699,20 +704,53 @@ body[data-mode="k7-classique"] .k7__writing--classique {
   fill: #2b2a33;
 }
 
-/* Handwritten in pen on the paper strip. The generic "cursive" family is what Android actually
-   resolves (Dancing Script, bundled with the system); the named ones cover a desktop preview. */
-.k7__hand {
-  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
-  fill: #26324f;
+/* The title/artist, handwritten on the label: black marker pen across K7 Étiquette's frosted strip
+   (bold enough to read over any album art), pencil on K7 Classique's ruled paper. Both fonts are
+   bundled rather than left to whatever "cursive" resolves to on the device, and each keeps its
+   own licence next to it — see public/fonts/README.md before moving or dropping either file. */
+@font-face {
+  font-family: "Permanent Marker";
+  src: url("/fonts/permanent-marker-latin-400.woff2") format("woff2");
+  font-display: swap;
 }
 
-.k7__hand--title {
-  font-size: 9.5px;
+@font-face {
+  font-family: "Reenie Beanie";
+  src: url("/fonts/reenie-beanie-latin-400.woff2") format("woff2");
+  font-display: swap;
 }
 
-.k7__hand--artist {
-  font-size: 7.5px;
-  fill-opacity: 0.8;
+.k7__writing--etiquette .k7__hand {
+  font-family: "Permanent Marker", cursive;
+  fill: #111;
+}
+
+.k7__writing--etiquette .k7__hand--title {
+  font-size: 12px;
+}
+
+.k7__writing--etiquette .k7__hand--artist {
+  font-size: 9px;
+}
+
+/* Reenie Beanie only comes in one, fairly thin weight: a hairline stroke in the ink's own colour
+   thickens it into a pencil pressed a little harder, without touching the font file itself. */
+.k7__writing--classique .k7__hand {
+  font-family: "Reenie Beanie", cursive;
+  color: #26324f;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0.35px;
+  stroke-linejoin: round;
+}
+
+.k7__writing--classique .k7__hand--title {
+  font-size: 17px;
+}
+
+.k7__writing--classique .k7__hand--artist {
+  font-size: 13px;
+  opacity: 0.8;
 }
 
 .k7__thumb-frame {

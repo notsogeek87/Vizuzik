@@ -246,11 +246,13 @@
          showing through that window and sized by --progress (see .k7__pack), and the trapezoid
          head-access section along the bottom edge. One shared illustration for both modes — only
          the label differs (see .k7__face--etiquette/--classique in style.css): the album art
-         printed across the whole label under a paper strip, or a plain palette-tinted label with
-         ruled paper band, stripes and a small art thumbnail. Both carry the track's title/artist
-         written on the paper, set in main.js (see setK7Text()), so the floating title card is
-         hidden in these modes. Same 320x200 viewBox, same portrait rotation trick and the same
-         tap-to-hide-controls as cassette mode (see .k7__art). -->
+         printed across the whole label under a frosted strip, title/artist in marker pen, or a
+         plain palette-tinted label with ruled paper band in pencil, stripes and a small art
+         thumbnail. The title/artist are set and fitted in main.js (see setK7Text()), so the
+         floating title card is hidden in these modes. The two handwriting fonts are bundled in
+         public/fonts/ with their own licences (see public/fonts/README.md). Same 320x200
+         viewBox, same portrait rotation trick and the same tap-to-hide-controls as cassette mode
+         (see .k7__art). -->
     <div id="k7" class="k7" aria-hidden="true">
       <svg class="k7__art" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
         <defs>
@@ -348,7 +350,8 @@
                 height="120"
                 preserveAspectRatio="xMidYMid slice"
               />
-              <rect class="k7__paper" x="26" y="22" width="268" height="27" />
+              <!-- Frosted rather than opaque, so the art still shows through behind the text. -->
+              <rect class="k7__band" x="26" y="22" width="268" height="27" />
             </g>
             <!-- K7 Classique: a plain label tinted from the palette, ruled paper band, stripes. -->
             <g class="k7__face k7__face--classique">
@@ -367,9 +370,8 @@
 
         <!-- Written on the paper strip, in both modes; filled and fitted in main.js. -->
         <g class="k7__writing k7__writing--etiquette">
-          <text class="k7__side" x="31" y="40">A</text>
-          <text id="k7-title-etiquette" class="k7__hand k7__hand--title" x="44" y="35"></text>
-          <text id="k7-artist-etiquette" class="k7__hand k7__hand--artist" x="44" y="45.5"></text>
+          <text id="k7-title-etiquette" class="k7__hand k7__hand--title" x="34" y="35"></text>
+          <text id="k7-artist-etiquette" class="k7__hand k7__hand--artist" x="34" y="45.5"></text>
         </g>
         <g class="k7__writing k7__writing--classique">
           <text class="k7__side" x="31" y="45">A</text>
