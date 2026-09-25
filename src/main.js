@@ -194,7 +194,7 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, progress.positionNow() / progress.duration)) : 0;
   writeVar("--progress", "progress", playedRatio);
   // The K7 modes' tape packs follow the same number, unquantised, and smooth over its jumps.
-  k7Tape.update(playedRatio);
+  k7Tape.update(playedRatio, isPlaying);
   k7Lid.update(progress.positionNow(), playedRatio);
   syncPaletteVars();
   progress.render();

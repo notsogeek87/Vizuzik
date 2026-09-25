@@ -409,25 +409,21 @@
           <rect x="130" y="66" width="60" height="36" fill="#000" fill-opacity="0.25" />
           <path class="k7__scale" d="M134 99 H186 M136 99 v-4 M143 99 v-2.5 M150 99 v-4 M157 99 v-2.5 M164 99 v-4 M171 99 v-2.5 M178 99 v-4 M185 99 v-2.5" />
         </g>
-        <!-- Each reel turns twice over: .k7__hub for playback, .k7__rewind for the quick rewind
-             on a track change (see src/k7.js). Clipped from outside the turning groups, so the
+        <!-- Each reel, turned by src/k7.js (see K7Tape): anticlockwise while playing, fast the other
+             way when rewinding on a track change. Clipped from outside the turning group, so the
              window's outline stays put while the flange turns inside it. -->
         <g clip-path="url(#k7-window-clip)">
           <g class="k7__hub k7__hub--a">
-            <g class="k7__rewind">
-              <use href="#k7-flange" transform="translate(97 84)" />
-              <circle cx="97" cy="84" r="13.5" fill="url(#k7-hub)" />
-              <circle cx="97" cy="84" r="8.5" fill="#1b1614" />
-              <use href="#k7-teeth" class="k7__teeth" transform="translate(97 84)" />
-            </g>
+            <use href="#k7-flange" transform="translate(97 84)" />
+            <circle cx="97" cy="84" r="13.5" fill="url(#k7-hub)" />
+            <circle cx="97" cy="84" r="8.5" fill="#1b1614" />
+            <use href="#k7-teeth" class="k7__teeth" transform="translate(97 84)" />
           </g>
           <g class="k7__hub k7__hub--b">
-            <g class="k7__rewind">
-              <use href="#k7-flange" transform="translate(223 84) rotate(20)" />
-              <circle cx="223" cy="84" r="13.5" fill="url(#k7-hub)" />
-              <circle cx="223" cy="84" r="8.5" fill="#1b1614" />
-              <use href="#k7-teeth" class="k7__teeth" transform="translate(223 84) rotate(25)" />
-            </g>
+            <use href="#k7-flange" transform="translate(223 84) rotate(20)" />
+            <circle cx="223" cy="84" r="13.5" fill="url(#k7-hub)" />
+            <circle cx="223" cy="84" r="8.5" fill="#1b1614" />
+            <use href="#k7-teeth" class="k7__teeth" transform="translate(223 84) rotate(25)" />
           </g>
         </g>
         <rect x="70" y="62" width="180" height="44" rx="22" fill="url(#k7-glass)" />
@@ -531,33 +527,13 @@
           <path class="k7__lid-plate" fill-rule="evenodd" d="M8 6 H312 A8 8 0 0 1 320 14 V186 A8 8 0 0 1 312 194 H8 A8 8 0 0 1 0 186 V14 A8 8 0 0 1 8 6 Z M34 16 H286 A8 8 0 0 1 294 24 V110 A8 8 0 0 1 286 118 H34 A8 8 0 0 1 26 110 V24 A8 8 0 0 1 34 16 Z" />
           <path class="k7__lid-brush" fill-rule="evenodd" fill="url(#k7-lid-brush)" d="M8 6 H312 A8 8 0 0 1 320 14 V186 A8 8 0 0 1 312 194 H8 A8 8 0 0 1 0 186 V14 A8 8 0 0 1 8 6 Z M34 16 H286 A8 8 0 0 1 294 24 V110 A8 8 0 0 1 286 118 H34 A8 8 0 0 1 26 110 V24 A8 8 0 0 1 34 16 Z" />
           <rect class="k7__lid-glass" x="26" y="16" width="268" height="102" rx="8" />
-          <!-- The glass's own glints: moved by the tilt too, less than the metal's light band, so
-               the glass reads as sitting on a different plane from the plate. -->
-          <g clip-path="url(#k7-lid-glass-clip)">
-            <g class="k7__lid-glints">
-              <path class="k7__lid-streak" d="M60 16 L95 16 L40 118 L5 118 Z" />
-              <path class="k7__lid-streak" d="M200 16 L232 16 L178 118 L146 118 Z" />
-              <path class="k7__lid-streak k7__lid-streak--thin" d="M240 16 L248 16 L194 118 L186 118 Z" />
-            </g>
-          </g>
           <rect class="k7__lid-rim" x="26" y="16" width="268" height="102" rx="8" />
           <rect class="k7__lid-rimlight" x="25" y="15" width="270" height="104" rx="9" />
-          <g clip-path="url(#k7-lid-metal-clip)">
-            <g class="k7__lid-sweep">
-              <rect x="120" y="-40" width="160" height="280" fill="url(#k7-lid-sweep)" transform="rotate(22 200 100)" />
-            </g>
-          </g>
           <path class="k7__lid-edge" d="M14 6.6 H306" />
-          <path class="k7__lid-ruler" d="M78 101 H242 M78.0 101 v-5 M86.2 101 v-2.8 M94.4 101 v-2.8 M102.6 101 v-5 M110.8 101 v-2.8 M119.0 101 v-2.8 M127.2 101 v-5 M135.4 101 v-2.8 M143.6 101 v-2.8 M151.8 101 v-5 M160.0 101 v-2.8 M168.2 101 v-2.8 M176.4 101 v-5 M184.6 101 v-2.8 M192.8 101 v-2.8 M201.0 101 v-5 M209.2 101 v-2.8 M217.4 101 v-2.8 M225.6 101 v-5 M233.8 101 v-2.8 M242.0 101 v-2.8" />
-          <g class="k7__lid-needle">
-            <line x1="78" y1="92" x2="78" y2="103" />
-            <path d="M75.4 89.5 h5.2 l-2.6 3.6 z" />
-          </g>
           <text class="k7__lid-brand" x="30" y="136">VIZUZIK</text>
           <text class="k7__lid-text" x="30" y="146">STEREO CASSETTE PLAYER</text>
           <text class="k7__lid-text" x="290" y="136" text-anchor="end">AUTO REVERSE</text>
           <rect class="k7__lid-lcd" x="238" y="142" width="52" height="16" rx="2" />
-          <text id="k7-lid-time" class="k7__lid-lcdtext" x="264" y="153.5" text-anchor="middle">0:00</text>
           <rect class="k7__lid-groove-light" x="91.6" y="158.6" width="137" height="29" rx="4" />
           <rect class="k7__lid-groove" x="91" y="158" width="137" height="29" rx="4" />
           <g class="k7__lid-key k7__lid-key--previous" data-key="previous">
@@ -583,6 +559,35 @@
             </g>
           </g>
           <rect class="k7__lid-accent" x="154" y="181" width="12" height="1.4" rx="0.7" />
+        </g>
+      </svg>
+      <!-- The lid's moving parts, in a layer of their own over it: the glints following the
+           tilt, the ruler's needle, the LCD's digits. Kept apart so that redrawing them — every
+           second for the time, and whenever the sensors report a tilt — never repaints the
+           heavy lid underneath (brushed-metal pattern, clips, keys), which is what let the
+           cassette show through it in patches on Android. -->
+      <svg class="k7__art k7__lid-layer k7__lid-live" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
+        <g class="k7__lid">
+          <g clip-path="url(#k7-lid-metal-clip)">
+            <g class="k7__lid-sweep">
+              <rect x="120" y="-40" width="160" height="280" fill="url(#k7-lid-sweep)" transform="rotate(22 200 100)" />
+            </g>
+          </g>
+          <!-- The glass's own glints: moved by the tilt too, less than the metal's light band, so
+               the glass reads as sitting on a different plane from the plate. -->
+          <g clip-path="url(#k7-lid-glass-clip)">
+            <g class="k7__lid-glints">
+              <path class="k7__lid-streak" d="M60 16 L95 16 L40 118 L5 118 Z" />
+              <path class="k7__lid-streak" d="M200 16 L232 16 L178 118 L146 118 Z" />
+              <path class="k7__lid-streak k7__lid-streak--thin" d="M240 16 L248 16 L194 118 L186 118 Z" />
+            </g>
+          </g>
+          <path class="k7__lid-ruler" d="M78 101 H242 M78.0 101 v-5 M86.2 101 v-2.8 M94.4 101 v-2.8 M102.6 101 v-5 M110.8 101 v-2.8 M119.0 101 v-2.8 M127.2 101 v-5 M135.4 101 v-2.8 M143.6 101 v-2.8 M151.8 101 v-5 M160.0 101 v-2.8 M168.2 101 v-2.8 M176.4 101 v-5 M184.6 101 v-2.8 M192.8 101 v-2.8 M201.0 101 v-5 M209.2 101 v-2.8 M217.4 101 v-2.8 M225.6 101 v-5 M233.8 101 v-2.8 M242.0 101 v-2.8" />
+          <g class="k7__lid-needle">
+            <line x1="78" y1="92" x2="78" y2="103" />
+            <path d="M75.4 89.5 h5.2 l-2.6 3.6 z" />
+          </g>
+          <text id="k7-lid-time" class="k7__lid-lcdtext" x="264" y="153.5" text-anchor="middle">0:00</text>
         </g>
       </svg>
     </div>

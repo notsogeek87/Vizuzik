@@ -1,6 +1,6 @@
-// Mechanics for the two K7 modes (see #k7 in index.html): K7Tape — how much tape is wound on
-// each reel, the path the tape takes from one pack to the other, and the quick rewind when a new
-// track starts — and K7Lid, the Walkman lid that carries their controls.
+// Mechanics for the two K7 modes (see #k7 in index.html): K7Tape — the reels turning, how much
+// tape is wound on each, the path the tape takes from one pack to the other, and the quick rewind
+// when a new track starts — and K7Lid, the Walkman lid that carries their controls.
 //
 // Driven from the same played ratio as the progress bar, but not tied to it frame for frame:
 // a jump in playback — scrubbing, or a new track starting from zero with the right-hand reel
@@ -20,11 +20,15 @@ const PACK_FULL = 70;
 // An empty pack: just the tape's leader round the hub.
 const PACK_EMPTY = 14;
 
-// One rewind turn, in seconds — the same period as .k7__rewind's animation in style.css. A
-// rewind always lasts a whole number of these turns, so the reels end exactly where they began.
+// One turn while playing, in seconds, for each reel: slightly different, as tape winds from one
+// to the other (the same two periods as cassette mode's reels). Both turn anticlockwise, as on a
+// real deck: the tape leaves the left pack by its outer edge and winds onto the right one by its.
+const PLAY_TURN_S = [3.2, 3.8];
+// One turn while rewinding, the other way round, and how long rewinding a whole side takes (less
+// tape, proportionally less, never under two turns' worth).
 const REWIND_TURN_S = 0.3;
-// Rewinding a whole side takes this long; less tape, proportionally less (never under 2 turns).
 const REWIND_FULL_S = 1.3;
+const REWIND_MIN_S = 0.6;
 
 // Below this, a difference is just playback moving on; above it, it's a jump to glide over.
 const JUMP = 0.02;
@@ -37,6 +41,10 @@ export class K7Tape {
     this.packsA = root.querySelectorAll(".k7__pack--a");
     this.packsB = root.querySelectorAll(".k7__pack--b");
     this.tape = root.querySelector(".k7__tape");
+    this.reels = [
+      { el: root.querySelector(".k7__hub--a"), x: REEL_A_X, angle: 0, written: null },
+      { el: root.querySelector(".k7__hub--b"), x: REEL_B_X, angle: 0, written: null },
+    ];
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.shown = null;
     this.written = null;
@@ -47,18 +55,15 @@ export class K7Tape {
   /** A new track has started: rewind whatever was played of the last one. */
   trackChanged() {
     if (this.shown == null || this.shown < JUMP || this.reducedMotion.matches) return;
-    const turns = Math.max(2, Math.round((REWIND_FULL_S * this.shown) / REWIND_TURN_S));
-    this.rewind = { from: this.shown, startedAt: performance.now(), durationMs: turns * REWIND_TURN_S * 1000 };
-    this.root.style.setProperty("--k7-rewind-turns", String(turns));
-    // Restarted from its first turn even if a rewind was already under way (tracks skipped
-    // in quick succession).
-    this.root.classList.remove("is-rewinding");
-    void this.root.getBoundingClientRect();
-    this.root.classList.add("is-rewinding");
+    const seconds = Math.max(REWIND_MIN_S, REWIND_FULL_S * this.shown);
+    this.rewind = { from: this.shown, startedAt: performance.now(), durationMs: seconds * 1000 };
   }
 
-  /** Called on every animation frame with how far into the track playback is, 0..1. */
-  update(played) {
+  /**
+   * Called on every animation frame with how far into the track playback is, 0..1, and whether
+   * it is playing (the reels only turn then, or while rewinding).
+   */
+  update(played, playing) {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.lastAt) / 1000);
     this.lastAt = now;
@@ -67,16 +72,27 @@ export class K7Tape {
       const t = Math.min(1, (now - this.rewind.startedAt) / this.rewind.durationMs);
       const eased = t < 0.5 ? 2 * t * t : 1 - (2 - 2 * t) ** 2 / 2;
       this.shown = this.rewind.from * (1 - eased);
-      if (t >= 1) {
-        this.rewind = null;
-        this.root.classList.remove("is-rewinding");
-      }
+      if (t >= 1) this.rewind = null;
     } else if (this.shown == null || Math.abs(played - this.shown) < JUMP) {
       this.shown = played;
     } else {
       this.shown += (played - this.shown) * Math.min(1, dt * GLIDE_RATE);
     }
+    this.turnReels(dt, playing);
     this.draw();
+  }
+
+  turnReels(dt, playing) {
+    if (this.reducedMotion.matches || (!playing && !this.rewind)) return;
+    this.reels.forEach((reel, i) => {
+      // Anticlockwise while playing (a negative angle, screen y pointing down); clockwise, fast,
+      // while rewinding.
+      reel.angle = (reel.angle + (this.rewind ? 360 / REWIND_TURN_S : -360 / PLAY_TURN_S[i]) * dt) % 360;
+      const angle = reel.angle.toFixed(1);
+      if (angle === reel.written) return;
+      reel.written = angle;
+      reel.el.setAttribute("transform", `rotate(${angle} ${reel.x} ${REEL_Y})`);
+    });
   }
 
   draw() {
@@ -114,6 +130,10 @@ const RULER_ZONE = { left: 62, right: 258, top: 86, bottom: 112 };
 // rest position follows however the phone is being held, so it drifts back to centre.
 const TILT_RANGE = 25;
 const TILT_REST_FOLLOW = 0.005;
+// A phone lying still still reports a little sensor noise: smoothed out, and below this many
+// degrees of change the glint isn't redrawn at all.
+const TILT_SMOOTHING = 0.25;
+const TILT_DEADBAND = 0.4;
 
 function clampTo(value, min, max) {
   return value < min ? min : value > max ? max : value;
@@ -176,7 +196,8 @@ export class K7Lid {
       this.shownTime = time;
       this.time.textContent = time;
     }
-    const offset = ((RULER_END - RULER_START) * played).toFixed(1);
+    // In half-unit steps: finer than the eye can follow on a needle, and far fewer repaints.
+    const offset = (Math.round((RULER_END - RULER_START) * played * 2) / 2).toFixed(1);
     if (offset !== this.shownNeedle) {
       this.shownNeedle = offset;
       this.needle.setAttribute("transform", `translate(${offset} 0)`);
@@ -196,6 +217,7 @@ export class K7Lid {
       this.sweep.removeAttribute("transform");
       this.glints.removeAttribute("transform");
       this.shownGlint = null;
+      this.glint = null;
     }
   }
 
@@ -227,7 +249,10 @@ export class K7Lid {
     const dy = clampTo(y - this.tiltRest.y, -TILT_RANGE, TILT_RANGE);
     // And the screen's into the illustration's: upright, it is turned a quarter clockwise.
     const upright = window.innerHeight > window.innerWidth;
-    this.glint = { x: upright ? dy : dx, y: upright ? -dx : dy };
+    const target = { x: upright ? dy : dx, y: upright ? -dx : dy };
+    if (!this.glint) this.glint = target;
+    this.glint.x += (target.x - this.glint.x) * TILT_SMOOTHING;
+    this.glint.y += (target.y - this.glint.y) * TILT_SMOOTHING;
     // The sensor fires faster than the screen redraws: at most one repaint per frame, and none
     // for a move too small to see.
     if (this.glintFrame == null) this.glintFrame = requestAnimationFrame(() => this._drawGlint());
@@ -236,9 +261,10 @@ export class K7Lid {
   _drawGlint() {
     this.glintFrame = null;
     if (!this.listening || !this.glint) return;
-    const x = Math.round(this.glint.x * 2) / 2;
-    const y = Math.round(this.glint.y * 2) / 2;
-    if (this.shownGlint && this.shownGlint.x === x && this.shownGlint.y === y) return;
+    const { x, y } = this.glint;
+    if (this.shownGlint && Math.abs(x - this.shownGlint.x) < TILT_DEADBAND && Math.abs(y - this.shownGlint.y) < TILT_DEADBAND) {
+      return;
+    }
     this.shownGlint = { x, y };
     this.sweep.setAttribute("transform", `translate(${(x * 4).toFixed(1)} ${(y * 1.5).toFixed(1)})`);
     this.glints.setAttribute("transform", `translate(${(x * 2.4).toFixed(1)} ${(y * 0.9).toFixed(1)})`);
