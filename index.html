@@ -518,7 +518,12 @@
           <line x1="157.4" y1="161" x2="162.6" y2="161" />
         </g>
 
-        <!-- The Walkman lid: closes over the cassette on a tap, with the transport keys on it, a
+      </svg>
+      <svg class="k7__art k7__lid-layer" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
+        <!-- The Walkman lid, in its own layer exactly over the cassette (same viewBox, same sizing — see
+             .k7__lid-layer): Android's WebView can then repaint either one without the other,
+             which is what kept a key press or the tilt glint from flickering the whole
+             illustration. It closes over the cassette on a tap, with the transport keys on it, a
              window onto the reels, a long tape-length ruler whose red needle can be dragged to
              seek, and a small LCD for the time (see K7Lid in src/k7.js; taps are hit-tested there,
              since .player sits above this illustration). Open, out of the way, by default. -->

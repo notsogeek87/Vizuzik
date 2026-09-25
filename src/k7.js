@@ -80,7 +80,8 @@ export class K7Tape {
   }
 
   draw() {
-    if (this.written != null && Math.abs(this.shown - this.written) < 0.0005) return;
+    // Every write repaints the illustration: skip the ones too small to see (a tenth of a unit).
+    if (this.written != null && Math.abs(this.shown - this.written) < 0.002) return;
     this.written = this.shown;
     const packA = PACK_FULL - this.shown * (PACK_FULL - PACK_EMPTY);
     const packB = PACK_EMPTY + this.shown * (PACK_FULL - PACK_EMPTY);
@@ -120,7 +121,7 @@ function clampTo(value, min, max) {
 
 export class K7Lid {
   constructor(root) {
-    this.svg = root.querySelector(".k7__art");
+    this.svg = root.querySelector(".k7__lid-layer");
     this.needle = root.querySelector(".k7__lid-needle");
     this.time = root.querySelector("#k7-lid-time");
     this.sweep = root.querySelector(".k7__lid-sweep");
@@ -132,6 +133,9 @@ export class K7Lid {
     this.shownNeedle = null;
     this.tiltRest = null;
     this.listening = false;
+    this.glint = null;
+    this.glintFrame = null;
+    this.shownGlint = null;
     this.onOrientation = (event) => this._onOrientation(event);
   }
 
@@ -191,6 +195,7 @@ export class K7Lid {
       window.removeEventListener("deviceorientation", this.onOrientation);
       this.sweep.removeAttribute("transform");
       this.glints.removeAttribute("transform");
+      this.shownGlint = null;
     }
   }
 
@@ -222,9 +227,20 @@ export class K7Lid {
     const dy = clampTo(y - this.tiltRest.y, -TILT_RANGE, TILT_RANGE);
     // And the screen's into the illustration's: upright, it is turned a quarter clockwise.
     const upright = window.innerHeight > window.innerWidth;
-    const sx = upright ? dy : dx;
-    const sy = upright ? -dx : dy;
-    this.sweep.setAttribute("transform", `translate(${(sx * 4).toFixed(1)} ${(sy * 1.5).toFixed(1)})`);
-    this.glints.setAttribute("transform", `translate(${(sx * 2.4).toFixed(1)} ${(sy * 0.9).toFixed(1)})`);
+    this.glint = { x: upright ? dy : dx, y: upright ? -dx : dy };
+    // The sensor fires faster than the screen redraws: at most one repaint per frame, and none
+    // for a move too small to see.
+    if (this.glintFrame == null) this.glintFrame = requestAnimationFrame(() => this._drawGlint());
+  }
+
+  _drawGlint() {
+    this.glintFrame = null;
+    if (!this.listening || !this.glint) return;
+    const x = Math.round(this.glint.x * 2) / 2;
+    const y = Math.round(this.glint.y * 2) / 2;
+    if (this.shownGlint && this.shownGlint.x === x && this.shownGlint.y === y) return;
+    this.shownGlint = { x, y };
+    this.sweep.setAttribute("transform", `translate(${(x * 4).toFixed(1)} ${(y * 1.5).toFixed(1)})`);
+    this.glints.setAttribute("transform", `translate(${(x * 2.4).toFixed(1)} ${(y * 0.9).toFixed(1)})`);
   }
 }

@@ -649,9 +649,20 @@ body.cassette-controls-hidden .k7__lid {
   stroke-width: 0.7;
 }
 
-/* Moved by the phone's tilt (see K7Lid in src/k7.js); still, it just sits at rest. */
-.k7__lid-sweep {
-  mix-blend-mode: screen;
+/* The lid's own layer, laid exactly over the cassette: same box as .k7__art (whose rules it
+   shares, portrait rotation included), stacked on it instead of below it, and promoted to its
+   own compositing layer so the lid and the cassette repaint independently. */
+.k7__lid-layer {
+  will-change: transform;
+}
+
+@media (orientation: landscape) {
+  .k7__lid-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
 }
 
 .k7__lid-edge {
