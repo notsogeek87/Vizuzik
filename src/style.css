@@ -577,6 +577,26 @@ body[data-mode^="k7-"] .meta {
   stroke-width: 1.5;
 }
 
+/* K7 Étiquette: a pre-recorded tape's coloured plastic, tinted by the album's main colour — a
+   dark shell sank into the black screen around it. One flat tint rather than the default's
+   top-to-bottom darkening, which only pushed the bottom back into the black. The plain value
+   first is what an older WebView without color-mix() keeps. */
+body[data-mode="k7-etiquette"] .k7__shell-stop {
+  stop-color: #3a3431;
+  stop-color: color-mix(in srgb, rgb(var(--c1)) 56%, #262222);
+}
+
+body[data-mode="k7-etiquette"] .k7__trapezoid {
+  fill: rgba(0, 0, 0, 0.05);
+}
+
+/* The bottom scrim (see .scrim) sets the transport controls off nicely, but it also darkens the
+   bottom half of the cassette: once a tap has tucked the controls away, it fades out with them
+   so the whole tinted shell shows. */
+body[data-mode="k7-etiquette"].cassette-controls-hidden .scrim {
+  opacity: 0;
+}
+
 .k7__bezel {
   fill: none;
   stroke: rgba(255, 255, 255, 0.06);
