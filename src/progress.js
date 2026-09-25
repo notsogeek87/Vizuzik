@@ -9,8 +9,8 @@ function clamp(value, min, max) {
   return value < min ? min : value > max ? max : value;
 }
 
-/** "3:07", or "1:02:33" once past an hour. */
-function formatTime(ms) {
+/** "3:07", or "1:02:33" once past an hour. Also the K7 lid's LCD (see k7.js). */
+export function formatTime(ms) {
   if (!Number.isFinite(ms) || ms < 0) ms = 0;
   const total = Math.floor(ms / 1000);
   const seconds = total % 60;
@@ -127,8 +127,30 @@ export class PlaybackProgress {
 
   _onPointerUp(event) {
     if (this.pointerId !== event.pointerId || this.scrubRatio == null) return;
-    const target = this.scrubRatio * this.duration;
     this._releasePointer();
+    this.commitScrub();
+  }
+
+  _cancelScrub() {
+    this._releasePointer();
+    this.cancelScrub();
+  }
+
+  /**
+   * Scrubbing driven from somewhere other than this bar — the K7 modes' ruler (see K7Lid in
+   * k7.js). Same state as a drag on the bar: positionNow() follows it until committed.
+   * @returns {boolean} whether there is anything to scrub through
+   */
+  scrubTo(ratio) {
+    if (!this.canSeek) return false;
+    this.scrubRatio = clamp(ratio, 0, 1);
+    this.render(true);
+    return true;
+  }
+
+  commitScrub() {
+    if (this.scrubRatio == null) return;
+    const target = this.scrubRatio * this.duration;
     // Anchored optimistically at the requested position: Deezer takes a moment to report the
     // new one, and a bar that snapped back before jumping forward would look broken.
     this.scrubRatio = null;
@@ -138,8 +160,7 @@ export class PlaybackProgress {
     this.onSeek(Math.round(target));
   }
 
-  _cancelScrub() {
-    this._releasePointer();
+  cancelScrub() {
     this.scrubRatio = null;
     this.render(true);
   }

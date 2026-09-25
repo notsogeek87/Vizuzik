@@ -1,6 +1,6 @@
 import { registerPlugin } from "@capacitor/core";
 import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
-import { K7Tape } from "./k7.js";
+import { K7Lid, K7Tape } from "./k7.js";
 import { extractPalette } from "./palette.js";
 import { PlaybackProgress } from "./progress.js";
 
@@ -119,6 +119,7 @@ let displayMode = VISUAL_STYLES.includes(storedMode) ? storedMode : "cover";
 
 const visualizer = new Visualizer(els.fx);
 const k7Tape = new K7Tape(document.getElementById("k7"));
+const k7Lid = new K7Lid(document.getElementById("k7"));
 visualizer.setFocusElement(els.disc);
 
 const progress = new PlaybackProgress(
@@ -194,6 +195,7 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   writeVar("--progress", "progress", playedRatio);
   // The K7 modes' tape packs follow the same number, unquantised, and smooth over its jumps.
   k7Tape.update(playedRatio);
+  k7Lid.update(progress.positionNow(), playedRatio);
   syncPaletteVars();
   progress.render();
 };
@@ -1473,6 +1475,8 @@ if (els.edgeDiagnostics) {
 
 let toastTimer = null;
 
+let appliedMode = null;
+
 function applyDisplayMode(announce) {
   document.body.dataset.mode = displayMode;
   visualizer.setStyle(displayMode);
@@ -1483,9 +1487,15 @@ function applyDisplayMode(announce) {
   scheduleFocusRefresh();
   if (announce) showToast(MODE_LABELS[displayMode]);
   syncOrientationLock();
-  // Leaving cassette mode with its buttons tapped away shouldn't carry that into the next
-  // mode, or the next time cassette mode itself is picked again.
-  if (!isCassetteMode(displayMode)) document.body.classList.remove("cassette-controls-hidden");
+  // Only on an actual change of mode (this also runs on every now-playing update): cassette
+  // mode, like every other, opens on its controls, and leaving it with them tapped away shouldn't
+  // carry that into the next mode; the K7 modes open on the bare cassette, their Walkman lid
+  // (and the controls on it) out of the way until a tap brings it down.
+  if (displayMode !== appliedMode) {
+    appliedMode = displayMode;
+    document.body.classList.toggle("cassette-controls-hidden", displayMode.startsWith("k7-"));
+    syncK7Lid();
+  }
   // Written while the mode was hidden, the label text couldn't be measured (see fitSvgText()).
   if (displayMode.startsWith("k7-")) refitK7Text();
 }
@@ -1495,6 +1505,17 @@ function applyDisplayMode(announce) {
 function isCassetteMode(mode) {
   return mode === "cassette" || mode.startsWith("k7-");
 }
+
+// In the K7 modes the controls are the Walkman lid's: shut over the cassette while they show.
+function k7LidShut() {
+  return displayMode.startsWith("k7-") && !document.body.classList.contains("cassette-controls-hidden");
+}
+
+function syncK7Lid() {
+  k7Lid.setActive(k7LidShut());
+}
+
+const K7_LID_KEY_BUTTONS = { previous: () => els.previous, "play-pause": () => els.playPause, next: () => els.next };
 
 // No display mode forces the phone into a particular orientation — cassette mode used to lock
 // landscape the way a video player forces landscape for fullscreen, but that fought the phone's
@@ -1736,6 +1757,9 @@ function ownsItsPointer(target) {
 
 els.player.addEventListener("pointerdown", (event) => {
   if (gesture || ownsItsPointer(event.target)) return;
+  // The K7 lid's keys and ruler are drawn in the illustration under .player, so what a touch
+  // lands on there is worked out from its position (see K7Lid.hit()).
+  const onLid = k7LidShut() ? k7Lid.hit(event.clientX, event.clientY) : null;
   gesture = {
     id: event.pointerId,
     x0: event.clientX,
@@ -1745,13 +1769,20 @@ els.player.addEventListener("pointerdown", (event) => {
     dy: 0,
     dragging: false,
     onStage: !!(event.target.closest && event.target.closest(".stage")),
+    lidKey: onLid && onLid.key,
+    scrubbing: !!(onLid && onLid.ruler != null && progress.scrubTo(onLid.ruler)),
   };
+  if (gesture.lidKey) k7Lid.press(gesture.lidKey, true);
   els.player.setPointerCapture(event.pointerId);
   document.body.classList.remove("is-swipe-releasing");
 });
 
 els.player.addEventListener("pointermove", (event) => {
   if (!gesture || gesture.id !== event.pointerId) return;
+  if (gesture.scrubbing) {
+    progress.scrubTo(k7Lid.rulerRatio(event.clientX, event.clientY));
+    return;
+  }
   gesture.dx = event.clientX - gesture.x0;
   gesture.dy = event.clientY - gesture.y0;
   if (!gesture.dragging && Math.abs(gesture.dx) > TAP_SLOP_PX && Math.abs(gesture.dx) > Math.abs(gesture.dy)) {
@@ -1771,6 +1802,12 @@ function endGesture(event, cancelled) {
   const g = gesture;
   gesture = null;
   if (els.player.hasPointerCapture(event.pointerId)) els.player.releasePointerCapture(event.pointerId);
+  if (g.lidKey) k7Lid.press(g.lidKey, false);
+  if (g.scrubbing) {
+    if (cancelled) progress.cancelScrub();
+    else progress.commitScrub();
+    return;
+  }
   document.body.classList.remove("is-swiping");
   document.body.classList.add("is-swipe-releasing");
 
@@ -1790,13 +1827,17 @@ function endGesture(event, cancelled) {
     !cancelled && !g.dragging && performance.now() - g.t0 < TAP_MAX_MS && Math.abs(g.dy) < TAP_SLOP_PX;
   // A tap on the artwork still cycles visualizations — the obvious gesture on a screen you
   // look at from across the room, and the toast names what you landed on.
-  if (isTap && g.onStage) {
+  if (isTap && g.lidKey) {
+    // The same buttons the other modes show, so the same behaviour.
+    K7_LID_KEY_BUTTONS[g.lidKey]().click();
+  } else if (isTap && g.onStage) {
     cycleDisplayMode();
   } else if (isTap && isCassetteMode(displayMode)) {
     // Cassette mode has no stage to tap (the artwork fills the screen): tapping it instead
     // toggles the transport buttons, scrub bar and title/artist card out of the way, for a
     // fully unobstructed view of the cassette (see .cassette-controls-hidden in style.css).
     document.body.classList.toggle("cassette-controls-hidden");
+    syncK7Lid();
   }
 }
 

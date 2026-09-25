@@ -590,11 +590,183 @@ body[data-mode="k7-etiquette"] .k7__trapezoid {
   fill: rgba(0, 0, 0, 0.05);
 }
 
-/* The bottom scrim (see .scrim) sets the transport controls off nicely, but it also darkens the
-   bottom half of the cassette: once a tap has tucked the controls away, it fades out with them
-   so the whole shell shows. */
-body[data-mode^="k7-"].cassette-controls-hidden .scrim {
+/* The K7 modes carry their own controls, on the Walkman lid (see .k7__lid): the app's usual
+   transport row and scrub bar stay in the DOM — the lid's keys click them, so it's the same
+   logic — but are never shown here. Nor is the bottom scrim that sets them off elsewhere: on
+   the lid it only darkened the metal. */
+body[data-mode^="k7-"] .controls,
+body[data-mode^="k7-"] .progress {
+  display: none;
+}
+
+body[data-mode^="k7-"] .scrim {
   opacity: 0;
+}
+
+/* The lid: shut over the cassette while the controls show, slid down out of the way once a
+   tap has tucked them — the default on entering a K7 mode (see applyDisplayMode() in main.js). */
+.k7__lid {
+  transition: transform 0.55s cubic-bezier(0.34, 1.3, 0.64, 1), opacity 0.4s ease;
+}
+
+body.cassette-controls-hidden .k7__lid {
+  transform: translateY(210px);
+  opacity: 0;
+}
+
+.k7__lid-plate {
+  fill: url(#k7-lid-metal);
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1.2;
+}
+
+#k7-lid-brush line {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 0.3;
+}
+
+.k7__lid-glass {
+  fill: url(#k7-lid-glass);
+}
+
+.k7__lid-streak {
+  fill: rgba(255, 255, 255, 0.07);
+}
+
+.k7__lid-streak--thin {
+  fill: rgba(255, 255, 255, 0.09);
+}
+
+.k7__lid-rim {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 2;
+}
+
+.k7__lid-rimlight {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 0.7;
+}
+
+/* Moved by the phone's tilt (see K7Lid in src/k7.js); still, it just sits at rest. */
+.k7__lid-sweep {
+  mix-blend-mode: screen;
+}
+
+.k7__lid-edge {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 0.8;
+}
+
+/* The cassette's own short scale would show through under the lid's long one. */
+body[data-mode^="k7-"]:not(.cassette-controls-hidden) .k7__scale {
+  opacity: 0;
+}
+
+.k7__lid-ruler {
+  fill: none;
+  stroke: rgba(236, 230, 218, 0.75);
+  stroke-width: 0.6;
+}
+
+.k7__lid-needle line {
+  stroke: #e0402f;
+  stroke-width: 1.2;
+}
+
+.k7__lid-needle path {
+  fill: #e0402f;
+}
+
+.k7__lid-brand {
+  font: 800 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 2.4px;
+  fill: #2b2b30;
+}
+
+.k7__lid-text {
+  font: 700 6px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 1.4px;
+  fill: #3a3a40;
+}
+
+.k7__lid-lcd {
+  fill: #1b2016;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 0.6;
+}
+
+.k7__lid-lcdtext {
+  font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace;
+  fill: #b8e07a;
+}
+
+/* Flush keys in the lid's own metal, set off by an engraved groove rather than sunk in a dark
+   well; play/pause stays pressed down while playing, with a thin red mark. */
+.k7__lid-groove {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.28);
+  stroke-width: 0.7;
+}
+
+.k7__lid-groove-light {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 0.6;
+}
+
+.k7__lid-keycap {
+  fill: url(#k7-lid-key);
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 0.5;
+}
+
+.k7__lid-keyshine {
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 0.5;
+}
+
+.k7__lid-key.is-pressed .k7__lid-keycap,
+body[data-state="playing"] .k7__lid-key--play-pause .k7__lid-keycap {
+  fill: url(#k7-lid-key-down);
+}
+
+.k7__lid-key.is-pressed .k7__lid-keyshine,
+body[data-state="playing"] .k7__lid-key--play-pause .k7__lid-keyshine {
+  display: none;
+}
+
+.k7__lid-icon {
+  fill: #44454b;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.k7__lid-icon--pause,
+body[data-state="playing"] .k7__lid-icon--play {
+  display: none;
+}
+
+body[data-state="playing"] .k7__lid-icon--pause {
+  display: inline;
+}
+
+.k7__lid-accent {
+  fill: #c0392b;
+  opacity: 0;
+}
+
+body[data-state="playing"] .k7__lid-accent {
+  opacity: 1;
+}
+
+/* Held upright, the whole illustration is turned a quarter; the key symbols are turned back so
+   they still read the right way up. */
+@media (orientation: portrait) {
+  .k7__lid-icon {
+    transform: rotate(-90deg);
+  }
 }
 
 /* K7 Classique: a blank tape recorded at home, so a neutral shell rather than a coloured one —
@@ -2508,6 +2680,10 @@ body[data-platform="tv"][data-mode="cassette"] .artist {
 
   .ambient__art {
     transform: none !important;
+  }
+
+  .k7__lid {
+    transition: none;
   }
 
   .disc {

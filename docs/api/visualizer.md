@@ -101,7 +101,7 @@ la même donnée que `.disc__spin`) mais à vitesse constante, pas sur le rythme
 `k7-etiquette` et `k7-classique` dérogent de la même façon : une seule illustration partagée
 (`#k7` dans `index.html`, section « K7 modes » de `style.css`) dont seule l'étiquette change
 selon le mode. Côté `main.js`, `isCassetteMode()` leur donne le même geste que `cassette` (un tap
-replie les contrôles), et `setK7Text()` écrit le titre et l'artiste sur l'étiquette. La mécanique de bande (taille des bobinages, chemin de la bande, glissement lors d'un saut, rembobinage au changement de morceau) est dans `src/k7.js` (`K7Tape`), appelée à chaque image depuis `visualizer.onFrame`.
+replie les contrôles), et `setK7Text()` écrit le titre et l'artiste sur l'étiquette. La mécanique de bande (taille des bobinages, chemin de la bande, glissement lors d'un saut, rembobinage au changement de morceau) est dans `src/k7.js` (`K7Tape`), appelée à chaque image depuis `visualizer.onFrame`, tout comme `K7Lid` (même fichier) : le capot de baladeur qui porte les contrôles des modes K7. L'illustration étant sous `.player`, les touches et la réglette du capot sont repérées par la position du doigt (`K7Lid.hit()`, convertie dans le repère du dessin, rotation portrait comprise) ; les touches déclenchent les boutons habituels `#previous`, `#play-pause`, `#next`, et la réglette pilote `PlaybackProgress` par `scrubTo()` / `commitScrub()`.
 
 ## L'autorisation audio
 
