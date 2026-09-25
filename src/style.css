@@ -592,9 +592,124 @@ body[data-mode="k7-etiquette"] .k7__trapezoid {
 
 /* The bottom scrim (see .scrim) sets the transport controls off nicely, but it also darkens the
    bottom half of the cassette: once a tap has tucked the controls away, it fades out with them
-   so the whole tinted shell shows. */
-body[data-mode="k7-etiquette"].cassette-controls-hidden .scrim {
+   so the whole shell shows. */
+body[data-mode^="k7-"].cassette-controls-hidden .scrim {
   opacity: 0;
+}
+
+/* K7 Classique: a blank tape recorded at home, so a neutral shell rather than a coloured one —
+   smoked, translucent plastic, with the mechanism showing through it (.k7__internals) and the
+   album's colours only in the glow behind it (.k7__halo), which also tints the smoke. */
+.k7__halo,
+.k7__internals {
+  display: none;
+}
+
+body[data-mode="k7-classique"] .k7__halo,
+body[data-mode="k7-classique"] .k7__internals {
+  display: inline;
+}
+
+/* The glow reaches past the illustration's own box. */
+body[data-mode="k7-classique"] .k7__art {
+  overflow: visible;
+}
+
+.k7__halo-stop--1 {
+  stop-color: rgb(var(--c1));
+  stop-opacity: 0.8;
+}
+
+.k7__halo-stop--2 {
+  stop-color: rgb(var(--c2));
+  stop-opacity: 0.38;
+}
+
+.k7__halo-stop--3 {
+  stop-color: rgb(var(--c2));
+  stop-opacity: 0;
+}
+
+body[data-mode="k7-classique"] .k7__shell {
+  fill: rgba(72, 66, 62, 0.62);
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1;
+}
+
+body[data-mode="k7-classique"] .k7__bezel {
+  stroke: rgba(255, 255, 255, 0.16);
+}
+
+body[data-mode="k7-classique"] .k7__trapezoid {
+  fill: rgba(255, 255, 255, 0.035);
+  stroke: rgba(255, 255, 255, 0.22);
+}
+
+body[data-mode="k7-classique"] .k7__trapezoid-light {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+body[data-mode="k7-classique"] .k7__ledge {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+body[data-mode="k7-classique"] .k7__hole {
+  fill: #020203;
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.k7__tape {
+  fill: none;
+  stroke: #6e4424;
+  stroke-width: 1.9;
+  stroke-linejoin: round;
+}
+
+.k7__roller-rim {
+  fill: rgba(225, 220, 210, 0.16);
+  stroke: rgba(235, 230, 220, 0.45);
+  stroke-width: 1.2;
+}
+
+.k7__roller-core {
+  fill: rgba(235, 230, 220, 0.28);
+  stroke: rgba(235, 230, 220, 0.5);
+  stroke-width: 0.6;
+}
+
+.k7__roller-pin {
+  fill: #bdb7ad;
+}
+
+.k7__guide {
+  fill: rgba(200, 195, 185, 0.35);
+  stroke: rgba(230, 225, 215, 0.5);
+  stroke-width: 0.5;
+}
+
+.k7__shield {
+  fill: rgba(150, 155, 165, 0.35);
+  stroke: rgba(210, 215, 225, 0.45);
+  stroke-width: 0.6;
+}
+
+.k7__spring {
+  fill: none;
+  stroke: rgba(200, 205, 215, 0.7);
+  stroke-width: 0.9;
+}
+
+.k7__felt {
+  fill: rgba(203, 191, 154, 0.8);
+}
+
+.k7__smoke {
+  fill: rgba(58, 52, 48, 0.28);
+}
+
+#k7-ribs line {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 0.5;
 }
 
 .k7__bezel {
@@ -603,18 +718,11 @@ body[data-mode="k7-etiquette"].cassette-controls-hidden .scrim {
 }
 
 /* Each tape pack is bigger than the window it shows through, as on a real cassette: only its
-   inner part (and the hub) is visible. Sized by --progress, like cassette mode's .cassette__coil:
-   the left/"supply" pack starts full and empties toward its hub, the right one fills. */
+   inner part (and the hub) is visible there. Sized from playback by src/k7.js (their r
+   attribute): the left/"supply" pack starts full and empties toward its hub, the right one
+   fills. */
 .k7__pack {
   fill: url(#k7-tape);
-}
-
-.k7__pack--a {
-  r: calc(48px - var(--progress) * 34px);
-}
-
-.k7__pack--b {
-  r: calc(14px + var(--progress) * 34px);
 }
 
 .k7__scale {
@@ -623,11 +731,18 @@ body[data-mode="k7-etiquette"].cassette-controls-hidden .scrim {
   stroke-width: 0.6;
 }
 
-/* The same two slightly different rates as cassette mode's reels, and the same keyframes. */
-.k7__hub {
+/* The same two slightly different rates as cassette mode's reels and the same keyframes, run
+   backwards: playing, both reels of a real cassette turn anticlockwise — the tape leaves the left
+   pack by its outer edge, heading down to the corner roller, and winds onto the right pack by
+   its outer edge coming up from the other one. */
+.k7__hub,
+.k7__rewind {
   transform-box: fill-box;
   transform-origin: 50% 50%;
-  animation: cassette-reel-spin 3.2s linear infinite;
+}
+
+.k7__hub {
+  animation: cassette-reel-spin 3.2s linear infinite reverse;
   animation-play-state: paused;
 }
 
@@ -637,6 +752,35 @@ body[data-mode="k7-etiquette"].cassette-controls-hidden .scrim {
 
 body[data-state="playing"] .k7__hub {
   animation-play-state: running;
+}
+
+/* Rewinding on a track change (see src/k7.js): playback's turning holds where it is while the
+   inner group spins the other way, fast, for a whole number of turns — so it ends exactly where
+   it started and playback picks up again without a jump. */
+.k7.is-rewinding .k7__hub {
+  animation-play-state: paused;
+}
+
+.k7.is-rewinding .k7__rewind {
+  animation: cassette-reel-spin 0.3s linear var(--k7-rewind-turns, 2);
+}
+
+.k7__flange-rim {
+  fill: rgba(230, 228, 222, 0.07);
+  stroke: rgba(235, 232, 225, 0.32);
+  stroke-width: 1.4;
+}
+
+.k7__flange-ring {
+  fill: none;
+  stroke: rgba(235, 232, 225, 0.14);
+  stroke-width: 0.8;
+}
+
+.k7__flange-spokes {
+  fill: none;
+  stroke: rgba(235, 232, 225, 0.22);
+  stroke-width: 1.6;
 }
 
 .k7__teeth {
@@ -2349,6 +2493,7 @@ body[data-platform="tv"][data-mode="cassette"] .artist {
   .cassette__tape,
   .cassette__gloss,
   .k7__hub,
+  .k7__rewind,
   .title .marquee__text,
   .message__pulse,
   .sheet__wave span,

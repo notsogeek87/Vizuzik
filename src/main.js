@@ -1,5 +1,6 @@
 import { registerPlugin } from "@capacitor/core";
 import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
+import { K7Tape } from "./k7.js";
 import { extractPalette } from "./palette.js";
 import { PlaybackProgress } from "./progress.js";
 
@@ -117,6 +118,7 @@ const storedMode = localStorage.getItem(DISPLAY_MODE_KEY);
 let displayMode = VISUAL_STYLES.includes(storedMode) ? storedMode : "cover";
 
 const visualizer = new Visualizer(els.fx);
+const k7Tape = new K7Tape(document.getElementById("k7"));
 visualizer.setFocusElement(els.disc);
 
 const progress = new PlaybackProgress(
@@ -190,6 +192,8 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   // --beat/--level/--bass.
   const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, progress.positionNow() / progress.duration)) : 0;
   writeVar("--progress", "progress", playedRatio);
+  // The K7 modes' tape packs follow the same number, unquantised, and smooth over its jumps.
+  k7Tape.update(playedRatio);
   syncPaletteVars();
   progress.render();
 };
@@ -1968,6 +1972,7 @@ function setNowPlaying(state) {
     setScrollingText(els.title, title);
     setScrollingText(els.artist, artist);
     setK7Text(title, artist);
+    k7Tape.trackChanged();
     playTrackChangeAnimation();
     // A new song has to visibly land. This and the handful of pulses below are the only
     // impulses the screen gets when the audio isn't being captured — all of them tied to

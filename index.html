@@ -242,8 +242,9 @@
     <!-- K7 modes ("K7 Étiquette", "K7 Classique"): a second, closer-to-life take on the cassette,
          offered alongside the original rather than replacing it. Laid out after a real compact
          cassette rather than a Walkman window: a large label covering most of the face, the two
-         reel hubs seen through an oval window cut into the middle of it, the wound tape packs
-         showing through that window and sized by --progress (see .k7__pack), and the trapezoid
+         reel hubs and their clear flanges seen through an oval window cut into the middle of it,
+         the wound tape packs showing through that window and sized by playback (see src/k7.js,
+         which also rewinds them on a track change), and the trapezoid
          head-access section along the bottom edge. One shared illustration for both modes — only
          the label differs (see .k7__face--etiquette/--classique in style.css): the album art
          printed across the whole label under a frosted strip, title/artist in marker pen, or a
@@ -299,6 +300,26 @@
             <rect x="0" y="0" width="320" height="200" fill="#fff" />
             <rect x="70" y="62" width="180" height="44" rx="22" fill="#000" />
           </mask>
+          <!-- K7 Classique only: the album-coloured glow behind the smoked shell, and the fine
+               horizontal ribs moulded into its bottom section. -->
+          <radialGradient id="k7-halo" r="0.5">
+            <stop class="k7__halo-stop k7__halo-stop--1" offset="0.5" />
+            <stop class="k7__halo-stop k7__halo-stop--2" offset="0.78" />
+            <stop class="k7__halo-stop k7__halo-stop--3" offset="1" />
+          </radialGradient>
+          <pattern id="k7-ribs" width="8" height="2" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0.5" x2="8" y2="0.5" />
+          </pattern>
+          <!-- A reel's clear plastic flange: a large disc with six spokes around the hub, seen
+               through the window, turning with it. -->
+          <g id="k7-flange">
+            <circle class="k7__flange-rim" r="30" />
+            <circle class="k7__flange-ring" r="25" />
+            <path
+              class="k7__flange-spokes"
+              d="M14 0 H29 M7 12.12 L14.5 25.11 M-7 12.12 L-14.5 25.11 M-14 0 H-29 M-7 -12.12 L-14.5 -25.11 M7 -12.12 L14.5 -25.11"
+            />
+          </g>
           <g id="k7-teeth">
             <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" />
             <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" transform="rotate(60)" />
@@ -309,29 +330,70 @@
           </g>
         </defs>
 
+        <ellipse class="k7__halo" cx="160" cy="100" rx="210" ry="150" fill="url(#k7-halo)" />
         <rect class="k7__shell" x="8" y="8" width="304" height="184" rx="9" />
         <rect x="8" y="8" width="304" height="184" rx="9" fill="url(#k7-light)" />
         <rect class="k7__bezel" x="12" y="12" width="296" height="176" rx="7" />
+
+        <!-- K7 Classique only (see .k7__internals): the mechanism seen through the smoked,
+             translucent shell of a blank tape — both tape packs (big enough, when full, to peek
+             out from under the label), the tape itself leaving each pack by its outer edge, round
+             the corner guide rollers and along the bottom edge past the pressure pad, then a smoke
+             tint and moulded ribs over all of it. Pack sizes and the tape's path follow playback
+             (see src/k7.js). -->
+        <g class="k7__internals">
+          <circle class="k7__pack k7__pack--a" cx="97" cy="84" r="70" />
+          <circle class="k7__pack k7__pack--b" cx="223" cy="84" r="14" />
+          <path class="k7__tape" d="M27 84 L29.6 174 Q29.6 185.4 40 185.4 L280 185.4 Q290.4 185.4 290.4 174 L237 84" />
+          <g class="k7__roller">
+            <circle class="k7__roller-rim" cx="40" cy="175" r="10" />
+            <circle class="k7__roller-core" cx="40" cy="175" r="4.2" />
+            <circle class="k7__roller-pin" cx="40" cy="175" r="1.4" />
+          </g>
+          <g class="k7__roller">
+            <circle class="k7__roller-rim" cx="280" cy="175" r="10" />
+            <circle class="k7__roller-core" cx="280" cy="175" r="4.2" />
+            <circle class="k7__roller-pin" cx="280" cy="175" r="1.4" />
+          </g>
+          <circle class="k7__guide" cx="66" cy="183" r="2.6" />
+          <circle class="k7__guide" cx="254" cy="183" r="2.6" />
+          <rect class="k7__shield" x="146" y="168" width="28" height="9" rx="1" />
+          <path class="k7__spring" d="M140 180 Q160 176 180 180" />
+          <rect class="k7__felt" x="153" y="181" width="14" height="4.5" rx="0.8" />
+          <rect class="k7__smoke" x="8" y="8" width="304" height="184" rx="9" />
+          <rect class="k7__ribs" x="12" y="150" width="296" height="40" fill="url(#k7-ribs)" />
+        </g>
 
         <!-- What shows through the window: the dark cavity, both tape packs (bigger than the
              window, so only their inner part shows, as on a real cassette) and the clearer
              centre pane with its tape-length scale. -->
         <g clip-path="url(#k7-window-clip)">
           <rect x="70" y="62" width="180" height="44" fill="#0f0c0b" />
-          <circle class="k7__pack k7__pack--a" cx="97" cy="84" />
-          <circle class="k7__pack k7__pack--b" cx="223" cy="84" />
+          <circle class="k7__pack k7__pack--a" cx="97" cy="84" r="70" />
+          <circle class="k7__pack k7__pack--b" cx="223" cy="84" r="14" />
           <rect x="130" y="66" width="60" height="36" fill="#000" fill-opacity="0.25" />
           <path class="k7__scale" d="M134 99 H186 M136 99 v-4 M143 99 v-2.5 M150 99 v-4 M157 99 v-2.5 M164 99 v-4 M171 99 v-2.5 M178 99 v-4 M185 99 v-2.5" />
         </g>
-        <g class="k7__hub k7__hub--a">
-          <circle cx="97" cy="84" r="13.5" fill="url(#k7-hub)" />
-          <circle cx="97" cy="84" r="8.5" fill="#1b1614" />
-          <use href="#k7-teeth" class="k7__teeth" transform="translate(97 84)" />
-        </g>
-        <g class="k7__hub k7__hub--b">
-          <circle cx="223" cy="84" r="13.5" fill="url(#k7-hub)" />
-          <circle cx="223" cy="84" r="8.5" fill="#1b1614" />
-          <use href="#k7-teeth" class="k7__teeth" transform="translate(223 84) rotate(25)" />
+        <!-- Each reel turns twice over: .k7__hub for playback, .k7__rewind for the quick rewind
+             on a track change (see src/k7.js). Clipped from outside the turning groups, so the
+             window's outline stays put while the flange turns inside it. -->
+        <g clip-path="url(#k7-window-clip)">
+          <g class="k7__hub k7__hub--a">
+            <g class="k7__rewind">
+              <use href="#k7-flange" transform="translate(97 84)" />
+              <circle cx="97" cy="84" r="13.5" fill="url(#k7-hub)" />
+              <circle cx="97" cy="84" r="8.5" fill="#1b1614" />
+              <use href="#k7-teeth" class="k7__teeth" transform="translate(97 84)" />
+            </g>
+          </g>
+          <g class="k7__hub k7__hub--b">
+            <g class="k7__rewind">
+              <use href="#k7-flange" transform="translate(223 84) rotate(20)" />
+              <circle cx="223" cy="84" r="13.5" fill="url(#k7-hub)" />
+              <circle cx="223" cy="84" r="8.5" fill="#1b1614" />
+              <use href="#k7-teeth" class="k7__teeth" transform="translate(223 84) rotate(25)" />
+            </g>
+          </g>
         </g>
         <rect x="70" y="62" width="180" height="44" rx="22" fill="url(#k7-glass)" />
 
