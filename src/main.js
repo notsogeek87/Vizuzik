@@ -15,6 +15,12 @@ const els = {
   disc: document.getElementById("disc"),
   cover: document.getElementById("cover"),
   cassetteArt: document.getElementById("cassette-art"),
+  k7ArtLabel: document.getElementById("k7-art-label"),
+  k7ArtThumb: document.getElementById("k7-art-thumb"),
+  k7TitleEtiquette: document.getElementById("k7-title-etiquette"),
+  k7ArtistEtiquette: document.getElementById("k7-artist-etiquette"),
+  k7TitleClassique: document.getElementById("k7-title-classique"),
+  k7ArtistClassique: document.getElementById("k7-artist-classique"),
   captureStatus: document.getElementById("capture-status"),
   overlayStatus: document.getElementById("overlay-status"),
   overlaySheet: document.getElementById("overlay-sheet"),
@@ -91,6 +97,8 @@ const MODE_LABELS = {
   nebula: "Nébuleuse",
   cocoon: "Cocon",
   cassette: "Cassette",
+  "k7-etiquette": "K7 Étiquette",
+  "k7-classique": "K7 Classique",
   baladeur: "Baladeur",
 };
 
@@ -1473,7 +1481,15 @@ function applyDisplayMode(announce) {
   syncOrientationLock();
   // Leaving cassette mode with its buttons tapped away shouldn't carry that into the next
   // mode, or the next time cassette mode itself is picked again.
-  if (displayMode !== "cassette") document.body.classList.remove("cassette-controls-hidden");
+  if (!isCassetteMode(displayMode)) document.body.classList.remove("cassette-controls-hidden");
+  // Written while the mode was hidden, the label text couldn't be measured (see fitSvgText()).
+  if (displayMode.startsWith("k7-")) refitK7Text();
+}
+
+// Cassette mode and the two K7 modes (see #k7 in index.html) share the same stage: a full-screen
+// illustration with no disc to tap, where a tap tucks the controls away instead.
+function isCassetteMode(mode) {
+  return mode === "cassette" || mode.startsWith("k7-");
 }
 
 // No display mode forces the phone into a particular orientation — cassette mode used to lock
@@ -1772,7 +1788,7 @@ function endGesture(event, cancelled) {
   // look at from across the room, and the toast names what you landed on.
   if (isTap && g.onStage) {
     cycleDisplayMode();
-  } else if (isTap && displayMode === "cassette") {
+  } else if (isTap && isCassetteMode(displayMode)) {
     // Cassette mode has no stage to tap (the artwork fills the screen): tapping it instead
     // toggles the transport buttons, scrub bar and title/artist card out of the way, for a
     // fully unobstructed view of the cassette (see .cassette-controls-hidden in style.css).
@@ -1837,6 +1853,8 @@ function setArtwork(art) {
   // Plain attribute, not backgroundImage: it's an <image> inside the cassette's inline SVG,
   // set as though it had been printed on the label — see .cassette__art-image in style.css.
   els.cassetteArt.setAttribute("href", art || "");
+  els.k7ArtLabel.setAttribute("href", art || "");
+  els.k7ArtThumb.setAttribute("href", art || "");
 
   extractPalette(art).then((palette) => {
     visualizer.setPalette(palette);
@@ -1877,6 +1895,49 @@ function setScrollingText(span, text) {
   });
 }
 
+/* ------------------------------------------------------------------ K7 label text */
+
+// The K7 modes write the title/artist on the cassette's paper strip, in SVG text. SVG text
+// neither wraps nor ellipsises on its own, so each line is fitted by hand to the strip's width:
+// first shrunk a little, then cut with an ellipsis if it still doesn't fit.
+const K7_TEXT_MAX_WIDTH = 238;
+const K7_TEXT_MIN_SCALE = 0.75;
+let k7Text = { title: "", artist: "" };
+
+function fitSvgText(el, text, maxWidth) {
+  el.style.fontSize = "";
+  el.textContent = text;
+  // Nothing to measure while the illustration isn't rendered (another mode is on screen, or
+  // the page is hidden): refitK7Text() runs again once a K7 mode shows.
+  const width = el.getComputedTextLength();
+  if (!width || width <= maxWidth) return;
+  const baseSize = parseFloat(getComputedStyle(el).fontSize);
+  const scale = Math.max(K7_TEXT_MIN_SCALE, maxWidth / width);
+  el.style.fontSize = `${baseSize * scale}px`;
+  if (el.getComputedTextLength() <= maxWidth) return;
+  let cut = text.length;
+  while (cut > 1) {
+    cut--;
+    el.textContent = `${text.slice(0, cut).trimEnd()}…`;
+    if (el.getComputedTextLength() <= maxWidth) return;
+  }
+}
+
+function setK7Text(title, artist) {
+  k7Text = { title, artist };
+  refitK7Text();
+}
+
+function refitK7Text() {
+  for (const [titleEl, artistEl] of [
+    [els.k7TitleEtiquette, els.k7ArtistEtiquette],
+    [els.k7TitleClassique, els.k7ArtistClassique],
+  ]) {
+    fitSvgText(titleEl, k7Text.title, K7_TEXT_MAX_WIDTH);
+    fitSvgText(artistEl, k7Text.artist, K7_TEXT_MAX_WIDTH);
+  }
+}
+
 function setNowPlaying(state) {
   if (!state || !state.active) {
     showScreen("empty");
@@ -1894,6 +1955,7 @@ function setNowPlaying(state) {
     currentTrackKey = trackKey;
     setScrollingText(els.title, title);
     setScrollingText(els.artist, artist);
+    setK7Text(title, artist);
     playTrackChangeAnimation();
     // A new song has to visibly land. This and the handful of pulses below are the only
     // impulses the screen gets when the audio isn't being captured — all of them tied to

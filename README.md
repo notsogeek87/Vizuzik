@@ -11,8 +11,9 @@ et contrôler la lecture.
 
 ## Le visuel
 
-Sept modes, en boucle via le bouton en haut à droite ou en touchant la pochette : **Pochette**,
-**Spectre**, **Corona**, **Aurore**, **Nébuleuse**, **Cocon**, **Cassette**. Les couleurs de
+Dix modes, en boucle via le bouton en haut à droite ou en touchant la pochette : **Pochette**,
+**Spectre**, **Corona**, **Aurore**, **Nébuleuse**, **Cocon**, **Cassette**, **K7 Étiquette**,
+**K7 Classique**, **Baladeur**. Les couleurs de
 toute l'interface sont extraites de la pochette du morceau en cours, et la lueur pulse sur les
 basses.
 

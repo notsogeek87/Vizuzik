@@ -239,6 +239,188 @@
       </svg>
     </div>
 
+    <!-- K7 modes ("K7 Étiquette", "K7 Classique"): a second, closer-to-life take on the cassette,
+         offered alongside the original rather than replacing it. Laid out after a real compact
+         cassette rather than a Walkman window: a large label covering most of the face, the two
+         reel hubs seen through an oval window cut into the middle of it, the wound tape packs
+         showing through that window and sized by --progress (see .k7__pack), and the trapezoid
+         head-access section along the bottom edge. One shared illustration for both modes — only
+         the label differs (see .k7__face--etiquette/--classique in style.css): the album art
+         printed across the whole label under a paper strip, or a plain palette-tinted label with
+         ruled paper band, stripes and a small art thumbnail. Both carry the track's title/artist
+         written on the paper, set in main.js (see setK7Text()), so the floating title card is
+         hidden in these modes. Same 320x200 viewBox, same portrait rotation trick and the same
+         tap-to-hide-controls as cassette mode (see .k7__art). -->
+    <div id="k7" class="k7" aria-hidden="true">
+      <svg class="k7__art" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="k7-shell" x1="0" y1="0" x2="0.3" y2="1">
+            <stop offset="0" stop-color="#3a3431" />
+            <stop offset="1" stop-color="#151212" />
+          </linearGradient>
+          <radialGradient id="k7-light" cx="0.25" cy="0.1" r="0.9">
+            <stop offset="0" stop-color="#fff" stop-opacity="0.13" />
+            <stop offset="1" stop-color="#fff" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient id="k7-label-shade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fff" stop-opacity="0.08" />
+            <stop offset="1" stop-color="#000" stop-opacity="0.18" />
+          </linearGradient>
+          <radialGradient id="k7-tape" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0.3" stop-color="#6b4429" />
+            <stop offset="0.97" stop-color="#3d2616" />
+            <stop offset="1" stop-color="#2a1a10" />
+          </radialGradient>
+          <linearGradient id="k7-glass" x1="0" y1="0" x2="0.6" y2="1">
+            <stop offset="0" stop-color="#fff" stop-opacity="0.16" />
+            <stop offset="0.45" stop-color="#fff" stop-opacity="0.02" />
+            <stop offset="1" stop-color="#fff" stop-opacity="0.07" />
+          </linearGradient>
+          <radialGradient id="k7-hub" cx="0.35" cy="0.3" r="0.8">
+            <stop offset="0" stop-color="#fbf9f4" />
+            <stop offset="0.7" stop-color="#dcd7cc" />
+            <stop offset="1" stop-color="#a39d91" />
+          </radialGradient>
+          <radialGradient id="k7-metal" cx="0.35" cy="0.3" r="0.8">
+            <stop offset="0" stop-color="#9b9690" />
+            <stop offset="1" stop-color="#2c2826" />
+          </radialGradient>
+          <clipPath id="k7-window-clip">
+            <rect x="70" y="62" width="180" height="44" rx="22" />
+          </clipPath>
+          <clipPath id="k7-label-clip">
+            <rect x="26" y="22" width="268" height="120" rx="5" />
+          </clipPath>
+          <!-- The label is one sheet with the window punched out of it, so whatever sits under
+               it (tape packs, hubs) only shows through that hole. -->
+          <mask id="k7-label-hole">
+            <rect x="0" y="0" width="320" height="200" fill="#fff" />
+            <rect x="70" y="62" width="180" height="44" rx="22" fill="#000" />
+          </mask>
+          <g id="k7-teeth">
+            <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" />
+            <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" transform="rotate(60)" />
+            <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" transform="rotate(120)" />
+            <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" transform="rotate(180)" />
+            <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" transform="rotate(240)" />
+            <rect x="-1.2" y="-8.6" width="2.4" height="3.2" rx="0.6" transform="rotate(300)" />
+          </g>
+        </defs>
+
+        <rect class="k7__shell" x="8" y="8" width="304" height="184" rx="9" />
+        <rect x="8" y="8" width="304" height="184" rx="9" fill="url(#k7-light)" />
+        <rect class="k7__bezel" x="12" y="12" width="296" height="176" rx="7" />
+
+        <!-- What shows through the window: the dark cavity, both tape packs (bigger than the
+             window, so only their inner part shows, as on a real cassette) and the clearer
+             centre pane with its tape-length scale. -->
+        <g clip-path="url(#k7-window-clip)">
+          <rect x="70" y="62" width="180" height="44" fill="#0f0c0b" />
+          <circle class="k7__pack k7__pack--a" cx="97" cy="84" />
+          <circle class="k7__pack k7__pack--b" cx="223" cy="84" />
+          <rect x="130" y="66" width="60" height="36" fill="#000" fill-opacity="0.25" />
+          <path class="k7__scale" d="M134 99 H186 M136 99 v-4 M143 99 v-2.5 M150 99 v-4 M157 99 v-2.5 M164 99 v-4 M171 99 v-2.5 M178 99 v-4 M185 99 v-2.5" />
+        </g>
+        <g class="k7__hub k7__hub--a">
+          <circle cx="97" cy="84" r="13.5" fill="url(#k7-hub)" />
+          <circle cx="97" cy="84" r="8.5" fill="#1b1614" />
+          <use href="#k7-teeth" class="k7__teeth" transform="translate(97 84)" />
+        </g>
+        <g class="k7__hub k7__hub--b">
+          <circle cx="223" cy="84" r="13.5" fill="url(#k7-hub)" />
+          <circle cx="223" cy="84" r="8.5" fill="#1b1614" />
+          <use href="#k7-teeth" class="k7__teeth" transform="translate(223 84) rotate(25)" />
+        </g>
+        <rect x="70" y="62" width="180" height="44" rx="22" fill="url(#k7-glass)" />
+
+        <!-- The label sheet, window punched through. -->
+        <g mask="url(#k7-label-hole)">
+          <g clip-path="url(#k7-label-clip)">
+            <!-- K7 Étiquette: the album art printed across the whole label. -->
+            <g class="k7__face k7__face--etiquette">
+              <rect class="k7__label-blank" x="26" y="22" width="268" height="120" />
+              <image
+                id="k7-art-label"
+                class="k7__art-image"
+                x="26"
+                y="22"
+                width="268"
+                height="120"
+                preserveAspectRatio="xMidYMid slice"
+              />
+              <rect class="k7__paper" x="26" y="22" width="268" height="27" />
+            </g>
+            <!-- K7 Classique: a plain label tinted from the palette, ruled paper band, stripes. -->
+            <g class="k7__face k7__face--classique">
+              <rect class="k7__label-tint" x="26" y="22" width="268" height="120" />
+              <rect class="k7__paper" x="26" y="22" width="268" height="31" />
+              <path class="k7__rule" d="M44 39.5 H286 M44 50.5 H286" />
+              <rect class="k7__stripe k7__stripe--1" x="26" y="124" width="268" height="3" />
+              <rect class="k7__stripe k7__stripe--2" x="26" y="131" width="268" height="3" />
+            </g>
+          </g>
+          <rect x="26" y="22" width="268" height="120" rx="5" fill="url(#k7-label-shade)" />
+        </g>
+        <rect class="k7__label-frame" x="26" y="22" width="268" height="120" rx="5" />
+        <rect class="k7__window-rim" x="70" y="62" width="180" height="44" rx="22" />
+        <rect class="k7__window-rim-light" x="70.8" y="62.8" width="178.4" height="42.4" rx="21.2" />
+
+        <!-- Written on the paper strip, in both modes; filled and fitted in main.js. -->
+        <g class="k7__writing k7__writing--etiquette">
+          <text class="k7__side" x="31" y="40">A</text>
+          <text id="k7-title-etiquette" class="k7__hand k7__hand--title" x="44" y="35"></text>
+          <text id="k7-artist-etiquette" class="k7__hand k7__hand--artist" x="44" y="45.5"></text>
+        </g>
+        <g class="k7__writing k7__writing--classique">
+          <text class="k7__side" x="31" y="45">A</text>
+          <text id="k7-title-classique" class="k7__hand k7__hand--title" x="46" y="38"></text>
+          <text id="k7-artist-classique" class="k7__hand k7__hand--artist" x="46" y="49"></text>
+          <image
+            id="k7-art-thumb"
+            x="34"
+            y="67"
+            width="30"
+            height="30"
+            preserveAspectRatio="xMidYMid slice"
+          />
+          <rect class="k7__thumb-frame" x="34" y="67" width="30" height="30" />
+          <text class="k7__brand" x="49" y="108">VIZUZIK</text>
+          <circle class="k7__dot" cx="272" cy="84" r="7" />
+        </g>
+
+        <!-- Bottom head-access section: ledge, trapezoid, the two capstan holes and two guide
+             holes, centre screw. -->
+        <path class="k7__ledge" d="M8 148 H312" />
+        <path class="k7__trapezoid" d="M60 150 H260 L250 192 H70 Z" />
+        <path class="k7__trapezoid-light" d="M61 151 H259" />
+        <circle class="k7__hole" cx="98" cy="178" r="5" />
+        <circle class="k7__hole" cx="222" cy="178" r="5" />
+        <rect class="k7__hole" x="122" y="173" width="7" height="7" rx="1.2" />
+        <rect class="k7__hole" x="191" y="173" width="7" height="7" rx="1.2" />
+
+        <g class="k7__screw" transform="rotate(-18 16 16)">
+          <circle cx="16" cy="16" r="4" />
+          <line x1="13.4" y1="16" x2="18.6" y2="16" />
+        </g>
+        <g class="k7__screw" transform="rotate(35 304 16)">
+          <circle cx="304" cy="16" r="4" />
+          <line x1="301.4" y1="16" x2="306.6" y2="16" />
+        </g>
+        <g class="k7__screw" transform="rotate(70 16 184)">
+          <circle cx="16" cy="184" r="4" />
+          <line x1="13.4" y1="184" x2="18.6" y2="184" />
+        </g>
+        <g class="k7__screw" transform="rotate(-40 304 184)">
+          <circle cx="304" cy="184" r="4" />
+          <line x1="301.4" y1="184" x2="306.6" y2="184" />
+        </g>
+        <g class="k7__screw" transform="rotate(12 160 161)">
+          <circle cx="160" cy="161" r="4" />
+          <line x1="157.4" y1="161" x2="162.6" y2="161" />
+        </g>
+      </svg>
+    </div>
+
     <!-- Baladeur mode: a fixed illustration of a portable player — a rounded-square metallic
          case with a circular "screen" inset. Unlike cassette (a full illustration with the real
          controls floated on top as their own frosted card) this one is just the case + screen
@@ -290,6 +472,17 @@
           <ellipse cx="12" cy="4.6" rx="2.1" ry="3.4" transform="rotate(300 12 12)" />
         </svg>
         <svg class="icon icon-cassette" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zm5.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM9 16h6v1.4H9z" /></svg>
+        <svg class="icon icon-k7-etiquette" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="M5 7h14v3.2H5z" />
+          <rect x="7" y="11.4" width="10" height="3.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.3" />
+        </svg>
+        <svg class="icon icon-k7-classique" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="M5.5 8h13v1.2h-13z" />
+          <rect x="7" y="11.4" width="10" height="3.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.3" />
+          <path d="M8 19.4l1-2.4h6l1 2.4" fill="none" stroke="currentColor" stroke-width="1.3" />
+        </svg>
         <svg class="icon icon-baladeur" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" fill="none" stroke="currentColor" stroke-width="1.6" />
           <circle cx="12" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4" />

@@ -176,10 +176,11 @@ body:not([data-mode="cover"]) .fx {
   opacity: 1;
 }
 
-/* Cassette and baladeur mode replace the canvas scene and the disc with one fixed
-   full-screen illustration — nothing here reacts to the beat, on purpose (see .cassette and
-   .baladeur below). */
+/* Cassette, K7 and baladeur mode replace the canvas scene and the disc with one fixed
+   full-screen illustration — nothing here reacts to the beat, on purpose (see .cassette, .k7
+   and .baladeur below). */
 body[data-mode="cassette"] .fx,
+body[data-mode^="k7-"] .fx,
 body[data-mode="baladeur"] .fx {
   opacity: 0;
 }
@@ -188,6 +189,7 @@ body[data-mode="baladeur"] .fx {
    its footprint): the illustration already fills the screen behind everything, so a
    reserved square here would only ever push the title/controls off-centre under it. */
 body[data-mode="cassette"] .stage,
+body[data-mode^="k7-"] .stage,
 body[data-mode="baladeur"] .stage {
   display: none;
 }
@@ -517,6 +519,246 @@ body[data-state="playing"] .cassette__tape {
   stop-color: rgb(var(--c2));
 }
 
+/* ============================================================ K7 modes */
+
+/* "K7 Étiquette" and "K7 Classique": one shared illustration of a real compact cassette (see
+   index.html's #k7), offered alongside cassette mode rather than replacing it. Same stage as
+   cassette — a fixed, full-screen layer the canvas and disc make way for — and the same sizing:
+   capped at --cassette-max-box-aspect, centred, and rotated a quarter turn when the phone is
+   held upright. Only the label changes between the two modes (see .k7__face). */
+.k7 {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s var(--ease-out);
+  background: var(--void);
+}
+
+body[data-mode^="k7-"] .k7 {
+  opacity: 1;
+}
+
+.k7__art {
+  display: block;
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
+  height: 100%;
+  margin-inline: auto;
+}
+
+@media (orientation: portrait) {
+  .k7__art {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(100vh, calc(var(--cassette-max-box-aspect) * 100vw));
+    height: 100vw;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+}
+
+/* The title/artist are written on the cassette's own paper strip (see setK7Text() in main.js),
+   so the floating card would only repeat them. Visually hidden rather than display:none, so it
+   stays readable to a screen reader (the illustration itself is aria-hidden). */
+body[data-mode^="k7-"] .meta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.k7__shell {
+  fill: url(#k7-shell);
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1.5;
+}
+
+.k7__bezel {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.06);
+}
+
+/* Each tape pack is bigger than the window it shows through, as on a real cassette: only its
+   inner part (and the hub) is visible. Sized by --progress, like cassette mode's .cassette__coil:
+   the left/"supply" pack starts full and empties toward its hub, the right one fills. */
+.k7__pack {
+  fill: url(#k7-tape);
+}
+
+.k7__pack--a {
+  r: calc(48px - var(--progress) * 34px);
+}
+
+.k7__pack--b {
+  r: calc(14px + var(--progress) * 34px);
+}
+
+.k7__scale {
+  fill: none;
+  stroke: rgba(232, 226, 214, 0.55);
+  stroke-width: 0.6;
+}
+
+/* The same two slightly different rates as cassette mode's reels, and the same keyframes. */
+.k7__hub {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: cassette-reel-spin 3.2s linear infinite;
+  animation-play-state: paused;
+}
+
+.k7__hub--b {
+  animation-duration: 3.8s;
+}
+
+body[data-state="playing"] .k7__hub {
+  animation-play-state: running;
+}
+
+.k7__teeth {
+  fill: #dcd7cc;
+}
+
+/* Only one label shows at a time — whichever K7 mode is on screen. */
+.k7__face,
+.k7__writing {
+  display: none;
+}
+
+body[data-mode="k7-etiquette"] .k7__face--etiquette,
+body[data-mode="k7-etiquette"] .k7__writing--etiquette,
+body[data-mode="k7-classique"] .k7__face--classique,
+body[data-mode="k7-classique"] .k7__writing--classique {
+  display: inline;
+}
+
+/* Shows until the first track's art loads, and at the edges of a "slice"-cropped one. */
+.k7__label-blank {
+  fill: #4a5560;
+}
+
+.k7__art-image {
+  filter: saturate(0.9);
+}
+
+.k7__paper {
+  fill: #ece6d8;
+}
+
+/* K7 Classique's label: a muted grey-blue, like the reference cassette's, pulled a little toward
+   the album's own main colour so each record gets its own tint. The plain fill first is what an
+   older WebView without color-mix() keeps. */
+.k7__label-tint {
+  fill: #4a5560;
+  fill: color-mix(in srgb, rgb(var(--c1)) 28%, #4a5560);
+}
+
+.k7__rule {
+  fill: none;
+  stroke: #9aa3b0;
+  stroke-width: 0.4;
+}
+
+.k7__stripe--1 {
+  fill: rgb(var(--c1));
+}
+
+.k7__stripe--2 {
+  fill: rgb(var(--c2));
+}
+
+.k7__dot {
+  fill: rgb(var(--c3));
+}
+
+.k7__label-frame {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.k7__window-rim {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2.2;
+}
+
+.k7__window-rim-light {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 0.6;
+}
+
+.k7__side {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  fill: #2b2a33;
+}
+
+/* Handwritten in pen on the paper strip. The generic "cursive" family is what Android actually
+   resolves (Dancing Script, bundled with the system); the named ones cover a desktop preview. */
+.k7__hand {
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  fill: #26324f;
+}
+
+.k7__hand--title {
+  font-size: 9.5px;
+}
+
+.k7__hand--artist {
+  font-size: 7.5px;
+  fill-opacity: 0.8;
+}
+
+.k7__thumb-frame {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 0.6;
+}
+
+.k7__brand {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 6.5px;
+  letter-spacing: 0.8px;
+  text-anchor: middle;
+  fill: #e9e6df;
+}
+
+.k7__ledge {
+  stroke: rgba(0, 0, 0, 0.45);
+}
+
+.k7__trapezoid {
+  fill: rgba(0, 0, 0, 0.12);
+  stroke: rgba(0, 0, 0, 0.5);
+}
+
+.k7__trapezoid-light {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.k7__hole {
+  fill: #050506;
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 0.6;
+}
+
+.k7__screw circle {
+  fill: url(#k7-metal);
+}
+
+.k7__screw line {
+  stroke: #141110;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
 /* ============================================================ top bar */
 
 .topbar {
@@ -635,6 +877,8 @@ body[data-mode="aurora"] .mode-toggle .icon-aurora,
 body[data-mode="nebula"] .mode-toggle .icon-nebula,
 body[data-mode="cocoon"] .mode-toggle .icon-cocoon,
 body[data-mode="cassette"] .mode-toggle .icon-cassette,
+body[data-mode="k7-etiquette"] .mode-toggle .icon-k7-etiquette,
+body[data-mode="k7-classique"] .mode-toggle .icon-k7-classique,
 body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   display: block;
   animation: icon-pop 0.45s var(--ease-spring);
@@ -1329,11 +1573,15 @@ body.is-changing .artist {
 /* Cassette mode has no stage to tap for the usual tap-to-cycle gesture, so a tap there instead
    tucks the transport buttons, the scrub bar, the title/artist card and the top bar (capture
    badge + mode toggle) away — a fully unobstructed view of the cassette, restored by the next
-   tap. Scoped to cassette mode so the class can't linger visibly into another mode. */
+   tap. Scoped to cassette mode so the class can't linger visibly into another mode. The K7 modes
+   share the same gesture and the same class (see isCassetteMode() in main.js). */
 body[data-mode="cassette"].cassette-controls-hidden .controls,
 body[data-mode="cassette"].cassette-controls-hidden .progress,
 body[data-mode="cassette"].cassette-controls-hidden .meta,
-body[data-mode="cassette"].cassette-controls-hidden .topbar {
+body[data-mode="cassette"].cassette-controls-hidden .topbar,
+body[data-mode^="k7-"].cassette-controls-hidden .controls,
+body[data-mode^="k7-"].cassette-controls-hidden .progress,
+body[data-mode^="k7-"].cassette-controls-hidden .topbar {
   opacity: 0;
   pointer-events: none;
 }
@@ -1443,7 +1691,8 @@ body[data-mode="cassette"] .meta {
   transition: opacity 0.3s ease;
 }
 
-body[data-mode="cassette"] .progress {
+body[data-mode="cassette"] .progress,
+body[data-mode^="k7-"] .progress {
   background: rgba(10, 10, 20, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.08);
   -webkit-backdrop-filter: blur(14px);
@@ -1461,7 +1710,8 @@ body[data-mode="cassette"] .progress {
    their one fixed size, and cassette mode shouldn't be the only one where they shrink depending
    on orientation. */
 @media (orientation: landscape) {
-  body[data-mode="cassette"] .player {
+  body[data-mode="cassette"] .player,
+  body[data-mode^="k7-"] .player {
     gap: 0.85rem;
     padding:
       calc(env(safe-area-inset-top, 0px) + 14px)
@@ -1482,7 +1732,8 @@ body[data-mode="cassette"] .progress {
     padding: 8px 20px;
   }
 
-  body[data-mode="cassette"] .progress {
+  body[data-mode="cassette"] .progress,
+  body[data-mode^="k7-"] .progress {
     width: min(70vw, 460px);
     padding: 12px 16px 8px;
   }
@@ -2039,6 +2290,7 @@ body[data-platform="tv"][data-mode="cassette"] .artist {
   .cassette__reel,
   .cassette__tape,
   .cassette__gloss,
+  .k7__hub,
   .title .marquee__text,
   .message__pulse,
   .sheet__wave span,
