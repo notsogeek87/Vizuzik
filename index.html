@@ -349,6 +349,9 @@
             <stop offset="0" stop-color="#b3b5bb" />
             <stop offset="1" stop-color="#cfd1d6" />
           </linearGradient>
+          <clipPath id="k7-lid-glass-clip">
+            <rect x="26" y="16" width="268" height="102" rx="8" />
+          </clipPath>
           <clipPath id="k7-lid-metal-clip">
             <path clip-rule="evenodd" d="M8 6 H312 A8 8 0 0 1 320 14 V186 A8 8 0 0 1 312 194 H8 A8 8 0 0 1 0 186 V14 A8 8 0 0 1 8 6 Z M34 16 H286 A8 8 0 0 1 294 24 V110 A8 8 0 0 1 286 118 H34 A8 8 0 0 1 26 110 V24 A8 8 0 0 1 34 16 Z" />
           </clipPath>
@@ -523,9 +526,15 @@
           <path class="k7__lid-plate" fill-rule="evenodd" d="M8 6 H312 A8 8 0 0 1 320 14 V186 A8 8 0 0 1 312 194 H8 A8 8 0 0 1 0 186 V14 A8 8 0 0 1 8 6 Z M34 16 H286 A8 8 0 0 1 294 24 V110 A8 8 0 0 1 286 118 H34 A8 8 0 0 1 26 110 V24 A8 8 0 0 1 34 16 Z" />
           <path class="k7__lid-brush" fill-rule="evenodd" fill="url(#k7-lid-brush)" d="M8 6 H312 A8 8 0 0 1 320 14 V186 A8 8 0 0 1 312 194 H8 A8 8 0 0 1 0 186 V14 A8 8 0 0 1 8 6 Z M34 16 H286 A8 8 0 0 1 294 24 V110 A8 8 0 0 1 286 118 H34 A8 8 0 0 1 26 110 V24 A8 8 0 0 1 34 16 Z" />
           <rect class="k7__lid-glass" x="26" y="16" width="268" height="102" rx="8" />
-          <path class="k7__lid-streak" d="M60 16 L95 16 L40 118 L26 118 L26 70 Z" />
-          <path class="k7__lid-streak" d="M200 16 L232 16 L178 118 L146 118 Z" />
-          <path class="k7__lid-streak k7__lid-streak--thin" d="M240 16 L248 16 L194 118 L186 118 Z" />
+          <!-- The glass's own glints: moved by the tilt too, less than the metal's light band, so
+               the glass reads as sitting on a different plane from the plate. -->
+          <g clip-path="url(#k7-lid-glass-clip)">
+            <g class="k7__lid-glints">
+              <path class="k7__lid-streak" d="M60 16 L95 16 L40 118 L5 118 Z" />
+              <path class="k7__lid-streak" d="M200 16 L232 16 L178 118 L146 118 Z" />
+              <path class="k7__lid-streak k7__lid-streak--thin" d="M240 16 L248 16 L194 118 L186 118 Z" />
+            </g>
+          </g>
           <rect class="k7__lid-rim" x="26" y="16" width="268" height="102" rx="8" />
           <rect class="k7__lid-rimlight" x="25" y="15" width="270" height="104" rx="9" />
           <g clip-path="url(#k7-lid-metal-clip)">

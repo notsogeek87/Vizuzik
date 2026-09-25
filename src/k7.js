@@ -124,6 +124,7 @@ export class K7Lid {
     this.needle = root.querySelector(".k7__lid-needle");
     this.time = root.querySelector("#k7-lid-time");
     this.sweep = root.querySelector(".k7__lid-sweep");
+    this.glints = root.querySelector(".k7__lid-glints");
     this.keys = {};
     for (const key of root.querySelectorAll(".k7__lid-key")) this.keys[key.dataset.key] = key;
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -189,6 +190,7 @@ export class K7Lid {
     } else {
       window.removeEventListener("deviceorientation", this.onOrientation);
       this.sweep.removeAttribute("transform");
+      this.glints.removeAttribute("transform");
     }
   }
 
@@ -202,7 +204,8 @@ export class K7Lid {
   }
 
   // Moves the light band across the lid's metal as the phone tilts, the way a real brushed
-  // aluminium plate catches the light.
+  // aluminium plate catches the light — and the window's glints with it, less far, so glass and
+  // plate read as two planes rather than one flat picture.
   _onOrientation(event) {
     if (event.gamma == null || event.beta == null) return;
     // The sensor reports the device's own axes; turn them into the screen's.
@@ -222,5 +225,6 @@ export class K7Lid {
     const sx = upright ? dy : dx;
     const sy = upright ? -dx : dy;
     this.sweep.setAttribute("transform", `translate(${(sx * 4).toFixed(1)} ${(sy * 1.5).toFixed(1)})`);
+    this.glints.setAttribute("transform", `translate(${(sx * 2.4).toFixed(1)} ${(sy * 0.9).toFixed(1)})`);
   }
 }
