@@ -243,11 +243,14 @@ body[data-mode="cassette"] .cassette {
    edge-to-edge exactly as before), short of a typical phone's. Past that cap the illustration
    simply stops growing and letterboxes into .cassette's own background instead of cropping
    further. Kept in sync with EdgeGlowView.drawCassette()'s own CASSETTE_MAX_BOX_ASPECT on the
-   lock-screen's native port of this same illustration. */
+   lock-screen's native port of this same illustration. The letterboxing is split evenly either
+   side (margin-inline: auto) rather than all on the right, the way drawCassette() centres the
+   box on the screen too. */
 .cassette__art {
   display: block;
   width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
   height: 100%;
+  margin-inline: auto;
 }
 
 /* The illustration is drawn cassette-side up, i.e. landscape. Held that way it needs no
