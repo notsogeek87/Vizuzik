@@ -807,6 +807,35 @@
           </select>
         </label>
 
+        <!-- When that screen shows up. A sleeping screen hands no touch to any app, so "on touch"
+             really means "when the user wakes the screen" (double tap to wake, a tap on the real
+             AOD, the side button) — see LockScreenVisualizerController.maybeShowOnWake(). Stored
+             in LockScreenVisualizerPreference, like the style above. -->
+        <label class="edge-settings__row">
+          <span>
+            Déclenchement
+            <small>Au réveil : l'écran reste éteint jusqu'à ce que tu le réveilles. En continu : l'écran est rallumé dès qu'il s'éteint.</small>
+          </span>
+          <select id="edge-lockscreen-trigger">
+            <option value="wake">Au réveil de l'écran</option>
+            <option value="continuous">Automatique, en continu</option>
+          </select>
+        </label>
+
+        <label id="edge-lockscreen-duration-row" class="edge-settings__row">
+          <span>
+            Durée d'affichage
+            <small>Ensuite, retour à l'écran de verrouillage normal, qui se met en veille tout seul.</small>
+          </span>
+          <select id="edge-lockscreen-duration">
+            <option value="5">5 s</option>
+            <option value="10">10 s</option>
+            <option value="15">15 s</option>
+            <option value="30">30 s</option>
+            <option value="60">60 s</option>
+          </select>
+        </label>
+
         <!-- Needs "usage access" to be honoured: nothing else can tell an overlay window which
              app is actually on screen. Left on with the permission missing, the overlay simply
              keeps showing everywhere rather than hiding on a guess — see ForegroundApp. -->

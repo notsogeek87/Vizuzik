@@ -35,6 +35,9 @@ const els = {
   edgeLockscreenHint: document.getElementById("edge-lockscreen-hint"),
   edgeLockscreenGrant: document.getElementById("edge-lockscreen-grant"),
   edgeLockscreenStyle: document.getElementById("edge-lockscreen-style"),
+  edgeLockscreenTrigger: document.getElementById("edge-lockscreen-trigger"),
+  edgeLockscreenDuration: document.getElementById("edge-lockscreen-duration"),
+  edgeLockscreenDurationRow: document.getElementById("edge-lockscreen-duration-row"),
   edgeStyle: document.getElementById("edge-style"),
   edgeBand: document.getElementById("edge-band"),
   edgeCocoonFallback: document.getElementById("edge-cocoon-fallback"),
@@ -845,6 +848,80 @@ function setLockScreenVisualizerStyle(style) {
   DeezerMedia.setLockScreenVisualizerStyle({ style }).catch(() => {});
 }
 
+// When the lock screen shows up — same storage pattern as the style just above, mirrored into
+// LockScreenVisualizerPreference natively. "wake": only when the user wakes the screen
+// themselves (a sleeping screen hands no touch to any app, so "the screen came back on" is the
+// closest thing), for LOCKSCREEN_VISUALIZER_DURATION seconds. "continuous": the original
+// behaviour, relit as soon as the screen goes off and kept up while the music plays.
+const LOCKSCREEN_VISUALIZER_TRIGGER_KEY = "vizuzik:lockScreenVisualizerTrigger";
+const LOCKSCREEN_VISUALIZER_TRIGGERS = ["wake", "continuous"];
+const LOCKSCREEN_VISUALIZER_DEFAULT_TRIGGER = "wake";
+const LOCKSCREEN_VISUALIZER_DURATION_KEY = "vizuzik:lockScreenVisualizerDuration";
+const LOCKSCREEN_VISUALIZER_DURATIONS = [5, 10, 15, 30, 60];
+const LOCKSCREEN_VISUALIZER_DEFAULT_DURATION = 10;
+
+function readLockScreenVisualizerTrigger() {
+  try {
+    const stored = localStorage.getItem(LOCKSCREEN_VISUALIZER_TRIGGER_KEY);
+    return LOCKSCREEN_VISUALIZER_TRIGGERS.includes(stored) ? stored : LOCKSCREEN_VISUALIZER_DEFAULT_TRIGGER;
+  } catch (err) {
+    return LOCKSCREEN_VISUALIZER_DEFAULT_TRIGGER;
+  }
+}
+
+function readLockScreenVisualizerDuration() {
+  try {
+    const stored = Number(localStorage.getItem(LOCKSCREEN_VISUALIZER_DURATION_KEY));
+    return LOCKSCREEN_VISUALIZER_DURATIONS.includes(stored) ? stored : LOCKSCREEN_VISUALIZER_DEFAULT_DURATION;
+  } catch (err) {
+    return LOCKSCREEN_VISUALIZER_DEFAULT_DURATION;
+  }
+}
+
+let lockScreenVisualizerTrigger = readLockScreenVisualizerTrigger();
+let lockScreenVisualizerDuration = readLockScreenVisualizerDuration();
+
+function setLockScreenVisualizerTrigger(trigger) {
+  if (!LOCKSCREEN_VISUALIZER_TRIGGERS.includes(trigger)) return;
+  lockScreenVisualizerTrigger = trigger;
+  try {
+    localStorage.setItem(LOCKSCREEN_VISUALIZER_TRIGGER_KEY, trigger);
+  } catch (err) {
+    /* see readLockScreenVisualizerStyle() */
+  }
+  DeezerMedia.setLockScreenVisualizerTrigger({ trigger }).catch(() => {});
+  syncLockScreenDurationRow();
+  updateLockScreenHint();
+}
+
+function setLockScreenVisualizerDuration(seconds) {
+  if (!LOCKSCREEN_VISUALIZER_DURATIONS.includes(seconds)) return;
+  lockScreenVisualizerDuration = seconds;
+  try {
+    localStorage.setItem(LOCKSCREEN_VISUALIZER_DURATION_KEY, String(seconds));
+  } catch (err) {
+    /* see readLockScreenVisualizerStyle() */
+  }
+  DeezerMedia.setLockScreenVisualizerDuration({ seconds }).catch(() => {});
+  updateLockScreenHint();
+}
+
+/** The duration only means something in "wake" mode — hidden in "continuous" mode. */
+function syncLockScreenDurationRow() {
+  if (els.edgeLockscreenDurationRow) {
+    els.edgeLockscreenDurationRow.hidden = lockScreenVisualizerTrigger !== "wake";
+  }
+}
+
+/** The part of the hint that describes when the lock screen appears, shared by every grant
+ *  state in updateLockScreenHint() below. */
+function lockScreenBehaviourText() {
+  if (lockScreenVisualizerTrigger === "wake") {
+    return `S'affiche ${lockScreenVisualizerDuration} s quand tu réveilles l'écran pendant la lecture (double tap, tap sur l'AOD ou bouton latéral), puis rend la main à l'écran de verrouillage.`;
+  }
+  return "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé.";
+}
+
 async function syncLockScreenPermissions() {
   try {
     const notificationState = await DeezerMedia.checkNotificationPermission();
@@ -871,8 +948,7 @@ function updateLockScreenHint() {
   if (!lockScreenNotificationGranted) {
     els.edgeLockscreenGrant.hidden = false;
     els.edgeLockscreenGrant.textContent = "Autoriser les notifications";
-    els.edgeLockscreenHint.textContent =
-      "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé. Nécessite d'autoriser les notifications.";
+    els.edgeLockscreenHint.textContent = `${lockScreenBehaviourText()} Nécessite d'autoriser les notifications.`;
   } else if (!lockScreenFullScreenGranted) {
     els.edgeLockscreenGrant.hidden = false;
     els.edgeLockscreenGrant.textContent = "Autoriser le plein écran";
@@ -880,8 +956,7 @@ function updateLockScreenHint() {
       "Encore une autorisation nécessaire (Android 14+) : sans elle, la notification s'affiche normalement mais ne ramène jamais l'écran toute seule.";
   } else {
     els.edgeLockscreenGrant.hidden = true;
-    els.edgeLockscreenHint.textContent =
-      "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé.";
+    els.edgeLockscreenHint.textContent = lockScreenBehaviourText();
   }
 }
 
@@ -1309,6 +1384,9 @@ async function loadEdgeConfig() {
   // lockScreenVisualizerEnabled.
   els.edgeLockscreenEnabled.checked = lockScreenVisualizerEnabled;
   setSelectValue(els.edgeLockscreenStyle, lockScreenVisualizerStyle);
+  setSelectValue(els.edgeLockscreenTrigger, lockScreenVisualizerTrigger);
+  setSelectValue(els.edgeLockscreenDuration, String(lockScreenVisualizerDuration));
+  syncLockScreenDurationRow();
 }
 
 let edgeSettingsCloseTimer = null;
@@ -1636,6 +1714,14 @@ els.edgeLockscreenEnabled.addEventListener("change", () => {
 
 els.edgeLockscreenStyle.addEventListener("change", () => {
   setLockScreenVisualizerStyle(els.edgeLockscreenStyle.value);
+});
+
+els.edgeLockscreenTrigger.addEventListener("change", () => {
+  setLockScreenVisualizerTrigger(els.edgeLockscreenTrigger.value);
+});
+
+els.edgeLockscreenDuration.addEventListener("change", () => {
+  setLockScreenVisualizerDuration(Number(els.edgeLockscreenDuration.value));
 });
 
 els.edgeLockscreenGrant.addEventListener("click", async () => {
@@ -2223,6 +2309,8 @@ applyDisplayMode(false);
   // Same cold-start mirror, for LockScreenVisualizerPreference/LockScreenVisualizerController.
   DeezerMedia.setLockScreenVisualizerEnabled({ enabled: lockScreenVisualizerEnabled }).catch(() => {});
   DeezerMedia.setLockScreenVisualizerStyle({ style: lockScreenVisualizerStyle }).catch(() => {});
+  DeezerMedia.setLockScreenVisualizerTrigger({ trigger: lockScreenVisualizerTrigger }).catch(() => {});
+  DeezerMedia.setLockScreenVisualizerDuration({ seconds: lockScreenVisualizerDuration }).catch(() => {});
   // Cold start only: never repeated on a later resume, since by then a resumed session is
   // already exactly where it should be, and redoing this mid-session would restart a track the
   // user is deliberately listening to or pausing.
