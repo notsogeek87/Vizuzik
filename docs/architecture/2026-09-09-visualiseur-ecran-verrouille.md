@@ -476,6 +476,12 @@ Le même relevé a montré un second défaut : le premier visualiseur lancé dep
 suite. Le journal note désormais le cycle de vie de l'Activity (`onCreate`, `onStart`, `onStop`) et
 la cause de chaque fermeture (`finishWith()`), pour corriger sur preuve plutôt qu'au jugé.
 
+Relevé suivant : le premier toucher lance bien le visualiseur, mais le journal indique `onStop`
+puis fermeture 2,3 s après `onStart`, alors que l'utilisateur voit le visualiseur animé pendant
+~10 s. Plutôt que corriger sur une lecture contradictoire, le journal gagne un numéro par instance
+(`K7#n`), `onResume`/`onPause`, les changements de focus, `onDestroy`, l'état du verrou à
+`onStart`/`onStop` (`isKeyguardLocked()`/`isDeviceLocked()`) et `USER_PRESENT`.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.

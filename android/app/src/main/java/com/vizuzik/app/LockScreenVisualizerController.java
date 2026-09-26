@@ -87,7 +87,7 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     /** Diagnostic only: the last screen-state changes and the decision taken on each, shown in
      *  the settings panel's "Diagnostic (avancé)" block (DeezerMediaPlugin.getOverlayDiagnostics())
      *  so the One UI sequence can be read off a real device rather than guessed. */
-    private static final int JOURNAL_SIZE = 40;
+    private static final int JOURNAL_SIZE = 60;
     private final long[] journalTimes = new long[JOURNAL_SIZE];
     private final String[] journalEvents = new String[JOURNAL_SIZE];
     private int journalNext;
@@ -164,6 +164,8 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 recordEvent("diffusion SCREEN_ON");
                 maybeShowOnWake("SCREEN_ON");
+            } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                recordEvent("diffusion USER_PRESENT (déverrouillé)");
             }
         }
     };
@@ -178,6 +180,8 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
         if (!receiverRegistered) {
             IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
             filter.addAction(Intent.ACTION_SCREEN_ON);
+            // Diagnostic only: journalled, never acted on here — see journal().
+            filter.addAction(Intent.ACTION_USER_PRESENT);
             // ACTION_SCREEN_OFF/ON are protected system broadcasts — nothing but the system can ever
             // send them — so NOT_EXPORTED (no other app may address this receiver directly) is the
             // correct, safe choice. ContextCompat.registerReceiver() folds the pre-Tiramisu/
@@ -216,7 +220,6 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     /** Called by LockScreenVisualizerActivity.onStop() — see ignoreNextAod. */
     void onVisualizerStopped() {
         visualizerStoppedAtMs = SystemClock.elapsedRealtime();
-        recordEvent("  K7 onStop");
     }
 
     /** For LockScreenVisualizerActivity's own lifecycle lines in the journal. */

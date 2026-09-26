@@ -111,6 +111,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     /** Between onStart() and onStop() — read by LockScreenVisualizerController.maybeShowOnWake()
      *  so a second wake signal for the same wake-up doesn't post another notification. */
     private static volatile boolean showing;
+    /** Diagnostic only: numbers each instance in the lock-screen journal (K7#1, K7#2…), so two
+     *  overlapping instances can't be mistaken for one. */
+    private static int instanceCounter;
+    private final int instanceId = ++instanceCounter;
 
     static boolean isShowing() {
         return showing;
@@ -166,7 +170,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        LockScreenVisualizerController.getInstance().log("  K7 onCreate");
+        journal("onCreate");
 
         // The one thing this Activity exists for: show up over the lock screen, without
         // dismissing it, and bring the display back on to do it. setShowWhenLocked()/
@@ -522,7 +526,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         showing = true;
-        LockScreenVisualizerController.getInstance().log("  K7 onStart");
+        journal("onStart, " + lockState());
         glowView.applyConfig(EdgeConfig.read(this));
         // Its own, shorter style choice (Barres/Cassette/K7/Disque/Baladeur) rather than EdgeConfig's own
         // "style" field the line above just read — the two pickers are deliberately separate, see
@@ -574,6 +578,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        journal("onNewIntent");
         // launchMode="singleTask" (see AndroidManifest.xml) means a second trigger while this is
         // already showing lands here instead of starting another instance — nothing to do beyond
         // acknowledging it: the view is already live and already current — beyond dropping the
@@ -589,6 +594,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStop() {
         super.onStop();
         showing = false;
+        journal("onStop, " + lockState());
         LockScreenVisualizerController.getInstance().onVisualizerStopped();
         // Anything taking this out of the foreground — the user actually unlocking, the real
         // keyguard's own bouncer appearing over it, a call — means this Activity has finished the
@@ -660,8 +666,49 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      *  LockScreenVisualizerController.journal()) says which one it was. finish() on an Activity
      *  already finishing is a no-op, so onStop()'s own call after another reason is harmless. */
     private void finishWith(String reason) {
-        if (!isFinishing()) LockScreenVisualizerController.getInstance().log("  K7 fermé : " + reason);
+        journal("fermé : " + reason + (isFinishing() ? " (déjà en fermeture)" : ""));
         finish();
+    }
+
+    /** One line in LockScreenVisualizerController's journal, tagged with this instance's number. */
+    private void journal(String event) {
+        LockScreenVisualizerController.getInstance().log("  K7#" + instanceId + " " + event);
+    }
+
+    /** The keyguard's two answers at this moment: showing ("verrou affiché") and actually
+     *  requiring credentials ("appareil verrouillé") — they differ during the grace delay some
+     *  phones leave before a turned-off screen really locks. */
+    private String lockState() {
+        KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        if (keyguardManager == null) return "verrou inconnu";
+        boolean deviceLocked = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
+            && keyguardManager.isDeviceLocked();
+        return "verrou " + (keyguardManager.isKeyguardLocked() ? "affiché" : "absent")
+            + ", appareil " + (deviceLocked ? "verrouillé" : "non verrouillé");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        journal("onResume");
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        journal("onPause");
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        journal(hasFocus ? "focus gagné" : "focus perdu");
+    }
+
+    @Override
+    protected void onDestroy() {
+        journal("onDestroy (disparu)");
+        super.onDestroy();
     }
 
     private void finishIfStillPaused() {
