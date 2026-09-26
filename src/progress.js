@@ -5,7 +5,7 @@
 
 const RENDER_INTERVAL_MS = 120;
 
-function clamp(value, min, max) {
+export function clamp(value, min, max) {
   return value < min ? min : value > max ? max : value;
 }
 
