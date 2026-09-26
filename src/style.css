@@ -879,6 +879,11 @@ body[data-mode="k7-classique"] .k7__hole {
   stroke-width: 1.9;
   stroke-linejoin: round;
 }
+/* Through the window there is no smoke over it: a shade darker, about the packs' own edge, so
+   it reads as the same tape coming out of them rather than a lighter strip. */
+.k7__tape--window {
+  stroke: #5a3820;
+}
 
 .k7__roller-rim {
   fill: rgba(225, 220, 210, 0.16);
