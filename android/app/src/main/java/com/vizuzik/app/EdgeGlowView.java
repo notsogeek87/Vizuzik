@@ -256,6 +256,11 @@ final class EdgeGlowView extends View {
     // Half way down the cassette's bottom section (the trapezoid, y 150 to 192): where the
     // transport buttons sit in the K7 styles — see k7ControlCenters().
     private static final float K7_CONTROLS_Y = 171f;
+    // Where the tape comes up from each corner roller, to the pack it winds on — see
+    // buildK7TapePath().
+    private static final float K7_TAPE_ROLLER_A_X = 29.6f;
+    private static final float K7_TAPE_ROLLER_B_X = 290.4f;
+    private static final float K7_TAPE_ROLLER_Y = 174f;
     // K7 Classique's corner guide rollers and the two small guides beside them (see drawK7Internals()).
     private static final float[] K7_ROLLER_X = { 40f, 280f };
     private static final float[] K7_GUIDE_X = { 66f, 254f };
@@ -451,6 +456,7 @@ final class EdgeGlowView extends View {
     private RadialGradient k7TapeShader;
     private final Matrix k7TapeMatrix = new Matrix();
     private final Matrix k7ViewMatrix = new Matrix();
+    private final float[] k7Tangent = new float[2];
     // Whether k7Scale() last found the illustration turned a quarter (a portrait screen) — see
     // k7ControlsRotated().
     private boolean k7Rotated;
@@ -2611,6 +2617,7 @@ final class EdgeGlowView extends View {
         strokeK7(p, Color.argb(classique ? 41 : 15, 255, 255, 255), 1f);
         canvas.drawRoundRect(12, 12, 308, 188, 7, 7, p);
 
+        buildK7TapePath(packA, packB);
         if (classique) drawK7Internals(canvas, p, packA, packB);
 
         // Through the window: the dark cavity, both tape packs, the clearer centre pane with its
@@ -2622,6 +2629,10 @@ final class EdgeGlowView extends View {
         canvas.drawRect(70, 62, 250, 106, p);
         drawK7Pack(canvas, p, K7_REEL_A_X, packA);
         drawK7Pack(canvas, p, K7_REEL_B_X, packB);
+        // The tape again, over the packs: seen leaving a small one, whose tangent point is in
+        // the window (see buildK7TapePath()).
+        drawK7Tape(canvas, p);
+        p.setStyle(Paint.Style.FILL);
         p.setColor(Color.argb(64, 0, 0, 0));
         canvas.drawRect(130, 66, 190, 102, p);
         strokeK7(p, Color.argb(140, 232, 226, 214), 0.6f);
@@ -2756,17 +2767,7 @@ final class EdgeGlowView extends View {
         drawK7Pack(canvas, p, K7_REEL_A_X, packA);
         drawK7Pack(canvas, p, K7_REEL_B_X, packB);
 
-        k7InternalTapePath.rewind();
-        k7InternalTapePath.moveTo(K7_REEL_A_X - packA, K7_REEL_Y);
-        k7InternalTapePath.lineTo(29.6f, 174);
-        k7InternalTapePath.quadTo(29.6f, 185.4f, 40, 185.4f);
-        k7InternalTapePath.lineTo(280, 185.4f);
-        k7InternalTapePath.quadTo(290.4f, 185.4f, 290.4f, 174);
-        k7InternalTapePath.lineTo(K7_REEL_B_X + packB, K7_REEL_Y);
-        strokeK7(p, 0xFF6E4424, 1.9f);
-        p.setStrokeJoin(Paint.Join.ROUND);
-        canvas.drawPath(k7InternalTapePath, p);
-        p.setStrokeJoin(Paint.Join.MITER);
+        drawK7Tape(canvas, p);
 
         for (float rx : K7_ROLLER_X) {
             p.setStyle(Paint.Style.FILL);
@@ -2805,6 +2806,42 @@ final class EdgeGlowView extends View {
         canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
         strokeK7(p, Color.argb(13, 255, 255, 255), 0.5f);
         canvas.drawLines(k7RibLines, p);
+    }
+
+    /**
+     * The tape's path for this frame, rewritten in place: off each pack where a real tape leaves
+     * it — the tangent from its corner guide roller, on the pack's outer side — down round the
+     * rollers and along the bottom edge. Same as K7Tape.draw() in the web player.
+     */
+    private void buildK7TapePath(float packA, float packB) {
+        k7InternalTapePath.rewind();
+        k7TangentPoint(K7_REEL_A_X, packA, K7_TAPE_ROLLER_A_X, 1f);
+        k7InternalTapePath.moveTo(k7Tangent[0], k7Tangent[1]);
+        k7InternalTapePath.lineTo(29.6f, K7_TAPE_ROLLER_Y);
+        k7InternalTapePath.quadTo(29.6f, 185.4f, 40, 185.4f);
+        k7InternalTapePath.lineTo(280, 185.4f);
+        k7InternalTapePath.quadTo(290.4f, 185.4f, 290.4f, K7_TAPE_ROLLER_Y);
+        k7TangentPoint(K7_REEL_B_X, packB, K7_TAPE_ROLLER_B_X, -1f);
+        k7InternalTapePath.lineTo(k7Tangent[0], k7Tangent[1]);
+    }
+
+    /** Where a straight tape from the roller point (rollerX, K7_TAPE_ROLLER_Y) touches the pack
+     *  of this radius, into k7Tangent — turn is +1 for the left pack, -1 for the right one. */
+    private void k7TangentPoint(float packX, float radius, float rollerX, float turn) {
+        double dx = rollerX - packX;
+        double dy = K7_TAPE_ROLLER_Y - K7_REEL_Y;
+        double toRoller = Math.atan2(dy, dx);
+        double spread = Math.acos(Math.min(1.0, radius / Math.hypot(dx, dy)));
+        double angle = toRoller + turn * spread;
+        k7Tangent[0] = packX + radius * (float) Math.cos(angle);
+        k7Tangent[1] = K7_REEL_Y + radius * (float) Math.sin(angle);
+    }
+
+    private void drawK7Tape(Canvas canvas, Paint p) {
+        strokeK7(p, 0xFF6E4424, 1.9f);
+        p.setStrokeJoin(Paint.Join.ROUND);
+        canvas.drawPath(k7InternalTapePath, p);
+        p.setStrokeJoin(Paint.Join.MITER);
     }
 
     /** One wound tape pack: a disc of tape, lighter towards the hub, at whatever radius the tape's
