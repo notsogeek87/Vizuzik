@@ -398,40 +398,41 @@ de la bande interne est réécrit sur place.
 
 ## Mise à jour (2026-09-26, suite) : « Déclenchement » et « Durée d'affichage »
 
-Demandé : que l'écran ne se rallume plus tout seul au verrouillage, mais seulement quand on le
-touche, et pour quelques secondes plutôt qu'en continu. Deux réglages rejoignent le style dans le
-panneau, stockés au même endroit (`LockScreenVisualizerPreference`, clés
-`lockScreenVisualizerTrigger`/`lockScreenVisualizerDurationSec`, miroirs `localStorage` côté
+Demandé : que l'écran ne reste plus allumé en continu, mais s'affiche un temps limité. Deux
+réglages rejoignent le style dans le panneau, stockés au même endroit (`LockScreenVisualizerPreference`,
+clés `lockScreenVisualizerTrigger`/`lockScreenVisualizerDurationSec`, miroirs `localStorage` côté
 `main.js`, poussés au natif à chaque démarrage comme le style) :
 
-- **Déclenchement** : « Au réveil de l'écran » (`wake`, **par défaut**) ou « Automatique, en
-  continu » (`continuous`, le comportement d'avant, inchangé).
-- **Durée d'affichage** : 5/10/15/30/60 s (10 s par défaut), en mode `wake` uniquement.
+- **Déclenchement** — trois valeurs, toutes fondées sur des diffusions système officielles :
+  - « À la mise en veille » (`sleep`, **par défaut**) : sur `ACTION_SCREEN_OFF` pendant la
+    lecture, le visualiseur s'affiche la durée choisie, puis rend la main au vrai écran de
+    verrouillage, qui s'endort seul. **Une fois par verrouillage** (`shownSinceUnlock`) : sinon
+    l'écran de verrouillage qui s'éteint après lui produirait un nouveau `SCREEN_OFF` et le
+    relancerait sans fin. Le drapeau n'est remis à zéro que par `ACTION_USER_PRESENT`
+    (déverrouillage réel) — aucun délai estimé.
+  - « Au réveil de l'écran » (`wake`) : sur `ACTION_SCREEN_ON` (touche latérale, double tap pour
+    réveiller), verrou affiché, lecture en cours, pas déjà affiché (`isShowing()`).
+  - « Automatique, en continu » (`continuous`) : le comportement d'origine, inchangé.
+- **Durée d'affichage** : 5/10/15/30/60 s (10 s par défaut), pour les deux premiers modes. Tout
+  toucher sur l'écran (`onUserInteraction()`) relance le compte à rebours.
 
-**« Au toucher » veut dire « au réveil ».** Écran éteint, aucune app ne reçoit le moindre toucher :
-c'est le téléphone lui-même (contrôleur tactile basse consommation, AOD) qui décide s'il se
-réveille. Ce qu'une app peut observer, c'est `ACTION_SCREEN_ON` — quelle qu'en soit la cause :
-double tap pour réveiller, tap sur la vraie AOD, bouton latéral. `LockScreenVisualizerController`
-écoute donc désormais `SCREEN_ON` en plus de `SCREEN_OFF`, et chaque mode ignore la diffusion de
-l'autre : `maybeShow()` (sur `SCREEN_OFF` et les changements de lecture) ne fait plus rien en mode
-`wake` — sinon un changement de morceau pendant qu'on regarde l'écran de verrouillage ferait
-réapparaître le visualiseur après expiration — et `maybeShowOnWake()` ne fait rien en mode
-`continuous`, ce qui l'empêche aussi de réagir au `SCREEN_ON` que `setTurnScreenOn()` provoque
-lui-même. La condition de `maybeShowOnWake()` est `KeyguardManager.isKeyguardLocked()` plutôt que
-`isInteractive()` : l'écran est allumé par définition à ce moment-là, ce qui compte est qu'il se
-soit réveillé sur l'écran de verrouillage.
+**Bouton de fermeture.** Un bouton ✕ en haut à droite, sur tous les styles, pour ne jamais
+dépendre d'un geste caché. En mode « À la mise en veille », il éteint aussi l'écran si le service
+d'accessibilité de Vizuzik est actif (`DeezerPlayerAccessibilityService.lockScreenIfConnected()`,
+`GLOBAL_ACTION_LOCK_SCREEN`, Android 9+) — une app ne peut pas éteindre l'écran elle-même sans
+droits d'administrateur d'appareil ; sans ce service, il rend la main au vrai écran de
+verrouillage, qui s'endort seul. Ailleurs, il ramène à l'écran de verrouillage pour déverrouiller.
 
-**Après la durée choisie**, `LockScreenVisualizerActivity` se ferme (`finish()`) et rend la main au
-vrai écran de verrouillage, qui se met en veille selon le délai du système : une app ne peut pas
-éteindre l'écran elle-même sans droits d'administration de l'appareil (`DevicePolicyManager.lockNow()`),
-hors de question ici. Tout toucher sur l'écran (`onUserInteraction()`) relance le compte à rebours,
-pour qu'appuyer sur « Suivant » ne le fasse pas disparaître en plein geste. Toutes les autres
-sorties (double tap, pause de plus de 1,5 s, déverrouillage, accueil) restent inchangées.
+### Piste non retenue : déclencher au toucher de l'AOD
 
-**Non vérifié sur appareil** : que la notification à intention plein écran lance bien l'Activity
-quand l'écran est *déjà* allumé sur le keyguard (c'est le comportement AOSP documenté — lancement
-direct tant que le keyguard est affiché — mais One UI n'a pas été testé ici), plutôt que de
-s'afficher en simple bandeau.
+Essayée (branche `add-option-lockscreen`, conservée pour archive) : détecter le toucher sur
+l'écran éteint via la transition d'affichage éteint → « doze » (l'AOD Samsung en « Appuyer pour
+afficher »), avec un journal de diagnostic pour mesurer la séquence réelle. Abandonnée sur
+mesures : le toucher, l'AOD que One UI réaffiche de lui-même après une session du visualiseur
+(+4,5 s contre +5,6 s pour un vrai toucher dans le même relevé, et pas systématiquement) et l'AOD
+d'une notification entrante produisent exactement la même transition. Toute règle pour les
+séparer avalait des touchers réels ou lançait le visualiseur sur une notification, et reposait sur
+un comportement non documenté de One UI qu'une mise à jour peut changer.
 
 ## Ce qui n'a pas été fait, et pourquoi
 

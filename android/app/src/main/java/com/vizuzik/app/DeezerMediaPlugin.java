@@ -455,13 +455,14 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
-     * Mirrors the web layer's "Déclenchement" pick ("wake" = only when the user wakes the screen,
-     * "continuous" = relight it as soon as it goes off) into LockScreenVisualizerPreference. Read
+     * Mirrors the web layer's "Déclenchement" pick ("sleep" = once when the screen goes off,
+     * "wake" = when the user fully wakes the screen, "continuous" = relight it as soon as it goes
+     * off and keep it up) into LockScreenVisualizerPreference. Read
      * fresh by LockScreenVisualizerController on every screen on/off, so nothing to act on here.
      */
     @PluginMethod
     public void setLockScreenVisualizerTrigger(PluginCall call) {
-        String trigger = call.getString("trigger", LockScreenVisualizerPreference.TRIGGER_WAKE);
+        String trigger = call.getString("trigger", LockScreenVisualizerPreference.TRIGGER_SLEEP);
         LockScreenVisualizerPreference.setTrigger(getContext(), trigger);
         call.resolve();
     }

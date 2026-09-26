@@ -807,16 +807,17 @@
           </select>
         </label>
 
-        <!-- When that screen shows up. A sleeping screen hands no touch to any app, so "on touch"
-             really means "when the user wakes the screen" (double tap to wake, a tap on the real
-             AOD, the side button) — see LockScreenVisualizerController.maybeShowOnWake(). Stored
-             in LockScreenVisualizerPreference, like the style above. -->
+        <!-- When that screen shows up — official system signals only (screen off, screen on,
+             unlocked), see LockScreenVisualizerController. Triggering on the AOD appearing was
+             tried and dropped: a tap, a notification and One UI's own AOD look identical to an
+             app. Stored in LockScreenVisualizerPreference, like the style above. -->
         <label class="edge-settings__row">
           <span>
             Déclenchement
-            <small>Au réveil : l'écran reste éteint jusqu'à ce que tu le réveilles. En continu : l'écran est rallumé dès qu'il s'éteint.</small>
+            <small>À la mise en veille : une fois à chaque verrouillage, puis le téléphone s'endort. Au réveil : quand tu rallumes l'écran. En continu : tant que la musique joue. Le bouton ✕ en haut à droite ferme l'affichage (en mode mise en veille, il éteint aussi l'écran si l'accès d'accessibilité de Vizuzik est activé).</small>
           </span>
           <select id="edge-lockscreen-trigger">
+            <option value="sleep">À la mise en veille</option>
             <option value="wake">Au réveil de l'écran</option>
             <option value="continuous">Automatique, en continu</option>
           </select>

@@ -52,22 +52,33 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
 
     private Context appContext;
     private boolean receiverRegistered;
+    /**
+     * "sleep" mode's loop guard. Once the visualizer closes, the lock screen it hands back to
+     * times out and the screen goes off again — another ACTION_SCREEN_OFF, which would bring the
+     * visualizer straight back, forever. So it shows once per lock: set when shown, cleared only by
+     * ACTION_USER_PRESENT, the system's own "the device was just unlocked" broadcast. Official
+     * signals only, no timing guesses — an earlier attempt to trigger on the AOD appearing relied on
+     * undocumented One UI behaviour and could not tell a tap from a notification (see the
+     * architecture doc's "Piste non retenue").
+     */
+    private boolean shownSinceUnlock;
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            // The trigger setting decides which of the two broadcasts matters: "continuous" reacts
-            // to the screen going off (relight it at once), "wake" to the user waking it
-            // themselves — a sleeping screen delivers no touch to any app, so a screen coming back
-            // on (double tap to wake, a tap on the real AOD, the side button) is the closest an
-            // app can get to "the user touched the screen". Each mode ignores the other's
-            // broadcast, which also keeps "continuous" from reacting to the SCREEN_ON its own
-            // setTurnScreenOn() causes.
+            // The trigger setting decides which broadcast matters: "continuous" and "sleep" react
+            // to the screen going off, "wake" to the user fully waking it (side button, double tap
+            // to wake). Each method below checks the trigger itself and ignores the others'
+            // broadcasts — which also keeps "wake" from reacting to the SCREEN_ON the visualizer's
+            // own setTurnScreenOn() causes in the other two modes.
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 maybeShow();
+                maybeShowOnSleep();
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 maybeShowOnWake();
+            } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                shownSinceUnlock = false;
             }
         }
     };
@@ -82,6 +93,7 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
         if (!receiverRegistered) {
             IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
             filter.addAction(Intent.ACTION_SCREEN_ON);
+            filter.addAction(Intent.ACTION_USER_PRESENT);
             // ACTION_SCREEN_OFF/ON are protected system broadcasts — nothing but the system can ever
             // send them — so NOT_EXPORTED (no other app may address this receiver directly) is the
             // correct, safe choice. ContextCompat.registerReceiver() folds the pre-Tiramisu/
@@ -111,9 +123,11 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     void maybeShow() {
         if (appContext == null) return;
         if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
-        // "wake" mode only ever shows on ACTION_SCREEN_ON (see maybeShowOnWake()) — neither the
-        // screen going off nor a track change on an idle lock screen may bring it back up.
-        if (LockScreenVisualizerPreference.isWakeTrigger(appContext)) return;
+        // "continuous" only: "sleep" has its own once-per-lock path (maybeShowOnSleep()) and
+        // "wake" only shows on ACTION_SCREEN_ON (maybeShowOnWake()) — in neither may a track
+        // change on an idle lock screen bring it back up.
+        if (!LockScreenVisualizerPreference.TRIGGER_CONTINUOUS.equals(
+                LockScreenVisualizerPreference.getTrigger(appContext))) return;
         // Vizuzik's own player already shows everything this would; showing our fake-AOD screen
         // over it would just be a redundant window on top of the app that's already visible.
         if (MainActivity.isForeground()) return;
@@ -137,8 +151,12 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     void maybeShowOnWake() {
         if (appContext == null) return;
         if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
-        if (!LockScreenVisualizerPreference.isWakeTrigger(appContext)) return;
+        if (!LockScreenVisualizerPreference.TRIGGER_WAKE.equals(
+                LockScreenVisualizerPreference.getTrigger(appContext))) return;
         if (MainActivity.isForeground()) return;
+        // A second wake while it is already up (e.g. the side button pressed again) must not
+        // post a notification no new Activity launch would ever cancel.
+        if (LockScreenVisualizerActivity.isShowing()) return;
 
         KeyguardManager keyguardManager =
             (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);
@@ -147,6 +165,26 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
         DeezerMediaBridge.NowPlaying nowPlaying = DeezerMediaBridge.getInstance().getLastNowPlaying();
         if (nowPlaying == null || !nowPlaying.isPlaying) return;
 
+        postFullScreenNotification();
+    }
+
+    /**
+     * "sleep" mode: the screen has just gone off (the user locking, or the screen timing out)
+     * while music plays — relight it once with the visualizer, for getDurationSec() seconds. See
+     * shownSinceUnlock for why only once per lock.
+     */
+    void maybeShowOnSleep() {
+        if (appContext == null) return;
+        if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
+        if (!LockScreenVisualizerPreference.TRIGGER_SLEEP.equals(
+                LockScreenVisualizerPreference.getTrigger(appContext))) return;
+        if (shownSinceUnlock) return;
+        if (MainActivity.isForeground()) return;
+
+        DeezerMediaBridge.NowPlaying nowPlaying = DeezerMediaBridge.getInstance().getLastNowPlaying();
+        if (nowPlaying == null || !nowPlaying.isPlaying) return;
+
+        shownSinceUnlock = true;
         postFullScreenNotification();
     }
 

@@ -102,12 +102,20 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     private TextView artistView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable pauseGraceExpired = this::finishIfStillPaused;
-    /** "wake" trigger only (see LockScreenVisualizerPreference.TRIGGER_WAKE): after the chosen
-     *  number of seconds, hand back to the real lock screen, which then goes to sleep on the
-     *  system's own timeout — an app cannot switch the display off itself without device-admin
-     *  rights. Never posted in "continuous" mode, which stays up for as long as the music plays. */
+    /** "sleep"/"wake" triggers only (see LockScreenVisualizerPreference.isTimedTrigger()): after
+     *  the chosen number of seconds, hand back to the real lock screen, which then goes to sleep
+     *  on the system's own timeout — an app cannot switch the display off itself without
+     *  device-admin rights. Never posted in "continuous" mode, which stays up for as long as the
+     *  music plays. */
     private final Runnable displayTimeoutExpired = this::finish;
     private long displayTimeoutMs;
+    /** Between onStart() and onStop() — read by LockScreenVisualizerController.maybeShowOnWake()
+     *  so a second wake while this is up doesn't post another notification. */
+    private static volatile boolean showing;
+
+    static boolean isShowing() {
+        return showing;
+    }
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -235,6 +243,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
                 root.addView(buildDiscMeta());
             }
         }
+        root.addView(buildCloseButton());
         setContentView(root);
         glowView = view;
 
@@ -467,6 +476,36 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         return row;
     }
 
+    /**
+     * The always-visible way out, top right, for every style — asked for so that closing never
+     * depends on knowing a gesture (double tap, home). It consumes its own tap, like the transport
+     * buttons, so it never reaches the double-tap detector.
+     *
+     * "sleep" mode: the point was a screen going dark, so this turns the screen off — which only an
+     * accessibility service may ask for (DeezerPlayerAccessibilityService.lockScreenIfConnected());
+     * without it, closing hands back to the real lock screen, which then sleeps on its own. The
+     * once-per-lock guard in LockScreenVisualizerController keeps either from bringing this back.
+     * Every other mode: back to the real lock screen, to unlock.
+     */
+    private ImageButton buildCloseButton() {
+        float density = getResources().getDisplayMetrics().density;
+        ImageButton close = circleButton(40, android.R.drawable.ic_menu_close_clear_cancel);
+        close.setContentDescription("Fermer");
+        close.setOnClickListener(v -> {
+            boolean sleepMode = LockScreenVisualizerPreference.TRIGGER_SLEEP.equals(
+                LockScreenVisualizerPreference.getTrigger(this));
+            if (sleepMode) DeezerPlayerAccessibilityService.lockScreenIfConnected();
+            finish();
+        });
+        int sizePx = Math.round(40 * density);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(sizePx, sizePx);
+        params.gravity = Gravity.TOP | Gravity.END;
+        params.topMargin = Math.round(28 * density);
+        params.rightMargin = Math.round(20 * density);
+        close.setLayoutParams(params);
+        return close;
+    }
+
     /** A translucent circle behind a framework media icon — no new drawable resources needed, the
      *  same android.R.drawable.ic_media_* set LockScreenVisualizerController already uses for the
      *  full-screen-intent notification's own small icon. */
@@ -518,7 +557,8 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         // "style" field the line above just read — the two pickers are deliberately separate, see
         // LockScreenVisualizerPreference and EdgeGlowView.setStandaloneStyle().
         glowView.setStandaloneStyle(LockScreenVisualizerPreference.getStyle(this));
-        displayTimeoutMs = LockScreenVisualizerPreference.isWakeTrigger(this)
+        showing = true;
+        displayTimeoutMs = LockScreenVisualizerPreference.isTimedTrigger(this)
             ? LockScreenVisualizerPreference.getDurationSec(this) * 1000L
             : 0;
         restartDisplayTimeout();
@@ -566,12 +606,19 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         super.onNewIntent(intent);
         // launchMode="singleTask" (see AndroidManifest.xml) means a second trigger while this is
         // already showing lands here instead of starting another instance — nothing to do beyond
-        // acknowledging it: the view is already live and already current.
+        // acknowledging it: the view is already live and already current — beyond dropping the
+        // full-screen-intent notification that got it here, same as onCreate() does.
+        try {
+            NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID);
+        } catch (Exception e) {
+            Log.w(TAG, "cancel notification", e);
+        }
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        showing = false;
         // Anything taking this out of the foreground — the user actually unlocking, the real
         // keyguard's own bouncer appearing over it, a call — means this Activity has finished the
         // one thing it exists to do. There is nothing to resume back into.
