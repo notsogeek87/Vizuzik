@@ -47,6 +47,11 @@ final class EdgeConfig {
     // STYLE_CASSETTE above: a screen-centred portable-player case+screen illustration, the
     // native port of the web player's own "baladeur" display mode.
     static final String STYLE_BALADEUR = "baladeur";
+    // See EdgeGlowView.drawK7() — the lock-screen ports of the web player's two K7 display modes
+    // (#k7 in index.html, src/k7.js), same shorter picker as STYLE_CASSETTE above. One drawing,
+    // two labels: only the label face differs between the two.
+    static final String STYLE_K7_ETIQUETTE = "k7-etiquette";
+    static final String STYLE_K7_CLASSIQUE = "k7-classique";
 
     static final String BAND_FULL = "full";
     static final String BAND_BASS = "bass";
