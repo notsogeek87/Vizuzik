@@ -1529,6 +1529,20 @@ function syncK7Lid() {
 
 const K7_LID_KEY_BUTTONS = { previous: els.previous, "play-pause": els.playPause, next: els.next };
 
+// The lid only slides when a tap opens or shuts it: its transition is switched on for that one
+// move (see .k7-lid-sliding in style.css), then off again. Tucked away, it sits off-screen
+// downwards in landscape and to the left in portrait, so turning the phone moves it too, and a
+// transition left on all the time carried it across the screen on every rotation. Waiting for
+// the rotation's own events to switch it off wasn't enough: the new layout can be worked out
+// before they arrive.
+const K7_LID_SLIDE_MS = 700;
+let k7LidSlideTimer = null;
+function slideK7Lid() {
+  document.body.classList.add("k7-lid-sliding");
+  clearTimeout(k7LidSlideTimer);
+  k7LidSlideTimer = setTimeout(() => document.body.classList.remove("k7-lid-sliding"), K7_LID_SLIDE_MS);
+}
+
 // No display mode forces the phone into a particular orientation — cassette mode used to lock
 // landscape the way a video player forces landscape for fullscreen, but that fought the phone's
 // own rotation: held upright (its normal, expected orientation, same as every other mode), the
@@ -1853,6 +1867,7 @@ function endGesture(event, cancelled) {
     // Cassette mode has no stage to tap (the artwork fills the screen): tapping it instead
     // toggles the transport buttons, scrub bar and title/artist card out of the way, for a
     // fully unobstructed view of the cassette (see .cassette-controls-hidden in style.css).
+    if (isK7Mode(displayMode)) slideK7Lid();
     document.body.classList.toggle("cassette-controls-hidden");
     syncK7Lid();
   }
