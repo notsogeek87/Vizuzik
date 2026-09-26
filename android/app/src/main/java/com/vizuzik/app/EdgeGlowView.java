@@ -261,6 +261,10 @@ final class EdgeGlowView extends View {
     private static final float K7_TAPE_ROLLER_A_X = 29.6f;
     private static final float K7_TAPE_ROLLER_B_X = 290.4f;
     private static final float K7_TAPE_ROLLER_Y = 174f;
+    private static final float K7_TAPE_TUCK = 2f;
+    // The tape behind K7 Classique's smoked shell, and the darker one seen through the window.
+    private static final int K7_TAPE_COLOR = 0xFF6E4424;
+    private static final int K7_TAPE_WINDOW_COLOR = 0xFF5A3820;
     // K7 Classique's corner guide rollers and the two small guides beside them (see drawK7Internals()).
     private static final float[] K7_ROLLER_X = { 40f, 280f };
     private static final float[] K7_GUIDE_X = { 66f, 254f };
@@ -2627,11 +2631,12 @@ final class EdgeGlowView extends View {
         p.setStyle(Paint.Style.FILL);
         p.setColor(0xFF0F0C0B);
         canvas.drawRect(70, 62, 250, 106, p);
+        // The tape again, under the packs: seen coming out of a small one, whose tangent point
+        // is in the window (see buildK7TapePath()). A shade darker than behind the smoked
+        // shell, with no smoke over it here: about the packs' own edge.
+        drawK7Tape(canvas, p, K7_TAPE_WINDOW_COLOR);
         drawK7Pack(canvas, p, K7_REEL_A_X, packA);
         drawK7Pack(canvas, p, K7_REEL_B_X, packB);
-        // The tape again, over the packs: seen leaving a small one, whose tangent point is in
-        // the window (see buildK7TapePath()).
-        drawK7Tape(canvas, p);
         p.setStyle(Paint.Style.FILL);
         p.setColor(Color.argb(64, 0, 0, 0));
         canvas.drawRect(130, 66, 190, 102, p);
@@ -2764,10 +2769,9 @@ final class EdgeGlowView extends View {
      *  round the corner rollers and along the bottom past the pressure pad, then the smoke tint
      *  and the moulded ribs over all of it. See .k7__internals in the web version. */
     private void drawK7Internals(Canvas canvas, Paint p, float packA, float packB) {
+        drawK7Tape(canvas, p, K7_TAPE_COLOR);
         drawK7Pack(canvas, p, K7_REEL_A_X, packA);
         drawK7Pack(canvas, p, K7_REEL_B_X, packB);
-
-        drawK7Tape(canvas, p);
 
         for (float rx : K7_ROLLER_X) {
             p.setStyle(Paint.Style.FILL);
@@ -2833,12 +2837,15 @@ final class EdgeGlowView extends View {
         double toRoller = Math.atan2(dy, dx);
         double spread = Math.acos(Math.min(1.0, radius / Math.hypot(dx, dy)));
         double angle = toRoller + turn * spread;
-        k7Tangent[0] = packX + radius * (float) Math.cos(angle);
-        k7Tangent[1] = K7_REEL_Y + radius * (float) Math.sin(angle);
+        // A little inside the pack, which is drawn over the tape: it comes out of the pack rather
+        // than stopping short at its edge with a square end.
+        float r = radius - K7_TAPE_TUCK;
+        k7Tangent[0] = packX + r * (float) Math.cos(angle);
+        k7Tangent[1] = K7_REEL_Y + r * (float) Math.sin(angle);
     }
 
-    private void drawK7Tape(Canvas canvas, Paint p) {
-        strokeK7(p, 0xFF6E4424, 1.9f);
+    private void drawK7Tape(Canvas canvas, Paint p, int color) {
+        strokeK7(p, color, 1.9f);
         p.setStrokeJoin(Paint.Join.ROUND);
         canvas.drawPath(k7InternalTapePath, p);
         p.setStrokeJoin(Paint.Join.MITER);
