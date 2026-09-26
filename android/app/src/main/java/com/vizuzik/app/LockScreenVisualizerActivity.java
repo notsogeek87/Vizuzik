@@ -106,7 +106,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      *  number of seconds, hand back to the real lock screen, which then goes to sleep on the
      *  system's own timeout — an app cannot switch the display off itself without device-admin
      *  rights. Never posted in "continuous" mode, which stays up for as long as the music plays. */
-    private final Runnable displayTimeoutExpired = this::finish;
+    private final Runnable displayTimeoutExpired = () -> finishWith("délai écoulé");
     private long displayTimeoutMs;
     /** Between onStart() and onStop() — read by LockScreenVisualizerController.maybeShowOnWake()
      *  so a second wake signal for the same wake-up doesn't post another notification. */
@@ -123,7 +123,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     private final BroadcastReceiver disabledReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            finish();
+            finishWith("réglage désactivé");
         }
     };
     /** setShowWhenLocked() keeps this Activity drawn on top of the keyguard even after the user
@@ -143,7 +143,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     private final BroadcastReceiver userPresentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            finish();
+            finishWith("déverrouillé");
         }
     };
     /** Whether the device was genuinely keyguard-locked the moment this screen came up — checked
@@ -166,6 +166,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        LockScreenVisualizerController.getInstance().log("  K7 onCreate");
 
         // The one thing this Activity exists for: show up over the lock screen, without
         // dismissing it, and bring the display back on to do it. setShowWhenLocked()/
@@ -207,7 +208,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onDoubleTap(MotionEvent e) {
-                    finish();
+                    finishWith("double tap");
                     return true;
                 }
             }
@@ -521,6 +522,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         showing = true;
+        LockScreenVisualizerController.getInstance().log("  K7 onStart");
         glowView.applyConfig(EdgeConfig.read(this));
         // Its own, shorter style choice (Barres/Cassette/K7/Disque/Baladeur) rather than EdgeConfig's own
         // "style" field the line above just read — the two pickers are deliberately separate, see
@@ -587,6 +589,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStop() {
         super.onStop();
         showing = false;
+        LockScreenVisualizerController.getInstance().onVisualizerStopped();
         // Anything taking this out of the foreground — the user actually unlocking, the real
         // keyguard's own bouncer appearing over it, a call — means this Activity has finished the
         // one thing it exists to do. There is nothing to resume back into.
@@ -606,7 +609,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
                 // Already unregistered (e.g. this onStop() runs twice) — nothing left to undo.
             }
         }
-        finish();
+        finishWith("onStop");
     }
 
     @Override
@@ -653,9 +656,17 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         }
     }
 
+    /** Every way this screen closes goes through here, so the lock-screen journal (see
+     *  LockScreenVisualizerController.journal()) says which one it was. finish() on an Activity
+     *  already finishing is a no-op, so onStop()'s own call after another reason is harmless. */
+    private void finishWith(String reason) {
+        if (!isFinishing()) LockScreenVisualizerController.getInstance().log("  K7 fermé : " + reason);
+        finish();
+    }
+
     private void finishIfStillPaused() {
         DeezerMediaBridge.NowPlaying current = DeezerMediaBridge.getInstance().getLastNowPlaying();
-        if (current == null || !current.isPlaying) finish();
+        if (current == null || !current.isPlaying) finishWith("pause");
     }
 
     @Override

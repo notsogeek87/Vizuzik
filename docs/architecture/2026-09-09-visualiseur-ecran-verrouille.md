@@ -461,6 +461,21 @@ prise et sa raison, avec l'écart en ms depuis le précédent) s'affiche dans le
 système après la mise en veille, éventuel état distinct (`doze` vs `doze_suspend`) entre AOD système
 et toucher — et remplacer la fenêtre par la règle que ces mesures justifient.
 
+**Ce que les mesures ont montré (journal, Z Fold8).** Verrouillage normal, sans toucher : aucun
+passage en doze en 27 s — One UI n'affiche pas l'AOD de lui-même après une mise en veille
+ordinaire. Toucher après ~5 s : `éteint → doze` à +5,6 s, visualiseur lancé. Puis, après la
+session du visualiseur, quand l'écran de verrouillage s'éteint : `éteint → doze` **sans toucher**
+à +4,5 s. Un délai ne peut donc pas séparer les deux (4,5 s système contre 5,6 s toucher). La
+fenêtre est remplacée par une règle de contexte (`ignoreNextAod`) : seule une mise en veille qui
+suit une session du visualiseur (écran éteint pendant qu'il s'affiche, ou dans les 30 s après sa
+fermeture) fait ignorer le premier `éteint → doze` qui suit, dans les 15 s. Après un verrouillage
+normal, le premier toucher marche sans délai.
+
+Le même relevé a montré un second défaut : le premier visualiseur lancé depuis l'AOD n'a tenu que
+~5 s (écran éteint au délai du seul écran de verrouillage), signe qu'il s'est fermé presque tout de
+suite. Le journal note désormais le cycle de vie de l'Activity (`onCreate`, `onStart`, `onStop`) et
+la cause de chaque fermeture (`finishWith()`), pour corriger sur preuve plutôt qu'au jugé.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.

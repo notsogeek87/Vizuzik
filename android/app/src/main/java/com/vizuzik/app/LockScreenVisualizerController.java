@@ -61,26 +61,33 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     /** Last state seen for the built-in display (Display.STATE_*), so a change can be read as a
      *  transition — see displayListener. */
     private int lastDisplayState = Display.STATE_UNKNOWN;
-    /** When the screen last went off (SystemClock.elapsedRealtime()) — see AOD_AFTER_SLEEP_IGNORE_MS. */
+    /** When the screen last went off (SystemClock.elapsedRealtime()) — see ignoreNextAod. */
     private long screenOffAtMs;
+    /** When LockScreenVisualizerActivity last stopped — see ignoreNextAod. 0 = never. */
+    private long visualizerStoppedAtMs;
     /**
-     * Field report (Z Fold8, AOD "Appuyer pour afficher"): when the lock screen times out, One UI
-     * goes OFF and then briefly into DOZE on its own — the same OFF → DOZE transition a tap makes.
-     * Reacting to it looped forever: visualizer for N s → lock screen → sleep → AOD → visualizer.
-     * Any OFF → DOZE this soon after the screen went off is taken as the system's, not a touch; a
-     * real tap that early still works, it just needs the second touch that fully wakes the phone
-     * (ACTION_SCREEN_ON).
+     * Field report (Z Fold8, AOD "Appuyer pour afficher"), measured with the journal below: after
+     * a visualizer session, when the lock screen it hands back to times out, One UI goes OFF and
+     * then into DOZE on its own ~4.5 s later — the same OFF → DOZE transition a tap makes, and
+     * reacting to it looped forever (visualizer → lock screen → sleep → AOD → visualizer). A
+     * plain lock with no visualizer involved showed no such DOZE at all.
      *
-     * First set to 10 s, a guess that fixed the loop but made a real tap in that window need a
-     * second touch. Down to 2 s while the real One UI sequence is measured with the event journal
-     * below (see recordEvent()), to be replaced by whatever rule that measurement supports.
+     * A time window alone cannot separate the two — the same test measured a real tap 5.6 s after
+     * the screen went off and the system's own DOZE 4.5 s after — so the rule is contextual: a
+     * sleep that follows a visualizer session (screen going off while it shows, or within
+     * AFTER_VISUALIZER_MS of it closing) arms this flag, and only the first OFF → DOZE after that
+     * sleep, within SYSTEM_AOD_MAX_DELAY_MS, is ignored. A normal lock never arms it, so there the
+     * first touch works at once. The cost: a real tap in those few seconds right after a
+     * visualizer session needs the second touch (ACTION_SCREEN_ON) — a narrow case.
      */
-    private static final long AOD_AFTER_SLEEP_IGNORE_MS = 2_000;
+    private boolean ignoreNextAod;
+    private static final long AFTER_VISUALIZER_MS = 30_000;
+    private static final long SYSTEM_AOD_MAX_DELAY_MS = 15_000;
 
     /** Diagnostic only: the last screen-state changes and the decision taken on each, shown in
      *  the settings panel's "Diagnostic (avancé)" block (DeezerMediaPlugin.getOverlayDiagnostics())
      *  so the One UI sequence can be read off a real device rather than guessed. */
-    private static final int JOURNAL_SIZE = 25;
+    private static final int JOURNAL_SIZE = 40;
     private final long[] journalTimes = new long[JOURNAL_SIZE];
     private final String[] journalEvents = new String[JOURNAL_SIZE];
     private int journalNext;
@@ -110,13 +117,23 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             lastDisplayState = state;
             if (state == previous) return;
             recordEvent("écran " + stateName(previous) + " → " + stateName(state));
-            if (previous == Display.STATE_ON && state != Display.STATE_ON) {
-                screenOffAtMs = SystemClock.elapsedRealtime();
+            long now = SystemClock.elapsedRealtime();
+            if (state == Display.STATE_ON) {
+                ignoreNextAod = false;
+                return;
+            }
+            if (previous == Display.STATE_ON) {
+                screenOffAtMs = now;
+                ignoreNextAod = LockScreenVisualizerActivity.isShowing()
+                    || (visualizerStoppedAtMs > 0 && now - visualizerStoppedAtMs < AFTER_VISUALIZER_MS);
+                if (ignoreNextAod) recordEvent("  veille après K7 : prochain AOD système ignoré");
             }
             boolean dozing = state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND;
             if (previous != Display.STATE_OFF || !dozing) return;
-            if (SystemClock.elapsedRealtime() - screenOffAtMs < AOD_AFTER_SLEEP_IGNORE_MS) {
-                recordEvent("  ignoré : juste après la mise en veille");
+            boolean systemAod = ignoreNextAod && now - screenOffAtMs < SYSTEM_AOD_MAX_DELAY_MS;
+            ignoreNextAod = false;
+            if (systemAod) {
+                recordEvent("  AOD ignoré : AOD système après K7");
                 return;
             }
             maybeShowOnWake("AOD");
@@ -196,8 +213,19 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
         }
     }
 
-    /** Written on the main thread (display listener, receiver, maybeShowOnWake()), read by
-     *  journal() from the plugin's thread — hence both synchronized. */
+    /** Called by LockScreenVisualizerActivity.onStop() — see ignoreNextAod. */
+    void onVisualizerStopped() {
+        visualizerStoppedAtMs = SystemClock.elapsedRealtime();
+        recordEvent("  K7 onStop");
+    }
+
+    /** For LockScreenVisualizerActivity's own lifecycle lines in the journal. */
+    void log(String event) {
+        recordEvent(event);
+    }
+
+    /** Written on the main thread (display listener, receiver, maybeShowOnWake(), the
+     *  visualizer's lifecycle), read by journal() from the plugin's thread — hence synchronized. */
     private synchronized void recordEvent(String event) {
         journalTimes[journalNext] = SystemClock.elapsedRealtime();
         journalEvents[journalNext] = event;
