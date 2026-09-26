@@ -1782,6 +1782,7 @@ els.player.addEventListener("pointerdown", (event) => {
     dragging: false,
     onStage: !!(event.target.closest && event.target.closest(".stage")),
     lidKey: onLid && onLid.key,
+    onRuler: !!(onLid && onLid.ruler != null),
     scrubbing: !!(onLid && onLid.ruler != null && progress.scrubTo(onLid.ruler)),
   };
   if (gesture.lidKey) k7Lid.press(gesture.lidKey, true);
@@ -1792,7 +1793,8 @@ els.player.addEventListener("pointerdown", (event) => {
 els.player.addEventListener("pointermove", (event) => {
   if (!gesture || gesture.id !== event.pointerId) return;
   if (gesture.scrubbing) {
-    progress.scrubTo(k7Lid.rulerRatio(event.clientX, event.clientY));
+    const ratio = k7Lid.rulerRatio(event.clientX, event.clientY);
+    if (ratio != null) progress.scrubTo(ratio);
     return;
   }
   gesture.dx = event.clientX - gesture.x0;
@@ -1842,6 +1844,9 @@ function endGesture(event, cancelled) {
   if (isTap && g.lidKey) {
     // The same buttons the other modes show, so the same behaviour.
     K7_LID_KEY_BUTTONS[g.lidKey].click();
+  } else if (g.onRuler) {
+    // The ruler, before the track can be seeked (no duration yet): nothing to do, and not a tap
+    // on the cassette either — it would open the lid under the finger.
   } else if (isTap && g.onStage) {
     cycleDisplayMode();
   } else if (isTap && isCassetteMode(displayMode)) {
@@ -2008,13 +2013,16 @@ function refitK7Text() {
 
 // Text measured before its handwriting font has arrived would be fitted to the fallback's widths.
 // A @font-face only starts loading once something visible uses it, so both are asked for up front
-// and the label refitted once they're in.
-Promise.all([
-  document.fonts.load('12px "Permanent Marker"'),
-  document.fonts.load('17px "Reenie Beanie"'),
-])
-  .then(refitK7Text)
-  .catch(() => {});
+// and the label refitted once they're in. The Font Loading API is absent on older WebViews, which
+// must not fail the rest of this module's initialization.
+if (document.fonts) {
+  Promise.all([
+    document.fonts.load('12px "Permanent Marker"'),
+    document.fonts.load('17px "Reenie Beanie"'),
+  ])
+    .then(refitK7Text)
+    .catch(() => {});
+}
 
 function setNowPlaying(state) {
   if (!state || !state.active) {

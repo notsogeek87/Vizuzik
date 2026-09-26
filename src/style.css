@@ -593,9 +593,16 @@ body[data-mode="k7-etiquette"] .k7__trapezoid {
 /* The K7 modes carry their own controls, on the Walkman lid (see .k7__lid): the app's usual
    transport row and scrub bar stay in the DOM — the lid's keys click them, so it's the same
    logic — but are never shown here. Nor is the bottom scrim that sets them off elsewhere: on
-   the lid it only darkened the metal. */
-body[data-mode^="k7-"] .controls,
-body[data-mode^="k7-"] .progress {
+   the lid it only darkened the metal.
+   Exception: the lid's keys are hit-tested purely by pointer coordinates (see K7Lid.hit() in
+   k7.js), which a TV remote's D-pad can't drive. There the lid stays off-screen instead (below)
+   and the app's own controls stay put, as in every other mode. */
+body[data-mode^="k7-"]:not([data-platform="tv"]) .controls,
+body[data-mode^="k7-"]:not([data-platform="tv"]) .progress {
+  display: none;
+}
+
+body[data-mode^="k7-"][data-platform="tv"] .k7__lid-layer {
   display: none;
 }
 

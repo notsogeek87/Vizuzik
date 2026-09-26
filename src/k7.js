@@ -8,7 +8,7 @@
 // scrub glides there instead; a track change rewinds, the reels spinning back fast while the
 // tape returns to the left-hand reel.
 
-import { formatTime } from "./progress.js";
+import { clamp, formatTime } from "./progress.js";
 
 // In the illustration's own 320x200 viewBox units.
 const REEL_A_X = 97;
@@ -56,7 +56,10 @@ export class K7Tape {
   trackChanged() {
     if (this.shown == null || this.shown < JUMP || this.reducedMotion.matches) return;
     const seconds = Math.max(REWIND_MIN_S, REWIND_FULL_S * this.shown);
-    this.rewind = { from: this.shown, startedAt: performance.now(), durationMs: seconds * 1000 };
+    // Timed by the frames it's drawn in, not the wall clock: update() only runs while a K7 mode
+    // is on screen, so a rewind left for another mode and come back to carries on where it was
+    // rather than jumping to its end.
+    this.rewind = { from: this.shown, elapsedMs: 0, durationMs: seconds * 1000 };
   }
 
   /**
@@ -69,7 +72,8 @@ export class K7Tape {
     this.lastAt = now;
 
     if (this.rewind) {
-      const t = Math.min(1, (now - this.rewind.startedAt) / this.rewind.durationMs);
+      this.rewind.elapsedMs += dt * 1000;
+      const t = Math.min(1, this.rewind.elapsedMs / this.rewind.durationMs);
       const eased = t < 0.5 ? 2 * t * t : 1 - (2 - 2 * t) ** 2 / 2;
       this.shown = this.rewind.from * (1 - eased);
       if (t >= 1) this.rewind = null;
@@ -135,10 +139,6 @@ const TILT_REST_FOLLOW = 0.005;
 const TILT_SMOOTHING = 0.25;
 const TILT_DEADBAND = 0.4;
 
-function clampTo(value, min, max) {
-  return value < min ? min : value > max ? max : value;
-}
-
 export class K7Lid {
   constructor(root) {
     this.svg = root.querySelector(".k7__lid-layer");
@@ -179,10 +179,11 @@ export class K7Lid {
     return null;
   }
 
-  /** Where along the ruler a finger is, 0..1, wherever it has wandered to since. */
+  /** Where along the ruler a finger is, 0..1, wherever it has wandered to since — or null if
+   *  the illustration's position can't be read right now, so the caller keeps the last one. */
   rulerRatio(clientX, clientY) {
     const p = this._toViewBox(clientX, clientY);
-    return p ? this._rulerRatio(p) : 0;
+    return p ? this._rulerRatio(p) : null;
   }
 
   press(key, down) {
@@ -227,7 +228,7 @@ export class K7Lid {
   }
 
   _rulerRatio(p) {
-    return clampTo((p.x - RULER_START) / (RULER_END - RULER_START), 0, 1);
+    return clamp((p.x - RULER_START) / (RULER_END - RULER_START), 0, 1);
   }
 
   // Moves the light band across the lid's metal as the phone tilts, the way a real brushed
@@ -245,8 +246,8 @@ export class K7Lid {
     if (!this.tiltRest) this.tiltRest = { x, y };
     this.tiltRest.x += (x - this.tiltRest.x) * TILT_REST_FOLLOW;
     this.tiltRest.y += (y - this.tiltRest.y) * TILT_REST_FOLLOW;
-    const dx = clampTo(x - this.tiltRest.x, -TILT_RANGE, TILT_RANGE);
-    const dy = clampTo(y - this.tiltRest.y, -TILT_RANGE, TILT_RANGE);
+    const dx = clamp(x - this.tiltRest.x, -TILT_RANGE, TILT_RANGE);
+    const dy = clamp(y - this.tiltRest.y, -TILT_RANGE, TILT_RANGE);
     // And the screen's into the illustration's: upright, it is turned a quarter clockwise.
     const upright = window.innerHeight > window.innerWidth;
     const target = { x: upright ? dy : dx, y: upright ? -dx : dy };
