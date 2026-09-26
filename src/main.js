@@ -2006,13 +2006,16 @@ function refitK7Text() {
 
 // Text measured before its handwriting font has arrived would be fitted to the fallback's widths.
 // A @font-face only starts loading once something visible uses it, so both are asked for up front
-// and the label refitted once they're in.
-Promise.all([
-  document.fonts.load('12px "Permanent Marker"'),
-  document.fonts.load('17px "Reenie Beanie"'),
-])
-  .then(refitK7Text)
-  .catch(() => {});
+// and the label refitted once they're in. The Font Loading API is absent on older WebViews, which
+// must not fail the rest of this module's initialization.
+if (document.fonts) {
+  Promise.all([
+    document.fonts.load('12px "Permanent Marker"'),
+    document.fonts.load('17px "Reenie Beanie"'),
+  ])
+    .then(refitK7Text)
+    .catch(() => {});
+}
 
 function setNowPlaying(state) {
   if (!state || !state.active) {
