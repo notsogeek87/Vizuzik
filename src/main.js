@@ -917,7 +917,7 @@ function syncLockScreenDurationRow() {
  *  state in updateLockScreenHint() below. */
 function lockScreenBehaviourText() {
   if (lockScreenVisualizerTrigger === "wake") {
-    return `S'affiche ${lockScreenVisualizerDuration} s quand tu touches l'écran éteint pendant la lecture (AOD Samsung en « Appuyer pour afficher »), puis rend la main à l'écran de verrouillage. La touche latérale et l'empreinte déverrouillent sans K7.`;
+    return `S'affiche ${lockScreenVisualizerDuration} s quand tu touches l'écran éteint pendant la lecture, puis rend la main à l'écran de verrouillage. Nécessite l'Always On Display activé en « Appuyer pour afficher » ; sans AOD, rien ne s'affiche.`;
   }
   return "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé.";
 }
