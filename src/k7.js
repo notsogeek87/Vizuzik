@@ -39,6 +39,7 @@ const GLIDE_RATE = 8;
 const TAPE_ROLLER_A_X = 29.6;
 const TAPE_ROLLER_B_X = 290.4;
 const TAPE_ROLLER_Y = 174;
+const TAPE_TUCK = 2;
 
 /**
  * Where a straight tape from the roller point (rollerX, TAPE_ROLLER_Y) touches the pack of this
@@ -51,7 +52,10 @@ function tangentPoint(packX, radius, rollerX, turn) {
   const toRoller = Math.atan2(dy, dx);
   const spread = Math.acos(Math.min(1, radius / Math.hypot(dx, dy)));
   const angle = toRoller + turn * spread;
-  return [packX + radius * Math.cos(angle), REEL_Y + radius * Math.sin(angle)];
+  // A little inside the pack, which is drawn over the tape: it comes out of the pack rather
+  // than stopping short at its edge with a square end.
+  const r = radius - TAPE_TUCK;
+  return [packX + r * Math.cos(angle), REEL_Y + r * Math.sin(angle)];
 }
 
 export class K7Tape {
