@@ -35,12 +35,32 @@ const JUMP = 0.02;
 // How fast a scrub glides to its new position: about half a second.
 const GLIDE_RATE = 8;
 
+// Where the tape comes up from each corner roller, to the pack it winds on.
+const TAPE_ROLLER_A_X = 29.6;
+const TAPE_ROLLER_B_X = 290.4;
+const TAPE_ROLLER_Y = 174;
+
+/**
+ * Where a straight tape from the roller point (rollerX, TAPE_ROLLER_Y) touches the pack of this
+ * radius centred on (packX, REEL_Y): the tangent point on the pack's outer side — turn is +1 for
+ * the left pack, -1 for the right one.
+ */
+function tangentPoint(packX, radius, rollerX, turn) {
+  const dx = rollerX - packX;
+  const dy = TAPE_ROLLER_Y - REEL_Y;
+  const toRoller = Math.atan2(dy, dx);
+  const spread = Math.acos(Math.min(1, radius / Math.hypot(dx, dy)));
+  const angle = toRoller + turn * spread;
+  return [packX + radius * Math.cos(angle), REEL_Y + radius * Math.sin(angle)];
+}
+
 export class K7Tape {
   constructor(root) {
     this.root = root;
     this.packsA = root.querySelectorAll(".k7__pack--a");
     this.packsB = root.querySelectorAll(".k7__pack--b");
-    this.tape = root.querySelector(".k7__tape");
+    // The same tape twice: behind the smoked shell (K7 Classique) and through the window.
+    this.tapes = root.querySelectorAll(".k7__tape");
     this.reels = [
       { el: root.querySelector(".k7__hub--a"), x: REEL_A_X, angle: 0, written: null },
       { el: root.querySelector(".k7__hub--b"), x: REEL_B_X, angle: 0, written: null },
@@ -107,14 +127,16 @@ export class K7Tape {
     const packB = PACK_EMPTY + this.shown * (PACK_FULL - PACK_EMPTY);
     for (const el of this.packsA) el.setAttribute("r", packA.toFixed(2));
     for (const el of this.packsB) el.setAttribute("r", packB.toFixed(2));
-    // Off each pack's outer edge, down round the corner guide rollers (centred at 40,175 and
-    // 280,175, radius 10) and along the bottom edge, past the pressure pad.
-    const leaveA = (REEL_A_X - packA).toFixed(2);
-    const reachB = (REEL_B_X + packB).toFixed(2);
-    this.tape.setAttribute(
-      "d",
-      `M${leaveA} ${REEL_Y} L29.6 174 Q29.6 185.4 40 185.4 L280 185.4 Q290.4 185.4 290.4 174 L${reachB} ${REEL_Y}`,
-    );
+    // Off each pack where a real tape leaves it — the tangent from the corner guide roller
+    // (centred at 40,175 and 280,175, radius 10), on the pack's outer side — down round the
+    // rollers and along the bottom edge, past the pressure pad. A small pack's tangent point is
+    // inside the window, so the tape is seen leaving it there; a big one's is under the label.
+    const [ax, ay] = tangentPoint(REEL_A_X, packA, TAPE_ROLLER_A_X, 1);
+    const [bx, by] = tangentPoint(REEL_B_X, packB, TAPE_ROLLER_B_X, -1);
+    const d =
+      `M${ax.toFixed(2)} ${ay.toFixed(2)} L29.6 174 Q29.6 185.4 40 185.4 ` +
+      `L280 185.4 Q290.4 185.4 290.4 174 L${bx.toFixed(2)} ${by.toFixed(2)}`;
+    for (const tape of this.tapes) tape.setAttribute("d", d);
   }
 }
 
