@@ -369,8 +369,12 @@ translucide et la mécanique visible au travers (bande, galets, patin). Le titre
 écrits sur l'étiquette (`setK7Text()`), ajustés comme côté web (réduits jusqu'à 75 %, puis coupés
 avec « … »), une seule fois par changement de texte plutôt qu'à chaque image.
 
-**Ce qui ne l'est pas, volontairement.** Le capot de baladeur et ses touches : cet écran garde sa
-propre rangée précédent/lecture-pause/suivant, conçue contre les touchers accidentels. Les reflets
+**Ce qui ne l'est pas, volontairement.** Le capot de baladeur et ses touches : cet écran garde ses
+propres boutons précédent/lecture-pause/suivant, conçus contre les touchers accidentels — mais
+posés sur la partie basse de la cassette (le trapèze) plutôt qu'à distance fixe du bas de l'écran,
+où ils chevauchaient le bord de la coque et ses vis (`EdgeGlowView.k7ControlCenters()`,
+`LockScreenVisualizerActivity.buildK7Controls()`). En portrait, l'illustration étant tournée d'un
+quart de tour, ils forment une colonne le long du côté gauche de l'écran, icônes à l'endroit. Les reflets
 qui suivent l'inclinaison du téléphone (un capteur de plus, allumé en continu) et le halo coloré
 derrière K7 Classique : décoratifs, sur une vue redessinée jusqu'à 30 fois par seconde.
 

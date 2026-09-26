@@ -82,6 +82,15 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      *  through a moment of "not playing", and reacting to that instantly would drop the screen
      *  back into a real sleep/AOD cycle only to relight it a moment later for the next track. */
     private static final long PAUSE_GRACE_MS = 1_500;
+    /** The K7 styles' buttons (see buildK7Controls()): their size in the cassette's own viewBox
+     *  units — room for all three across its bottom section — and the bounds that keeps them a
+     *  comfortable touch target however big or small the cassette is drawn. */
+    private static final float K7_SECONDARY_UNITS = 26f;
+    private static final float K7_PRIMARY_UNITS = 32f;
+    private static final int K7_SECONDARY_MIN_DP = 40;
+    private static final int K7_SECONDARY_MAX_DP = 56;
+    private static final int K7_PRIMARY_MIN_DP = 48;
+    private static final int K7_PRIMARY_MAX_DP = 68;
 
     private EdgeGlowView glowView;
     /** Toggled between play/pause artwork in updatePlayPauseIcon(), the only mutable thing about
@@ -205,6 +214,9 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         String standaloneStyle = LockScreenVisualizerPreference.getStyle(this);
         if (LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)) {
             root.addView(buildBaladeurOverlay(view));
+        } else if (LockScreenVisualizerPreference.STYLE_K7_ETIQUETTE.equals(standaloneStyle)
+            || LockScreenVisualizerPreference.STYLE_K7_CLASSIQUE.equals(standaloneStyle)) {
+            root.addView(buildK7Controls(view));
         } else {
             root.addView(buildTransportControls());
             // "vinyl" ("Disque") alone also gets a title/artist card, pinned near the top of the
@@ -297,6 +309,68 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         outerParams.gravity = Gravity.CENTER;
         column.setLayoutParams(outerParams);
         return column;
+    }
+
+    /**
+     * The two K7 styles only: the same three buttons, but on the cassette itself — its bottom
+     * section, where EdgeGlowView.k7ControlCenters() says it is — rather than pinned to the real
+     * screen's bottom edge, where they ran over the cassette's own edge and screws. Held upright,
+     * that section runs down the left side of the screen (the illustration is turned a quarter),
+     * so the buttons then stand in a column there; their icons stay upright either way. Sized from
+     * the cassette's own scale, within touchable bounds, and placed again whenever the view is
+     * laid out afresh (a rotation, a fold).
+     *
+     * The layer holding them is never clickable itself: a touch anywhere but on a button still
+     * reaches the glow view underneath, and its double tap to dismiss.
+     */
+    private FrameLayout buildK7Controls(EdgeGlowView glowViewRef) {
+        FrameLayout layer = new FrameLayout(this);
+        layer.setLayoutParams(new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageButton previous = circleButton(K7_SECONDARY_MAX_DP, android.R.drawable.ic_media_previous);
+        previous.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToPrevious));
+        playPauseButton = circleButton(K7_PRIMARY_MAX_DP, android.R.drawable.ic_media_pause);
+        playPauseButton.setOnClickListener(v -> withTransportControls(
+            lastIsPlaying ? MediaController.TransportControls::pause : MediaController.TransportControls::play
+        ));
+        ImageButton next = circleButton(K7_SECONDARY_MAX_DP, android.R.drawable.ic_media_next);
+        next.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToNext));
+        ImageButton[] buttons = { previous, playPauseButton, next };
+        for (ImageButton button : buttons) {
+            layer.addView(button, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            // Hidden until placed: never flashed at the layer's top-left corner first.
+            button.setVisibility(android.view.View.INVISIBLE);
+        }
+
+        float[] centers = new float[6];
+        Runnable place = () -> {
+            float scale = glowViewRef.k7ControlCenters(centers);
+            if (scale <= 0f) return;
+            float density = getResources().getDisplayMetrics().density;
+            for (int i = 0; i < buttons.length; i++) {
+                boolean primary = i == 1;
+                float units = primary ? K7_PRIMARY_UNITS : K7_SECONDARY_UNITS;
+                float minDp = primary ? K7_PRIMARY_MIN_DP : K7_SECONDARY_MIN_DP;
+                float maxDp = primary ? K7_PRIMARY_MAX_DP : K7_SECONDARY_MAX_DP;
+                int size = Math.round(Math.max(minDp * density, Math.min(maxDp * density, units * scale)));
+                ImageButton button = buttons[i];
+                ViewGroup.LayoutParams params = button.getLayoutParams();
+                if (params.width != size) {
+                    params.width = size;
+                    params.height = size;
+                    button.setLayoutParams(params);
+                    int padding = Math.round(size * 0.28f);
+                    button.setPadding(padding, padding, padding, padding);
+                }
+                button.setX(centers[i * 2] - size * 0.5f);
+                button.setY(centers[i * 2 + 1] - size * 0.5f);
+                button.setVisibility(android.view.View.VISIBLE);
+            }
+        };
+        glowViewRef.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> v.post(place));
+        return layer;
     }
 
     /**

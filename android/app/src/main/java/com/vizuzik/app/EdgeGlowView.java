@@ -253,6 +253,9 @@ final class EdgeGlowView extends View {
     private static final float K7_TEXT_MIN_SCALE = 0.75f;
     private static final float K7_TEXT_MAX_WIDTH_ETIQUETTE = 252f;
     private static final float K7_TEXT_MAX_WIDTH_CLASSIQUE = 238f;
+    // Half way down the cassette's bottom section (the trapezoid, y 150 to 192): where the
+    // transport buttons sit in the K7 styles — see k7ControlCenters().
+    private static final float K7_CONTROLS_Y = 171f;
     // K7 Classique's corner guide rollers and the two small guides beside them (see drawK7Internals()).
     private static final float[] K7_ROLLER_X = { 40f, 280f };
     private static final float[] K7_GUIDE_X = { 66f, 254f };
@@ -447,6 +450,7 @@ final class EdgeGlowView extends View {
     private Shader k7MetalShader;
     private RadialGradient k7TapeShader;
     private final Matrix k7TapeMatrix = new Matrix();
+    private final Matrix k7ViewMatrix = new Matrix();
     private ColorMatrixColorFilter k7ArtColorFilter;
     // The last artwork handed over for "vinyl" — see setAlbumArt(). Read from the main thread
     // only (set from DeezerMediaBridge's callback, which also runs on the main thread), so a
@@ -2568,19 +2572,7 @@ final class EdgeGlowView extends View {
      * long as the lock screen is up.
      */
     private void drawK7(Canvas canvas, boolean classique) {
-        if (displayWidth <= 0 || displayHeight <= 0) refreshDisplaySize();
-        float screenW = displayWidth > 0 ? displayWidth : getWidth();
-        float screenH = displayHeight > 0 ? displayHeight : getHeight();
-        if (screenW <= 0 || screenH <= 0) return;
-        refreshOrigin();
-        float cx = screenW * 0.5f - viewLocation[0];
-        float cy = screenH * 0.5f - viewLocation[1];
-
-        boolean rotate = screenH > screenW;
-        float boxW = rotate ? screenH : screenW;
-        float boxH = rotate ? screenW : screenH;
-        boxW = Math.min(boxW, boxH * CASSETTE_MAX_BOX_ASPECT);
-        float scale = Math.max(boxW / CASSETTE_VIEWBOX_WIDTH, boxH / CASSETTE_VIEWBOX_HEIGHT);
+        if (k7Scale(k7ViewMatrix) <= 0f) return;
 
         buildK7Shapes();
         loadK7Fonts();
@@ -2596,10 +2588,7 @@ final class EdgeGlowView extends View {
         float packB = K7_PACK_EMPTY + shown * (K7_PACK_FULL - K7_PACK_EMPTY);
 
         canvas.save();
-        canvas.translate(cx, cy);
-        if (rotate) canvas.rotate(90);
-        canvas.scale(scale, scale);
-        canvas.translate(-CASSETTE_VIEWBOX_WIDTH * 0.5f, -CASSETTE_VIEWBOX_HEIGHT * 0.5f);
+        canvas.concat(k7ViewMatrix);
 
         // The shell, its top-left light and the moulded bezel.
         p.setStyle(Paint.Style.FILL);
@@ -2692,6 +2681,55 @@ final class EdgeGlowView extends View {
         canvas.restore();
         p.setShader(null);
         p.setColorFilter(null);
+    }
+
+    /**
+     * Where the K7 illustration sits on this view: the viewBox-to-view matrix drawK7() draws
+     * through — drawCassette()'s own box and quarter turn — written into out. Returns how many
+     * pixels one viewBox unit is, or 0 if the screen's size isn't known yet.
+     */
+    private float k7Scale(Matrix out) {
+        if (displayWidth <= 0 || displayHeight <= 0) refreshDisplaySize();
+        float screenW = displayWidth > 0 ? displayWidth : getWidth();
+        float screenH = displayHeight > 0 ? displayHeight : getHeight();
+        if (screenW <= 0 || screenH <= 0) return 0f;
+        refreshOrigin();
+        float cx = screenW * 0.5f - viewLocation[0];
+        float cy = screenH * 0.5f - viewLocation[1];
+
+        boolean rotate = screenH > screenW;
+        float boxW = rotate ? screenH : screenW;
+        float boxH = rotate ? screenW : screenH;
+        boxW = Math.min(boxW, boxH * CASSETTE_MAX_BOX_ASPECT);
+        float scale = Math.max(boxW / CASSETTE_VIEWBOX_WIDTH, boxH / CASSETTE_VIEWBOX_HEIGHT);
+
+        out.setTranslate(-CASSETTE_VIEWBOX_WIDTH * 0.5f, -CASSETTE_VIEWBOX_HEIGHT * 0.5f);
+        out.postScale(scale, scale);
+        if (rotate) out.postRotate(90);
+        out.postTranslate(cx, cy);
+        return scale;
+    }
+
+    /**
+     * Where LockScreenVisualizerActivity puts the transport buttons in the two K7 styles: on the
+     * cassette's own bottom section (the trapezoid), rather than at a fixed distance from the
+     * screen's edge — the three centres, previous/play-pause/next, as view coordinates in out
+     * (x, y pairs). Held upright, the illustration's quarter turn puts that section down the left
+     * side of the screen, so the three then stand in a column there. Returns the pixels per
+     * viewBox unit the buttons are sized from, or 0 if the screen's size isn't known yet.
+     */
+    float k7ControlCenters(float[] out) {
+        Matrix matrix = new Matrix();
+        float scale = k7Scale(matrix);
+        if (scale <= 0f) return 0f;
+        out[0] = 114f;
+        out[1] = K7_CONTROLS_Y;
+        out[2] = 160f;
+        out[3] = K7_CONTROLS_Y;
+        out[4] = 206f;
+        out[5] = K7_CONTROLS_Y;
+        matrix.mapPoints(out);
+        return scale;
     }
 
     /** K7 Classique only: the mechanism seen through the smoked shell — both packs (big enough,
