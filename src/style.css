@@ -603,6 +603,14 @@ body[data-mode^="k7-"] .scrim {
   opacity: 0;
 }
 
+/* The top bar (capture badge, mode toggle) comes and goes with the lid, like cassette mode's
+   controls with its tap (see .cassette-controls-hidden further down). */
+body[data-mode^="k7-"].cassette-controls-hidden .topbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
 
 .k7__lid-plate {
   fill: url(#k7-lid-metal);
@@ -649,8 +657,12 @@ body[data-mode^="k7-"] .scrim {
    the whole layer (the separate translate property, so portrait's rotation is left alone) is
    done by the compositor without repainting anything. */
 .k7__lid-layer {
-  will-change: translate;
   transition: translate 0.55s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/* Their own compositing layers only while a K7 mode is on screen, not for the whole session. */
+body[data-mode^="k7-"] .k7__lid-layer {
+  will-change: translate;
 }
 
 body.cassette-controls-hidden .k7__lid-layer {
@@ -1937,15 +1949,11 @@ body.is-changing .artist {
 /* Cassette mode has no stage to tap for the usual tap-to-cycle gesture, so a tap there instead
    tucks the transport buttons, the scrub bar, the title/artist card and the top bar (capture
    badge + mode toggle) away — a fully unobstructed view of the cassette, restored by the next
-   tap. Scoped to cassette mode so the class can't linger visibly into another mode. The K7 modes
-   share the same gesture and the same class (see isCassetteMode() in main.js). */
+   tap. Scoped to cassette mode so the class can't linger visibly into another mode. */
 body[data-mode="cassette"].cassette-controls-hidden .controls,
 body[data-mode="cassette"].cassette-controls-hidden .progress,
 body[data-mode="cassette"].cassette-controls-hidden .meta,
-body[data-mode="cassette"].cassette-controls-hidden .topbar,
-body[data-mode^="k7-"].cassette-controls-hidden .controls,
-body[data-mode^="k7-"].cassette-controls-hidden .progress,
-body[data-mode^="k7-"].cassette-controls-hidden .topbar {
+body[data-mode="cassette"].cassette-controls-hidden .topbar {
   opacity: 0;
   pointer-events: none;
 }
@@ -2055,8 +2063,7 @@ body[data-mode="cassette"] .meta {
   transition: opacity 0.3s ease;
 }
 
-body[data-mode="cassette"] .progress,
-body[data-mode^="k7-"] .progress {
+body[data-mode="cassette"] .progress {
   background: rgba(10, 10, 20, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.08);
   -webkit-backdrop-filter: blur(14px);
@@ -2074,8 +2081,7 @@ body[data-mode^="k7-"] .progress {
    their one fixed size, and cassette mode shouldn't be the only one where they shrink depending
    on orientation. */
 @media (orientation: landscape) {
-  body[data-mode="cassette"] .player,
-  body[data-mode^="k7-"] .player {
+  body[data-mode="cassette"] .player {
     gap: 0.85rem;
     padding:
       calc(env(safe-area-inset-top, 0px) + 14px)
@@ -2096,8 +2102,7 @@ body[data-mode^="k7-"] .progress {
     padding: 8px 20px;
   }
 
-  body[data-mode="cassette"] .progress,
-  body[data-mode^="k7-"] .progress {
+  body[data-mode="cassette"] .progress {
     width: min(70vw, 460px);
     padding: 12px 16px 8px;
   }

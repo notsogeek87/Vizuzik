@@ -191,11 +191,16 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   // mode is the one consumer today (see .cassette__coil in style.css), tying each reel's own
   // wound-tape amount to it — but any mode could read it, the same way any of them can read
   // --beat/--level/--bass.
-  const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, progress.positionNow() / progress.duration)) : 0;
+  const position = progress.positionNow();
+  const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, position / progress.duration)) : 0;
   writeVar("--progress", "progress", playedRatio);
-  // The K7 modes' tape packs follow the same number, unquantised, and smooth over its jumps.
-  k7Tape.update(playedRatio, isPlaying);
-  k7Lid.update(progress.positionNow(), playedRatio);
+  // The K7 modes' reels, tape and lid follow the same number, unquantised — only while one of
+  // them is on screen: the illustration stays in the page, invisible, in every other mode, and
+  // turning its reels there would repaint it for nothing on every frame.
+  if (isK7Mode(displayMode)) {
+    k7Tape.update(playedRatio, isPlaying);
+    k7Lid.update(position, playedRatio);
+  }
   syncPaletteVars();
   progress.render();
 };
@@ -1493,29 +1498,34 @@ function applyDisplayMode(announce) {
   // (and the controls on it) out of the way until a tap brings it down.
   if (displayMode !== appliedMode) {
     appliedMode = displayMode;
-    document.body.classList.toggle("cassette-controls-hidden", displayMode.startsWith("k7-"));
+    document.body.classList.toggle("cassette-controls-hidden", isK7Mode(displayMode));
     syncK7Lid();
+    // Written while the mode was hidden, the label text couldn't be measured (see fitSvgText()).
+    if (isK7Mode(displayMode)) refitK7Text();
   }
-  // Written while the mode was hidden, the label text couldn't be measured (see fitSvgText()).
-  if (displayMode.startsWith("k7-")) refitK7Text();
+}
+
+function isK7Mode(mode) {
+  return mode.startsWith("k7-");
 }
 
 // Cassette mode and the two K7 modes (see #k7 in index.html) share the same stage: a full-screen
 // illustration with no disc to tap, where a tap tucks the controls away instead.
 function isCassetteMode(mode) {
-  return mode === "cassette" || mode.startsWith("k7-");
+  return mode === "cassette" || isK7Mode(mode);
 }
 
 // In the K7 modes the controls are the Walkman lid's: shut over the cassette while they show.
 function k7LidShut() {
-  return displayMode.startsWith("k7-") && !document.body.classList.contains("cassette-controls-hidden");
+  return isK7Mode(displayMode) && !document.body.classList.contains("cassette-controls-hidden");
 }
 
+// The lid only listens to the motion sensors while it is actually shut on screen.
 function syncK7Lid() {
-  k7Lid.setActive(k7LidShut());
+  k7Lid.setActive(k7LidShut() && !els.player.hidden);
 }
 
-const K7_LID_KEY_BUTTONS = { previous: () => els.previous, "play-pause": () => els.playPause, next: () => els.next };
+const K7_LID_KEY_BUTTONS = { previous: els.previous, "play-pause": els.playPause, next: els.next };
 
 // No display mode forces the phone into a particular orientation — cassette mode used to lock
 // landscape the way a video player forces landscape for fullscreen, but that fought the phone's
@@ -1829,7 +1839,7 @@ function endGesture(event, cancelled) {
   // look at from across the room, and the toast names what you landed on.
   if (isTap && g.lidKey) {
     // The same buttons the other modes show, so the same behaviour.
-    K7_LID_KEY_BUTTONS[g.lidKey]().click();
+    K7_LID_KEY_BUTTONS[g.lidKey].click();
   } else if (isTap && g.onStage) {
     cycleDisplayMode();
   } else if (isTap && isCassetteMode(displayMode)) {
@@ -1858,6 +1868,7 @@ function showScreen(screen) {
   els.modeToggle.hidden = screen !== "player";
   els.empty.hidden = screen !== "empty";
   els.permission.hidden = screen !== "permission";
+  syncK7Lid();
 
   if (screen === "player") {
     visualizer.start();
@@ -1962,12 +1973,20 @@ function fitSvgText(el, text, maxWidth) {
   const scale = Math.max(K7_TEXT_MIN_SCALE, maxWidth / width);
   el.style.fontSize = `${baseSize * scale}px`;
   if (el.getComputedTextLength() <= maxWidth) return;
-  let cut = text.length;
-  while (cut > 1) {
-    cut--;
-    el.textContent = `${text.slice(0, cut).trimEnd()}…`;
-    if (el.getComputedTextLength() <= maxWidth) return;
+  // The longest prefix that still fits with its ellipsis, found by halving: each try is a
+  // layout, so a few of them rather than one per character.
+  const cutAt = (length) => {
+    el.textContent = `${text.slice(0, length).trimEnd()}…`;
+    return el.getComputedTextLength() <= maxWidth;
+  };
+  let fits = 1;
+  let tooLong = text.length;
+  while (tooLong - fits > 1) {
+    const middle = (fits + tooLong) >> 1;
+    if (cutAt(middle)) fits = middle;
+    else tooLong = middle;
   }
+  cutAt(fits);
 }
 
 function setK7Text(title, artist) {
@@ -2013,7 +2032,7 @@ function setNowPlaying(state) {
     setScrollingText(els.title, title);
     setScrollingText(els.artist, artist);
     setK7Text(title, artist);
-    k7Tape.trackChanged();
+    if (isK7Mode(displayMode)) k7Tape.trackChanged();
     playTrackChangeAnimation();
     // A new song has to visibly land. This and the handful of pulses below are the only
     // impulses the screen gets when the audio isn't being captured — all of them tied to
