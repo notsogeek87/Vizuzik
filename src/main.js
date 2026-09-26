@@ -849,7 +849,7 @@ function setLockScreenVisualizerStyle(style) {
 }
 
 // When the lock screen shows up — same storage pattern as the style just above, mirrored into
-// LockScreenVisualizerPreference natively. "wake": only when the user wakes the screen
+// LockScreenVisualizerPreference natively. "wake": only when the user taps the sleeping screen
 // themselves (a sleeping screen hands no touch to any app, so "the screen came back on" is the
 // closest thing), for LOCKSCREEN_VISUALIZER_DURATION seconds. "continuous": the original
 // behaviour, relit as soon as the screen goes off and kept up while the music plays.
@@ -917,7 +917,7 @@ function syncLockScreenDurationRow() {
  *  state in updateLockScreenHint() below. */
 function lockScreenBehaviourText() {
   if (lockScreenVisualizerTrigger === "wake") {
-    return `S'affiche ${lockScreenVisualizerDuration} s quand tu réveilles l'écran pendant la lecture (double tap, tap sur l'AOD ou bouton latéral), puis rend la main à l'écran de verrouillage.`;
+    return `S'affiche ${lockScreenVisualizerDuration} s quand tu touches l'écran éteint pendant la lecture (AOD Samsung en « Appuyer pour afficher »), puis rend la main à l'écran de verrouillage. La touche latérale et l'empreinte déverrouillent sans K7.`;
   }
   return "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé.";
 }

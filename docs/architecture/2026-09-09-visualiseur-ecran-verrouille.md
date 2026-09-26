@@ -482,6 +482,15 @@ puis fermeture 2,3 s après `onStart`, alors que l'utilisateur voit le visualise
 (`K7#n`), `onResume`/`onPause`, les changements de focus, `onDestroy`, l'état du verrou à
 `onStart`/`onStop` (`isKeyguardLocked()`/`isDeviceLocked()`) et `USER_PRESENT`.
 
+Le relevé suivant a levé la contradiction : le visualiseur du test tient bien ses 10 s ; les
+fermetures « à 2 s » étaient le réveil suivant, **touche latérale pour déverrouiller** — `éteint →
+allumé` sans doze, `SCREEN_ON` relançait le visualiseur, puis l'authentification par empreinte le
+faisait passer en arrière-plan 1,4 s plus tard. Le visualiseur gênait donc le déverrouillage.
+Décision : en mode « Au réveil » (renommé « Au toucher de l'écran éteint (AOD) »), `SCREEN_ON` ne
+lance plus rien ; seul le toucher qui fait apparaître l'AOD (`éteint → doze`) le fait. La touche
+latérale et l'empreinte déverrouillent directement. Contrepartie : sans AOD en « Appuyer pour
+afficher », ce mode ne se déclenche jamais — le texte d'aide du panneau le dit.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.

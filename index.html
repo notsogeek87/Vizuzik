@@ -807,17 +807,19 @@
           </select>
         </label>
 
-        <!-- When that screen shows up. A sleeping screen hands no touch to any app, so "on touch"
-             really means "when the user wakes the screen" (double tap to wake, a tap on the real
-             AOD, the side button) — see LockScreenVisualizerController.maybeShowOnWake(). Stored
-             in LockScreenVisualizerPreference, like the style above. -->
+        <!-- When that screen shows up. A sleeping screen hands no touch to any app; what one can
+             see is the display entering the AOD's low-power "doze" state, which a tap on the
+             sleeping screen causes with Samsung's AOD set to "Appuyer pour afficher" — see
+             LockScreenVisualizerController.maybeShowOnWake(). A full wake (side button,
+             fingerprint) shows nothing, so unlocking stays unobstructed. Stored in
+             LockScreenVisualizerPreference, like the style above. -->
         <label class="edge-settings__row">
           <span>
             Déclenchement
-            <small>Au réveil : l'écran reste éteint jusqu'à ce que tu le réveilles. En continu : l'écran est rallumé dès qu'il s'éteint.</small>
+            <small>Au toucher : l'écran reste éteint jusqu'à ce que tu le touches (AOD Samsung réglé sur « Appuyer pour afficher ») ; la touche latérale et l'empreinte déverrouillent sans K7. En continu : l'écran est rallumé dès qu'il s'éteint.</small>
           </span>
           <select id="edge-lockscreen-trigger">
-            <option value="wake">Au réveil de l'écran</option>
+            <option value="wake">Au toucher de l'écran éteint (AOD)</option>
             <option value="continuous">Automatique, en continu</option>
           </select>
         </label>

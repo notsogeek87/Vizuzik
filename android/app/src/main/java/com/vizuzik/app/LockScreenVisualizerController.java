@@ -149,21 +149,19 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            // The trigger setting decides which of the two broadcasts matters: "continuous" reacts
-            // to the screen going off (relight it at once), "wake" to the user waking it
-            // themselves — a sleeping screen delivers no touch to any app, so a screen coming back
-            // on (double tap to wake, a tap on the real AOD, the side button) is the closest an
-            // app can get to "the user touched the screen". Each mode ignores the other's
-            // broadcast, which also keeps "continuous" from reacting to the SCREEN_ON its own
-            // setTurnScreenOn() causes.
+            // Only "continuous" acts on a broadcast here (relight the screen as soon as it goes
+            // off). "wake" is driven by the display listener alone — a tap on the sleeping screen
+            // bringing up the AOD (OFF → DOZE). A full wake (ACTION_SCREEN_ON: side button,
+            // fingerprint, double tap) no longer shows anything: field report, that is how the
+            // user wakes the phone to unlock it, and a visualizer popping up there stood in the
+            // way of the unlock. Still journalled, never acted on.
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 recordEvent("diffusion SCREEN_OFF");
                 screenOffAtMs = SystemClock.elapsedRealtime();
                 maybeShow();
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
-                recordEvent("diffusion SCREEN_ON");
-                maybeShowOnWake("SCREEN_ON");
+                recordEvent("diffusion SCREEN_ON (réveil complet, pas de K7)");
             } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
                 recordEvent("diffusion USER_PRESENT (déverrouillé)");
             }
@@ -273,7 +271,7 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     void maybeShow() {
         if (appContext == null) return;
         if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
-        // "wake" mode only ever shows on ACTION_SCREEN_ON (see maybeShowOnWake()) — neither the
+        // "wake" mode only ever shows on a tap bringing up the AOD (see maybeShowOnWake()) — neither the
         // screen going off nor a track change on an idle lock screen may bring it back up.
         if (LockScreenVisualizerPreference.isWakeTrigger(appContext)) return;
         // Vizuzik's own player already shows everything this would; showing our fake-AOD screen
@@ -290,8 +288,8 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     }
 
     /**
-     * "wake" mode's way in: the user has just woken the screen — fully (ACTION_SCREEN_ON) or only
-     * into the AOD (see displayListener) — onto the lock screen while music plays — show the visualizer over it, for the time
+     * "wake" mode's only way in: a tap on the sleeping screen has just brought up the AOD (see
+     * displayListener) over the lock screen while music plays — show the visualizer, for the time
      * LockScreenVisualizerActivity reads from LockScreenVisualizerPreference.getDurationSec().
      * isKeyguardLocked() rather than isInteractive(): the screen is on by definition here; what
      * matters is that it woke onto the lock screen, not onto an unlocked phone.
