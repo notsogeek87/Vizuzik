@@ -77,6 +77,7 @@ const progress = new PlaybackProgress(
 | `setTrack({ position, duration, isPlaying })` | Ré-ancre l'horloge locale. Ignoré pendant un glisser en cours : la position pointée par le doigt est plus récente que celle qui revient du natif. |
 | `positionNow()` | Position courante en ms, extrapolée depuis l'ancre. |
 | `render(force)` | Met à jour le DOM. S'auto-limite à une mise à jour toutes les 120 ms — une barre qui avance d'un pixel par seconde n'a rien à gagner à 60 images par seconde. |
+| `scrubTo(ratio)` / `commitScrub()` / `cancelScrub()` | Un glisser piloté d'ailleurs que la barre — la réglette du capot des modes K7 (voir `K7Lid` dans `src/k7.js`) : même état qu'un glisser sur la barre, `positionNow()` le suit jusqu'à la validation, qui ré-ancre et appelle `onSeek`. `scrubTo()` renvoie `false` s'il n'y a rien à parcourir (durée inconnue). |
 
 L'horloge tourne localement entre deux ancres ; `src/main.js` la ré-ancre toutes les 5 s via
 `getPosition()`, ce qui suffit largement à ce que la dérive ne devienne jamais visible.

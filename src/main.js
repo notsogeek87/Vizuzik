@@ -1,5 +1,6 @@
 import { registerPlugin } from "@capacitor/core";
 import { Visualizer, VISUAL_STYLES } from "./visualizer.js";
+import { K7Lid, K7Tape } from "./k7.js";
 import { extractPalette } from "./palette.js";
 import { PlaybackProgress } from "./progress.js";
 
@@ -15,6 +16,12 @@ const els = {
   disc: document.getElementById("disc"),
   cover: document.getElementById("cover"),
   cassetteArt: document.getElementById("cassette-art"),
+  k7ArtLabel: document.getElementById("k7-art-label"),
+  k7ArtThumb: document.getElementById("k7-art-thumb"),
+  k7TitleEtiquette: document.getElementById("k7-title-etiquette"),
+  k7ArtistEtiquette: document.getElementById("k7-artist-etiquette"),
+  k7TitleClassique: document.getElementById("k7-title-classique"),
+  k7ArtistClassique: document.getElementById("k7-artist-classique"),
   captureStatus: document.getElementById("capture-status"),
   overlayStatus: document.getElementById("overlay-status"),
   overlaySheet: document.getElementById("overlay-sheet"),
@@ -91,6 +98,8 @@ const MODE_LABELS = {
   nebula: "Nébuleuse",
   cocoon: "Cocon",
   cassette: "Cassette",
+  "k7-etiquette": "K7 Étiquette",
+  "k7-classique": "K7 Classique",
   baladeur: "Baladeur",
 };
 
@@ -109,6 +118,8 @@ const storedMode = localStorage.getItem(DISPLAY_MODE_KEY);
 let displayMode = VISUAL_STYLES.includes(storedMode) ? storedMode : "cover";
 
 const visualizer = new Visualizer(els.fx);
+const k7Tape = new K7Tape(document.getElementById("k7"));
+const k7Lid = new K7Lid(document.getElementById("k7"));
 visualizer.setFocusElement(els.disc);
 
 const progress = new PlaybackProgress(
@@ -180,8 +191,16 @@ visualizer.onFrame = ({ beat, level, bass }) => {
   // mode is the one consumer today (see .cassette__coil in style.css), tying each reel's own
   // wound-tape amount to it — but any mode could read it, the same way any of them can read
   // --beat/--level/--bass.
-  const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, progress.positionNow() / progress.duration)) : 0;
+  const position = progress.positionNow();
+  const playedRatio = progress.duration > 0 ? Math.min(1, Math.max(0, position / progress.duration)) : 0;
   writeVar("--progress", "progress", playedRatio);
+  // The K7 modes' reels, tape and lid follow the same number, unquantised — only while one of
+  // them is on screen: the illustration stays in the page, invisible, in every other mode, and
+  // turning its reels there would repaint it for nothing on every frame.
+  if (isK7Mode(displayMode)) {
+    k7Tape.update(playedRatio, isPlaying);
+    k7Lid.update(position, playedRatio);
+  }
   syncPaletteVars();
   progress.render();
 };
@@ -1461,6 +1480,8 @@ if (els.edgeDiagnostics) {
 
 let toastTimer = null;
 
+let appliedMode = null;
+
 function applyDisplayMode(announce) {
   document.body.dataset.mode = displayMode;
   visualizer.setStyle(displayMode);
@@ -1471,9 +1492,53 @@ function applyDisplayMode(announce) {
   scheduleFocusRefresh();
   if (announce) showToast(MODE_LABELS[displayMode]);
   syncOrientationLock();
-  // Leaving cassette mode with its buttons tapped away shouldn't carry that into the next
-  // mode, or the next time cassette mode itself is picked again.
-  if (displayMode !== "cassette") document.body.classList.remove("cassette-controls-hidden");
+  // Only on an actual change of mode (this also runs on every now-playing update): cassette
+  // mode, like every other, opens on its controls, and leaving it with them tapped away shouldn't
+  // carry that into the next mode; the K7 modes open on the bare cassette, their Walkman lid
+  // (and the controls on it) out of the way until a tap brings it down.
+  if (displayMode !== appliedMode) {
+    appliedMode = displayMode;
+    document.body.classList.toggle("cassette-controls-hidden", isK7Mode(displayMode));
+    syncK7Lid();
+    // Written while the mode was hidden, the label text couldn't be measured (see fitSvgText()).
+    if (isK7Mode(displayMode)) refitK7Text();
+  }
+}
+
+function isK7Mode(mode) {
+  return mode.startsWith("k7-");
+}
+
+// Cassette mode and the two K7 modes (see #k7 in index.html) share the same stage: a full-screen
+// illustration with no disc to tap, where a tap tucks the controls away instead.
+function isCassetteMode(mode) {
+  return mode === "cassette" || isK7Mode(mode);
+}
+
+// In the K7 modes the controls are the Walkman lid's: shut over the cassette while they show.
+function k7LidShut() {
+  return isK7Mode(displayMode) && !document.body.classList.contains("cassette-controls-hidden");
+}
+
+// The lid only listens to the motion sensors while it is actually shut on screen.
+function syncK7Lid() {
+  k7Lid.setActive(k7LidShut() && !els.player.hidden);
+}
+
+const K7_LID_KEY_BUTTONS = { previous: els.previous, "play-pause": els.playPause, next: els.next };
+
+// The lid only slides when a tap opens or shuts it: its transition is switched on for that one
+// move (see .k7-lid-sliding in style.css), then off again. Tucked away, it sits off-screen
+// downwards in landscape and to the left in portrait, so turning the phone moves it too, and a
+// transition left on all the time carried it across the screen on every rotation. Waiting for
+// the rotation's own events to switch it off wasn't enough: the new layout can be worked out
+// before they arrive.
+const K7_LID_SLIDE_MS = 700;
+let k7LidSlideTimer = null;
+function slideK7Lid() {
+  document.body.classList.add("k7-lid-sliding");
+  clearTimeout(k7LidSlideTimer);
+  k7LidSlideTimer = setTimeout(() => document.body.classList.remove("k7-lid-sliding"), K7_LID_SLIDE_MS);
 }
 
 // No display mode forces the phone into a particular orientation — cassette mode used to lock
@@ -1716,6 +1781,9 @@ function ownsItsPointer(target) {
 
 els.player.addEventListener("pointerdown", (event) => {
   if (gesture || ownsItsPointer(event.target)) return;
+  // The K7 lid's keys and ruler are drawn in the illustration under .player, so what a touch
+  // lands on there is worked out from its position (see K7Lid.hit()).
+  const onLid = k7LidShut() ? k7Lid.hit(event.clientX, event.clientY) : null;
   gesture = {
     id: event.pointerId,
     x0: event.clientX,
@@ -1725,13 +1793,22 @@ els.player.addEventListener("pointerdown", (event) => {
     dy: 0,
     dragging: false,
     onStage: !!(event.target.closest && event.target.closest(".stage")),
+    lidKey: onLid && onLid.key,
+    onRuler: !!(onLid && onLid.ruler != null),
+    scrubbing: !!(onLid && onLid.ruler != null && progress.scrubTo(onLid.ruler)),
   };
+  if (gesture.lidKey) k7Lid.press(gesture.lidKey, true);
   els.player.setPointerCapture(event.pointerId);
   document.body.classList.remove("is-swipe-releasing");
 });
 
 els.player.addEventListener("pointermove", (event) => {
   if (!gesture || gesture.id !== event.pointerId) return;
+  if (gesture.scrubbing) {
+    const ratio = k7Lid.rulerRatio(event.clientX, event.clientY);
+    if (ratio != null) progress.scrubTo(ratio);
+    return;
+  }
   gesture.dx = event.clientX - gesture.x0;
   gesture.dy = event.clientY - gesture.y0;
   if (!gesture.dragging && Math.abs(gesture.dx) > TAP_SLOP_PX && Math.abs(gesture.dx) > Math.abs(gesture.dy)) {
@@ -1751,6 +1828,12 @@ function endGesture(event, cancelled) {
   const g = gesture;
   gesture = null;
   if (els.player.hasPointerCapture(event.pointerId)) els.player.releasePointerCapture(event.pointerId);
+  if (g.lidKey) k7Lid.press(g.lidKey, false);
+  if (g.scrubbing) {
+    if (cancelled) progress.cancelScrub();
+    else progress.commitScrub();
+    return;
+  }
   document.body.classList.remove("is-swiping");
   document.body.classList.add("is-swipe-releasing");
 
@@ -1770,13 +1853,21 @@ function endGesture(event, cancelled) {
     !cancelled && !g.dragging && performance.now() - g.t0 < TAP_MAX_MS && Math.abs(g.dy) < TAP_SLOP_PX;
   // A tap on the artwork still cycles visualizations — the obvious gesture on a screen you
   // look at from across the room, and the toast names what you landed on.
-  if (isTap && g.onStage) {
+  if (isTap && g.lidKey) {
+    // The same buttons the other modes show, so the same behaviour.
+    K7_LID_KEY_BUTTONS[g.lidKey].click();
+  } else if (g.onRuler) {
+    // The ruler, before the track can be seeked (no duration yet): nothing to do, and not a tap
+    // on the cassette either — it would open the lid under the finger.
+  } else if (isTap && g.onStage) {
     cycleDisplayMode();
-  } else if (isTap && displayMode === "cassette") {
+  } else if (isTap && isCassetteMode(displayMode)) {
     // Cassette mode has no stage to tap (the artwork fills the screen): tapping it instead
     // toggles the transport buttons, scrub bar and title/artist card out of the way, for a
     // fully unobstructed view of the cassette (see .cassette-controls-hidden in style.css).
+    if (isK7Mode(displayMode)) slideK7Lid();
     document.body.classList.toggle("cassette-controls-hidden");
+    syncK7Lid();
   }
 }
 
@@ -1797,6 +1888,7 @@ function showScreen(screen) {
   els.modeToggle.hidden = screen !== "player";
   els.empty.hidden = screen !== "empty";
   els.permission.hidden = screen !== "permission";
+  syncK7Lid();
 
   if (screen === "player") {
     visualizer.start();
@@ -1837,6 +1929,8 @@ function setArtwork(art) {
   // Plain attribute, not backgroundImage: it's an <image> inside the cassette's inline SVG,
   // set as though it had been printed on the label — see .cassette__art-image in style.css.
   els.cassetteArt.setAttribute("href", art || "");
+  els.k7ArtLabel.setAttribute("href", art || "");
+  els.k7ArtThumb.setAttribute("href", art || "");
 
   extractPalette(art).then((palette) => {
     visualizer.setPalette(palette);
@@ -1877,6 +1971,72 @@ function setScrollingText(span, text) {
   });
 }
 
+/* ------------------------------------------------------------------ K7 label text */
+
+// The K7 modes write the title/artist on the cassette's paper strip, in SVG text. SVG text
+// neither wraps nor ellipsises on its own, so each line is fitted by hand to the strip's width:
+// first shrunk a little, then cut with an ellipsis if it still doesn't fit. Étiquette's text
+// starts further left (no side letter there), so it gets a little more room.
+const K7_TEXT_MAX_WIDTH_ETIQUETTE = 252;
+const K7_TEXT_MAX_WIDTH_CLASSIQUE = 238;
+const K7_TEXT_MIN_SCALE = 0.75;
+let k7Text = { title: "", artist: "" };
+
+function fitSvgText(el, text, maxWidth) {
+  el.style.fontSize = "";
+  el.textContent = text;
+  // Nothing to measure while the illustration isn't rendered (another mode is on screen, or
+  // the page is hidden): refitK7Text() runs again once a K7 mode shows.
+  const width = el.getComputedTextLength();
+  if (!width || width <= maxWidth) return;
+  const baseSize = parseFloat(getComputedStyle(el).fontSize);
+  const scale = Math.max(K7_TEXT_MIN_SCALE, maxWidth / width);
+  el.style.fontSize = `${baseSize * scale}px`;
+  if (el.getComputedTextLength() <= maxWidth) return;
+  // The longest prefix that still fits with its ellipsis, found by halving: each try is a
+  // layout, so a few of them rather than one per character.
+  const cutAt = (length) => {
+    el.textContent = `${text.slice(0, length).trimEnd()}…`;
+    return el.getComputedTextLength() <= maxWidth;
+  };
+  let fits = 1;
+  let tooLong = text.length;
+  while (tooLong - fits > 1) {
+    const middle = (fits + tooLong) >> 1;
+    if (cutAt(middle)) fits = middle;
+    else tooLong = middle;
+  }
+  cutAt(fits);
+}
+
+function setK7Text(title, artist) {
+  k7Text = { title, artist };
+  refitK7Text();
+}
+
+function refitK7Text() {
+  for (const [titleEl, artistEl, maxWidth] of [
+    [els.k7TitleEtiquette, els.k7ArtistEtiquette, K7_TEXT_MAX_WIDTH_ETIQUETTE],
+    [els.k7TitleClassique, els.k7ArtistClassique, K7_TEXT_MAX_WIDTH_CLASSIQUE],
+  ]) {
+    fitSvgText(titleEl, k7Text.title, maxWidth);
+    fitSvgText(artistEl, k7Text.artist, maxWidth);
+  }
+}
+
+// Text measured before its handwriting font has arrived would be fitted to the fallback's widths.
+// A @font-face only starts loading once something visible uses it, so both are asked for up front
+// and the label refitted once they're in. The Font Loading API is absent on older WebViews, which
+// must not fail the rest of this module's initialization.
+if (document.fonts) {
+  Promise.all([
+    document.fonts.load('12px "Permanent Marker"'),
+    document.fonts.load('17px "Reenie Beanie"'),
+  ])
+    .then(refitK7Text)
+    .catch(() => {});
+}
+
 function setNowPlaying(state) {
   if (!state || !state.active) {
     showScreen("empty");
@@ -1894,6 +2054,8 @@ function setNowPlaying(state) {
     currentTrackKey = trackKey;
     setScrollingText(els.title, title);
     setScrollingText(els.artist, artist);
+    setK7Text(title, artist);
+    if (isK7Mode(displayMode)) k7Tape.trackChanged();
     playTrackChangeAnimation();
     // A new song has to visibly land. This and the handful of pulses below are the only
     // impulses the screen gets when the audio isn't being captured — all of them tied to

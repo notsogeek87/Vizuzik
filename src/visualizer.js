@@ -28,7 +28,7 @@
 // Everything is drawn additively and then bloomed by blitting the frame back over itself
 // through a blur, which is what gives the neon "lit from within" look at almost no cost.
 
-export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette", "baladeur"];
+export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette", "k7-etiquette", "k7-classique", "baladeur"];
 
 // Matches TrackedSessionAudioSource's BAND_COUNT on the native side so live levels map 1:1 with
 // no interpolation needed.
@@ -463,6 +463,8 @@ export class Visualizer {
       this.style === "aurora" ||
       this.style === "cocoon" ||
       this.style === "cassette" ||
+      this.style === "k7-etiquette" ||
+      this.style === "k7-classique" ||
       this.style === "baladeur"
     )
       return;
@@ -525,6 +527,8 @@ export class Visualizer {
         this._drawCocoon(ctx);
         break;
       case "cassette":
+      case "k7-etiquette":
+      case "k7-classique":
       case "baladeur":
         // Nothing to draw: the CSS layer carries the whole scene, and .fx is hidden in these
         // modes anyway (see body[data-mode="cassette"], body[data-mode="baladeur"] .fx in
