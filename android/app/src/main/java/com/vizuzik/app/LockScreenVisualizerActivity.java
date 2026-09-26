@@ -102,6 +102,12 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     private TextView artistView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable pauseGraceExpired = this::finishIfStillPaused;
+    /** "wake" trigger only (see LockScreenVisualizerPreference.TRIGGER_WAKE): after the chosen
+     *  number of seconds, hand back to the real lock screen, which then goes to sleep on the
+     *  system's own timeout — an app cannot switch the display off itself without device-admin
+     *  rights. Never posted in "continuous" mode, which stays up for as long as the music plays. */
+    private final Runnable displayTimeoutExpired = this::finish;
+    private long displayTimeoutMs;
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -512,6 +518,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         // "style" field the line above just read — the two pickers are deliberately separate, see
         // LockScreenVisualizerPreference and EdgeGlowView.setStandaloneStyle().
         glowView.setStandaloneStyle(LockScreenVisualizerPreference.getStyle(this));
+        displayTimeoutMs = LockScreenVisualizerPreference.isWakeTrigger(this)
+            ? LockScreenVisualizerPreference.getDurationSec(this) * 1000L
+            : 0;
+        restartDisplayTimeout();
         DeezerMediaBridge.getInstance().addListener(this);
         AudioLevelsBridge.getInstance().addListener(this);
         ContextCompat.registerReceiver(
@@ -538,6 +548,19 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         }
     }
 
+    /** Any touch on this screen — a transport button, even the first tap of a double tap —
+     *  restarts the countdown, so pressing "suivant" never has the screen vanish mid-gesture. */
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        restartDisplayTimeout();
+    }
+
+    private void restartDisplayTimeout() {
+        handler.removeCallbacks(displayTimeoutExpired);
+        if (displayTimeoutMs > 0) handler.postDelayed(displayTimeoutExpired, displayTimeoutMs);
+    }
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -553,6 +576,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         // keyguard's own bouncer appearing over it, a call — means this Activity has finished the
         // one thing it exists to do. There is nothing to resume back into.
         handler.removeCallbacks(pauseGraceExpired);
+        handler.removeCallbacks(displayTimeoutExpired);
         DeezerMediaBridge.getInstance().removeListener(this);
         AudioLevelsBridge.getInstance().removeListener(this);
         try {

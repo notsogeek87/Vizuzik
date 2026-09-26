@@ -455,6 +455,27 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
     }
 
     /**
+     * Mirrors the web layer's "Déclenchement" pick ("wake" = only when the user wakes the screen,
+     * "continuous" = relight it as soon as it goes off) into LockScreenVisualizerPreference. Read
+     * fresh by LockScreenVisualizerController on every screen on/off, so nothing to act on here.
+     */
+    @PluginMethod
+    public void setLockScreenVisualizerTrigger(PluginCall call) {
+        String trigger = call.getString("trigger", LockScreenVisualizerPreference.TRIGGER_WAKE);
+        LockScreenVisualizerPreference.setTrigger(getContext(), trigger);
+        call.resolve();
+    }
+
+    /** Mirrors the web layer's "Durée d'affichage" pick (seconds) — read by
+     *  LockScreenVisualizerActivity each time it is shown in "wake" mode. */
+    @PluginMethod
+    public void setLockScreenVisualizerDuration(PluginCall call) {
+        Integer seconds = call.getInt("seconds", 10);
+        LockScreenVisualizerPreference.setDurationSec(getContext(), seconds == null ? 10 : seconds);
+        call.resolve();
+    }
+
+    /**
      * Whether the edge-glow overlay (drawn over the tracked app itself, MuViz Edge-style) can run
      * on this device (Android 8+, TYPE_APPLICATION_OVERLAY) and whether the "display over other
      * apps" special permission is currently granted. The web layer checks this on every resume —
