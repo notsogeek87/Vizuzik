@@ -849,13 +849,13 @@ function setLockScreenVisualizerStyle(style) {
 }
 
 // When the lock screen shows up — same storage pattern as the style just above, mirrored into
-// LockScreenVisualizerPreference natively. "wake": only when the user wakes the screen
-// themselves (a sleeping screen hands no touch to any app, so "the screen came back on" is the
-// closest thing), for LOCKSCREEN_VISUALIZER_DURATION seconds. "continuous": the original
-// behaviour, relit as soon as the screen goes off and kept up while the music plays.
+// LockScreenVisualizerPreference natively. "sleep" (default): once per lock, when the screen goes
+// off. "wake": when the user fully wakes the screen (side button, double tap to wake). Both for
+// LOCKSCREEN_VISUALIZER_DURATION seconds. "continuous": the original behaviour, relit as soon as
+// the screen goes off and kept up while the music plays.
 const LOCKSCREEN_VISUALIZER_TRIGGER_KEY = "vizuzik:lockScreenVisualizerTrigger";
-const LOCKSCREEN_VISUALIZER_TRIGGERS = ["wake", "continuous"];
-const LOCKSCREEN_VISUALIZER_DEFAULT_TRIGGER = "wake";
+const LOCKSCREEN_VISUALIZER_TRIGGERS = ["sleep", "wake", "continuous"];
+const LOCKSCREEN_VISUALIZER_DEFAULT_TRIGGER = "sleep";
 const LOCKSCREEN_VISUALIZER_DURATION_KEY = "vizuzik:lockScreenVisualizerDuration";
 const LOCKSCREEN_VISUALIZER_DURATIONS = [5, 10, 15, 30, 60];
 const LOCKSCREEN_VISUALIZER_DEFAULT_DURATION = 10;
@@ -909,15 +909,18 @@ function setLockScreenVisualizerDuration(seconds) {
 /** The duration only means something in "wake" mode — hidden in "continuous" mode. */
 function syncLockScreenDurationRow() {
   if (els.edgeLockscreenDurationRow) {
-    els.edgeLockscreenDurationRow.hidden = lockScreenVisualizerTrigger !== "wake";
+    els.edgeLockscreenDurationRow.hidden = lockScreenVisualizerTrigger === "continuous";
   }
 }
 
 /** The part of the hint that describes when the lock screen appears, shared by every grant
  *  state in updateLockScreenHint() below. */
 function lockScreenBehaviourText() {
+  if (lockScreenVisualizerTrigger === "sleep") {
+    return `S'affiche ${lockScreenVisualizerDuration} s quand l'écran se met en veille pendant la lecture, une fois par verrouillage, puis le téléphone s'endort.`;
+  }
   if (lockScreenVisualizerTrigger === "wake") {
-    return `S'affiche ${lockScreenVisualizerDuration} s quand tu réveilles l'écran pendant la lecture (double tap, tap sur l'AOD ou bouton latéral), puis rend la main à l'écran de verrouillage.`;
+    return `S'affiche ${lockScreenVisualizerDuration} s quand tu rallumes l'écran pendant la lecture (touche latérale, ou double tap si l'AOD est désactivé), puis rend la main à l'écran de verrouillage.`;
   }
   return "Ramène l'écran pendant que la musique joue, à la place de la mise en veille — coûte nettement plus de batterie qu'un vrai écran toujours allumé.";
 }

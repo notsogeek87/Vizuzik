@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -308,16 +309,34 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         // Nothing held here beyond what the framework already tears down on interrupt.
     }
 
+    /** The live instance while bound — only for lockScreenIfConnected() below. */
+    private static volatile DeezerPlayerAccessibilityService connected;
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        connected = this;
         NowPlayerScreenState.setServiceConnected(true);
     }
 
     @Override
     public boolean onUnbind(Intent intent) {
+        connected = null;
         NowPlayerScreenState.setServiceConnected(false);
         return super.onUnbind(intent);
+    }
+
+    /**
+     * Turns the screen off and locks, the way the power button would — for the lock-screen
+     * visualizer's close button in "sleep" mode (see LockScreenVisualizerActivity). No app can
+     * switch the display off by itself short of device-admin rights; an accessibility service can
+     * ask for it (GLOBAL_ACTION_LOCK_SCREEN, Android 9+). Returns false when this service isn't
+     * enabled/bound or the phone is too old, so the caller falls back to closing normally.
+     */
+    static boolean lockScreenIfConnected() {
+        DeezerPlayerAccessibilityService service = connected;
+        if (service == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false;
+        return service.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
     }
 
     /** Whether this service is currently enabled in system Settings — how the settings panel
