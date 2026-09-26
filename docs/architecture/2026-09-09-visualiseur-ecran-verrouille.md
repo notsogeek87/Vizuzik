@@ -446,6 +446,13 @@ isShowing()` évite qu'enchaîner doze puis vrai réveil (le `setTurnScreenOn()`
 poste une seconde notification. Non vérifié : que Samsung délivre bien ce changement d'état à
 l'app pendant le doze.
 
+**Deuxième retour terrain : une boucle.** Samsung délivre bien le changement d'état — mais quand
+l'écran de verrouillage s'éteint de lui-même, One UI passe aussi brièvement par éteint → doze,
+sans aucun toucher. Résultat : visualiseur N s → écran de verrouillage → mise en veille → AOD →
+visualiseur, indéfiniment. Correctif : une transition éteint → doze survenant moins de 10 s
+(`AOD_AFTER_SLEEP_IGNORE_MS`) après la mise en veille est ignorée. Un vrai toucher dans ces 10 s
+continue de marcher, mais demande le deuxième toucher (réveil complet, `SCREEN_ON`).
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.

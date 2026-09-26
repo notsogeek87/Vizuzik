@@ -13,6 +13,7 @@ import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Display;
 
@@ -60,6 +61,17 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     /** Last state seen for the built-in display (Display.STATE_*), so a change can be read as a
      *  transition — see displayListener. */
     private int lastDisplayState = Display.STATE_UNKNOWN;
+    /** When the screen last went off (SystemClock.elapsedRealtime()) — see AOD_AFTER_SLEEP_IGNORE_MS. */
+    private long screenOffAtMs;
+    /**
+     * Field report (Z Fold8, AOD "Appuyer pour afficher"): when the lock screen times out, One UI
+     * goes OFF and then briefly into DOZE on its own — the same OFF → DOZE transition a tap makes.
+     * Reacting to it looped forever: visualizer for N s → lock screen → sleep → AOD → visualizer.
+     * Any OFF → DOZE this soon after the screen went off is taken as the system's, not a touch; a
+     * real tap that early still works, it just needs the second touch that fully wakes the phone
+     * (ACTION_SCREEN_ON).
+     */
+    private static final long AOD_AFTER_SLEEP_IGNORE_MS = 10_000;
 
     /**
      * Catches the first touch on a sleeping screen in "wake" mode. With Samsung's AOD set to
@@ -83,8 +95,13 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             int state = currentDisplayState();
             int previous = lastDisplayState;
             lastDisplayState = state;
+            if (previous == Display.STATE_ON && state != Display.STATE_ON) {
+                screenOffAtMs = SystemClock.elapsedRealtime();
+            }
             boolean dozing = state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND;
-            if (previous == Display.STATE_OFF && dozing) maybeShowOnWake();
+            boolean justWentToSleep =
+                SystemClock.elapsedRealtime() - screenOffAtMs < AOD_AFTER_SLEEP_IGNORE_MS;
+            if (previous == Display.STATE_OFF && dozing && !justWentToSleep) maybeShowOnWake();
         }
 
         @Override
@@ -106,6 +123,7 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             // setTurnScreenOn() causes.
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                screenOffAtMs = SystemClock.elapsedRealtime();
                 maybeShow();
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 maybeShowOnWake();
