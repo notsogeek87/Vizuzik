@@ -2583,9 +2583,14 @@ final class EdgeGlowView extends View {
         p.reset();
         p.setAntiAlias(true);
 
-        int c1 = paletteColorAt(0f);
-        int c2 = paletteColorAt(1f);
-        int c3 = paletteColorAt(2f);
+        // The album's own three colours, held as they are: not paletteColorAt(), whose ambient
+        // travel keeps every other style's colours slowly cycling. On a cassette that read as the
+        // label and shell changing colour by themselves, which the web player's K7 modes don't do.
+        // A new track still blends in, over PALETTE_BLEND_MS (see currentAutoPalette()).
+        int[][] palette = currentPalette();
+        int c1 = Color.rgb(palette[0][0], palette[0][1], palette[0][2]);
+        int c2 = Color.rgb(palette[1][0], palette[1][1], palette[1][2]);
+        int c3 = Color.rgb(palette[2][0], palette[2][1], palette[2][2]);
         float shown = Math.max(0f, Math.min(1f, k7Shown < 0f ? cassetteProgress() : k7Shown));
         float packA = K7_PACK_FULL - shown * (K7_PACK_FULL - K7_PACK_EMPTY);
         float packB = K7_PACK_EMPTY + shown * (K7_PACK_FULL - K7_PACK_EMPTY);

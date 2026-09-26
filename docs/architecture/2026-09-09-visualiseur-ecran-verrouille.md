@@ -379,6 +379,13 @@ avec elle : cet écran ne suit pas la rotation du téléphone, la cassette se li
 tourné sur le côté, et les boutons se lisent alors de la même façon, en rangée sous l'étiquette. Les reflets
 qui suivent l'inclinaison du téléphone (un capteur de plus, allumé en continu) et le halo coloré
 derrière K7 Classique : décoratifs, sur une vue redessinée jusqu'à 30 fois par seconde.
+Le halo coûterait surtout sur un écran OLED : il allumerait en continu les zones noires autour de
+la cassette, là où un pixel noir est éteint.
+
+**Couleurs fixes.** Les K7 prennent les trois couleurs de la pochette telles quelles
+(`currentPalette()`), pas `paletteColorAt()` : son « voyage » ambiant, voulu pour les autres
+styles, faisait changer tout seuls la coque et l'étiquette de couleur, ce que les modes K7 de l'app
+ne font pas. Un nouveau morceau se fond toujours en `PALETTE_BLEND_MS`.
 
 **Les polices.** Android ne lit pas le WOFF2 du web : les deux polices manuscrites sont ajoutées
 dans leur version TTF d'origine, complète et non modifiée (`res/font/permanent_marker.ttf`,
