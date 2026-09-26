@@ -406,10 +406,14 @@ clés `lockScreenVisualizerTrigger`/`lockScreenVisualizerDurationSec`, miroirs `
 - **Déclenchement** — trois valeurs, toutes fondées sur des diffusions système officielles :
   - « À la mise en veille » (`sleep`, **par défaut**) : sur `ACTION_SCREEN_OFF` pendant la
     lecture, le visualiseur s'affiche la durée choisie, puis rend la main au vrai écran de
-    verrouillage, qui s'endort seul. **Une fois par verrouillage** (`shownSinceUnlock`) : sinon
+    verrouillage, qui s'endort seul. **Une fois par réveil de l'utilisateur** : sinon
     l'écran de verrouillage qui s'éteint après lui produirait un nouveau `SCREEN_OFF` et le
-    relancerait sans fin. Le drapeau n'est remis à zéro que par `ACTION_USER_PRESENT`
-    (déverrouillage réel) — aucun délai estimé.
+    relancerait sans fin. Le drapeau (`shownSinceUserWake`) n'est remis à zéro que par le
+    prochain `ACTION_SCREEN_ON` provoqué par l'utilisateur (touche latérale, empreinte,
+    déverrouillage) — jamais par celui que provoque le visualiseur lui-même en rallumant l'écran
+    (`expectingOwnWake`). Aucun délai estimé. Première version : remise à zéro par
+    `ACTION_USER_PRESENT` (déverrouillage) ; sur le téléphone de test cette diffusion n'arrivait
+    jamais (le journal de diagnostic l'avait montré), d'où un visualiseur affiché une seule fois.
   - « Au réveil de l'écran » (`wake`) : sur `ACTION_SCREEN_ON` (touche latérale, double tap pour
     réveiller), verrou affiché, lecture en cours, pas déjà affiché (`isShowing()`).
   - « Automatique, en continu » (`continuous`) : le comportement d'origine, inchangé.

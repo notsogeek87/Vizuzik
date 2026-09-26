@@ -55,13 +55,23 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     /**
      * "sleep" mode's loop guard. Once the visualizer closes, the lock screen it hands back to
      * times out and the screen goes off again — another ACTION_SCREEN_OFF, which would bring the
-     * visualizer straight back, forever. So it shows once per lock: set when shown, cleared only by
-     * ACTION_USER_PRESENT, the system's own "the device was just unlocked" broadcast. Official
-     * signals only, no timing guesses — an earlier attempt to trigger on the AOD appearing relied on
-     * undocumented One UI behaviour and could not tell a tap from a notification (see the
-     * architecture doc's "Piste non retenue").
+     * visualizer straight back, forever. So it shows once per wake-up by the user: set when shown,
+     * cleared by the next ACTION_SCREEN_ON the user causes (side button, fingerprint, unlock) —
+     * never by the one the visualizer's own setTurnScreenOn() causes, see expectingOwnWake.
+     *
+     * ACTION_USER_PRESENT ("just unlocked") was the first choice and still clears it too, but on
+     * the test phone it never reached this receiver (a diagnostic journal showed SCREEN_ON/OFF
+     * arriving every time and USER_PRESENT never), which left the visualizer shown once and then
+     * never again. SCREEN_ON/OFF are the two signals that journal proved reliable. No timing
+     * guesses either — an earlier attempt to trigger on the AOD appearing relied on undocumented
+     * One UI behaviour and could not tell a tap from a notification (see the architecture doc's
+     * "Piste non retenue").
      */
-    private boolean shownSinceUnlock;
+    private boolean shownSinceUserWake;
+    /** Set when maybeShowOnSleep() launches the visualizer, whose own setTurnScreenOn() is about to
+     *  send an ACTION_SCREEN_ON that must not count as the user waking the phone. Consumed by that
+     *  SCREEN_ON. */
+    private boolean expectingOwnWake;
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -76,9 +86,14 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
                 maybeShow();
                 maybeShowOnSleep();
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                if (expectingOwnWake || LockScreenVisualizerActivity.isShowing()) {
+                    expectingOwnWake = false;
+                } else {
+                    shownSinceUserWake = false;
+                }
                 maybeShowOnWake();
             } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
-                shownSinceUnlock = false;
+                shownSinceUserWake = false;
             }
         }
     };
@@ -171,20 +186,21 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     /**
      * "sleep" mode: the screen has just gone off (the user locking, or the screen timing out)
      * while music plays — relight it once with the visualizer, for getDurationSec() seconds. See
-     * shownSinceUnlock for why only once per lock.
+     * shownSinceUserWake for why only once per wake-up.
      */
     void maybeShowOnSleep() {
         if (appContext == null) return;
         if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
         if (!LockScreenVisualizerPreference.TRIGGER_SLEEP.equals(
                 LockScreenVisualizerPreference.getTrigger(appContext))) return;
-        if (shownSinceUnlock) return;
+        if (shownSinceUserWake) return;
         if (MainActivity.isForeground()) return;
 
         DeezerMediaBridge.NowPlaying nowPlaying = DeezerMediaBridge.getInstance().getLastNowPlaying();
         if (nowPlaying == null || !nowPlaying.isPlaying) return;
 
-        shownSinceUnlock = true;
+        shownSinceUserWake = true;
+        expectingOwnWake = true;
         postFullScreenNotification();
     }
 

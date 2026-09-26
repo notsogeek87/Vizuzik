@@ -917,7 +917,7 @@ function syncLockScreenDurationRow() {
  *  state in updateLockScreenHint() below. */
 function lockScreenBehaviourText() {
   if (lockScreenVisualizerTrigger === "sleep") {
-    return `S'affiche ${lockScreenVisualizerDuration} s quand l'écran se met en veille pendant la lecture, une fois par verrouillage, puis le téléphone s'endort.`;
+    return `S'affiche ${lockScreenVisualizerDuration} s quand l'écran se met en veille pendant la lecture, puis le téléphone s'endort (pas de nouvel affichage tant que tu n'as pas rallumé l'écran).`;
   }
   if (lockScreenVisualizerTrigger === "wake") {
     return `S'affiche ${lockScreenVisualizerDuration} s quand tu rallumes l'écran pendant la lecture (touche latérale, ou double tap si l'AOD est désactivé), puis rend la main à l'écran de verrouillage.`;
