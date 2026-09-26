@@ -351,6 +351,38 @@ causes, aucune dans l'heuristique d'accessibilité elle-même :
    défaut reprend la main. `write()` estampille la version en même temps que la valeur, pour qu'un
    « éteint » choisi délibérément après coup ne soit pas repris pour l'ancien défaut et effacé.
 
+## Mise à jour (2026-09-26) : les styles « K7 Étiquette » et « K7 Classique »
+
+Les deux modes K7 du lecteur web (`#k7` dans `index.html`, `src/k7.js`) portés sur cet écran,
+comme deux options de plus dans son sélecteur (`EdgeConfig.STYLE_K7_ETIQUETTE`/`STYLE_K7_CLASSIQUE`,
+acceptés par `LockScreenVisualizerPreference`, jamais proposés à Edge Visualizer). Un seul dessin,
+`EdgeGlowView.drawK7()`, dont seules l'étiquette et la coque changent d'un style à l'autre — même
+découpage que côté web — et la même boîte que `drawCassette()` (plein écran recadré, plafonné à
+`CASSETTE_MAX_BOX_ASPECT`, quart de tour en portrait).
+
+**Ce qui est porté.** La géométrie, coordonnée par coordonnée du viewBox 320x200 ; la mécanique de
+bande de `K7Tape`, étape par étape dans `advanceK7()` : bobinages dimensionnés par la progression
+(`cassetteProgress()`, le même ancrage que « Cassette »), bobines tournant dans le sens antihoraire
+pendant la lecture, glissement sur un saut, rembobinage rapide au changement de morceau
+(`k7TrackChanged()`, appelé par `LockScreenVisualizerActivity`). Pour K7 Classique, la coque fumée
+translucide et la mécanique visible au travers (bande, galets, patin). Le titre et l'artiste sont
+écrits sur l'étiquette (`setK7Text()`), ajustés comme côté web (réduits jusqu'à 75 %, puis coupés
+avec « … »), une seule fois par changement de texte plutôt qu'à chaque image.
+
+**Ce qui ne l'est pas, volontairement.** Le capot de baladeur et ses touches : cet écran garde sa
+propre rangée précédent/lecture-pause/suivant, conçue contre les touchers accidentels. Les reflets
+qui suivent l'inclinaison du téléphone (un capteur de plus, allumé en continu) et le halo coloré
+derrière K7 Classique : décoratifs, sur une vue redessinée jusqu'à 30 fois par seconde.
+
+**Les polices.** Android ne lit pas le WOFF2 du web : les deux polices manuscrites sont ajoutées
+dans leur version TTF d'origine, complète et non modifiée (`res/font/permanent_marker.ttf`,
+`res/font/reenie_beanie.ttf`), chargées une fois par `ResourcesCompat.getFont()`. Même licences,
+mêmes obligations — voir `public/fonts/README.md`.
+
+Aucune allocation par image : chemins et dégradés sont construits une fois (`buildK7Shapes()`),
+le dégradé des bobinages est un dégradé de rayon 1 déplacé par sa matrice locale, et seul le chemin
+de la bande interne est réécrit sur place.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.
@@ -389,6 +421,8 @@ correctif lui-même, ni les cycles répétés (plusieurs allers-retours AOD → 
   l'autre ; que le double tap de fond continue de fonctionner normalement à côté des boutons plutôt
   que d'entrer en conflit avec eux ; le rendu visuel réel des cercles translucides sur les trois
   styles (Barres/Cassette/Disque).
+- **Non vérifié non plus** (styles K7) : le rendu réel de `drawK7()` sur l'appareil, en particulier
+  celui des polices manuscrites à cette échelle, et la rangée de boutons par-dessus la cassette.
 - À vérifier en priorité sur l'appareil cible avant de considérer cette fonctionnalité comme fiable.
 
 ## Pistes non retenues

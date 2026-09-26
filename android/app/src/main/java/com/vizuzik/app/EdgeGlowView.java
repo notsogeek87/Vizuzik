@@ -14,6 +14,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
+import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -21,6 +22,8 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+
+import androidx.core.content.res.ResourcesCompat;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -229,6 +232,30 @@ final class EdgeGlowView extends View {
     // notches and brand tab drawn near its border — leaving just the reels and label with no
     // case around them.
     private static final float CASSETTE_MAX_BOX_ASPECT = 1.7f;
+    // "k7-etiquette"/"k7-classique" — see drawK7(). Same viewBox and box as "cassette" above, and
+    // the same numbers as the web player's own tape mechanics (src/k7.js, K7Tape), which is where
+    // each is explained: reel centres, pack radii when full and empty, one turn's duration while
+    // playing and while rewinding, how long rewinding a whole side takes, and the glide over a jump.
+    private static final float K7_REEL_A_X = 97f;
+    private static final float K7_REEL_B_X = 223f;
+    private static final float K7_REEL_Y = 84f;
+    private static final float K7_PACK_FULL = 70f;
+    private static final float K7_PACK_EMPTY = 14f;
+    private static final float K7_DEG_PER_SEC_A = 360f / 3.2f;
+    private static final float K7_DEG_PER_SEC_B = 360f / 3.8f;
+    private static final float K7_REWIND_DEG_PER_SEC = 360f / 0.3f;
+    private static final float K7_REWIND_FULL_S = 1.3f;
+    private static final float K7_REWIND_MIN_S = 0.6f;
+    private static final float K7_JUMP = 0.02f;
+    private static final float K7_GLIDE_RATE = 8f;
+    // The label text's fitting, same as main.js's fitSvgText(): shrunk to at most this much of its
+    // size, then cut with an ellipsis. Étiquette's text starts further left, so it gets more room.
+    private static final float K7_TEXT_MIN_SCALE = 0.75f;
+    private static final float K7_TEXT_MAX_WIDTH_ETIQUETTE = 252f;
+    private static final float K7_TEXT_MAX_WIDTH_CLASSIQUE = 238f;
+    // K7 Classique's corner guide rollers and the two small guides beside them (see drawK7Internals()).
+    private static final float[] K7_ROLLER_X = { 40f, 280f };
+    private static final float[] K7_GUIDE_X = { 66f, 254f };
     // Same --void CSS variable the web player's own .cover background sits on (#14141f).
     private static final int VINYL_VOID_COLOR = 0xFF14141F;
     /** How far past the record's own edge its shadow reaches, as a multiple of the radius. */
@@ -375,6 +402,52 @@ final class EdgeGlowView extends View {
     private long cassetteDurationMs;
     private long cassetteAnchorPositionMs;
     private long cassetteAnchorAtMs;
+    // The two K7 styles' own tape state (see drawK7()/advanceK7()), kept apart from "cassette"'s:
+    // how far along the tape *shows* (it glides over a jump and rewinds on a new track rather than
+    // snapping to cassetteProgress()), -1 until the first frame; the rewind in progress, if any;
+    // and both reel angles, anticlockwise (negative) while playing.
+    private float k7Shown = -1f;
+    private boolean k7Rewinding;
+    private float k7RewindFrom;
+    private long k7RewindStartMs;
+    private float k7RewindDurationMs;
+    private float k7ReelADeg;
+    private float k7ReelBDeg;
+    // Written on the label — see setK7Text(). Fitted once per text/style change (k7FitKey), not
+    // per frame: measuring is the one costly part of drawing text.
+    private String k7Title = "";
+    private String k7Artist = "";
+    private String k7FitKey;
+    private String k7TitleFitted = "";
+    private String k7ArtistFitted = "";
+    private float k7TitleSize;
+    private float k7ArtistSize;
+    // The two handwriting fonts, the same files the web player bundles (see public/fonts/README.md)
+    // but as the original TTFs in res/font: Android can't read the web's WOFF2. Loaded on the
+    // first K7 frame; null (system font instead) if that fails.
+    private boolean k7FontsLoaded;
+    private Typeface k7MarkerFont;
+    private Typeface k7PencilFont;
+    private final Paint k7TextPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    // Fixed shapes and shaders, built on the first K7 frame (see buildK7Shapes()): every one is in
+    // the fixed 320x200 viewBox, so none ever needs rebuilding. The tape path alone changes with
+    // the pack sizes, and is rewritten in place.
+    private final Path k7WindowPath = new Path();
+    private final Path k7TrapezoidPath = new Path();
+    private final Path k7SpokesPath = new Path();
+    private final Path k7SpringPath = new Path();
+    private final Path k7InternalTapePath = new Path();
+    private final Path k7ScalePath = new Path();
+    private final Path k7LabelClipPath = new Path();
+    private float[] k7RibLines;
+    private Shader k7LightShader;
+    private Shader k7LabelShadeShader;
+    private Shader k7GlassShader;
+    private Shader k7HubShader;
+    private Shader k7MetalShader;
+    private RadialGradient k7TapeShader;
+    private final Matrix k7TapeMatrix = new Matrix();
+    private ColorMatrixColorFilter k7ArtColorFilter;
     // The last artwork handed over for "vinyl" — see setAlbumArt(). Read from the main thread
     // only (set from DeezerMediaBridge's callback, which also runs on the main thread), so a
     // plain reference is enough; the shader is rebuilt once per track rather than per frame.
@@ -628,6 +701,23 @@ final class EdgeGlowView extends View {
         return position / (float) cassetteDurationMs;
     }
 
+    /** Title and artist, handwritten on the two K7 styles' label (see drawK7()) — called on every
+     *  track change by LockScreenVisualizerActivity, whichever style is showing. */
+    void setK7Text(String title, String artist) {
+        k7Title = title != null ? title : "";
+        k7Artist = artist != null ? artist : "";
+    }
+
+    /** A new track has started: the K7 styles rewind whatever was played of the last one, the
+     *  reels spinning back fast — same as K7Tape.trackChanged() in the web player. */
+    void k7TrackChanged() {
+        if (k7Shown < K7_JUMP) return;
+        k7RewindFrom = k7Shown;
+        k7RewindStartMs = SystemClock.elapsedRealtime();
+        k7RewindDurationMs = Math.max(K7_REWIND_MIN_S, K7_REWIND_FULL_S * k7Shown) * 1000f;
+        k7Rewinding = true;
+    }
+
     /** The capture feeding this view stopped for good — drop straight back to ambient. */
     void clearLevels() {
         lastLevelsAtMs = 0;
@@ -747,6 +837,7 @@ final class EdgeGlowView extends View {
             advanceBars(dtMs / 1000f);
             advanceVinyl(dtMs / 1000f);
             advanceCassette(dtMs / 1000f);
+            advanceK7(dtMs / 1000f);
             advanceParticles(dtMs / 1000f);
             updateSuppression(now);
             updateWindowBounds();
@@ -798,6 +889,34 @@ final class EdgeGlowView extends View {
         if (!vinylPlaying) return;
         cassetteReelADeg = (cassetteReelADeg + dt * CASSETTE_DEG_PER_SEC_A) % 360f;
         cassetteReelBDeg = (cassetteReelBDeg + dt * CASSETTE_DEG_PER_SEC_B) % 360f;
+    }
+
+    /** The two K7 styles' tape: how far along it shows, and both reels — K7Tape.update() in the
+     *  web player, step for step. Only while one of them is on screen: nothing else reads it. */
+    private void advanceK7(float dt) {
+        if (!isK7Style(activeStyle())) return;
+        float played = cassetteProgress();
+        if (k7Rewinding) {
+            float t = Math.min(1f, (SystemClock.elapsedRealtime() - k7RewindStartMs) / k7RewindDurationMs);
+            float eased = t < 0.5f ? 2f * t * t : 1f - (2f - 2f * t) * (2f - 2f * t) / 2f;
+            k7Shown = k7RewindFrom * (1f - eased);
+            if (t >= 1f) k7Rewinding = false;
+        } else if (k7Shown < 0f || Math.abs(played - k7Shown) < K7_JUMP) {
+            k7Shown = played;
+        } else {
+            k7Shown += (played - k7Shown) * Math.min(1f, dt * K7_GLIDE_RATE);
+        }
+        if (k7Rewinding) {
+            k7ReelADeg = (k7ReelADeg + dt * K7_REWIND_DEG_PER_SEC) % 360f;
+            k7ReelBDeg = (k7ReelBDeg + dt * K7_REWIND_DEG_PER_SEC) % 360f;
+        } else if (vinylPlaying) {
+            k7ReelADeg = (k7ReelADeg - dt * K7_DEG_PER_SEC_A) % 360f;
+            k7ReelBDeg = (k7ReelBDeg - dt * K7_DEG_PER_SEC_B) % 360f;
+        }
+    }
+
+    private static boolean isK7Style(String style) {
+        return EdgeConfig.STYLE_K7_ETIQUETTE.equals(style) || EdgeConfig.STYLE_K7_CLASSIQUE.equals(style);
     }
 
     /** Eases the drawn spectrum towards the captured one and lets the peak caps fall. */
@@ -1105,6 +1224,8 @@ final class EdgeGlowView extends View {
                 drawCassette(canvas);
             } else if (EdgeConfig.STYLE_BALADEUR.equals(active)) {
                 drawBaladeur(canvas);
+            } else if (isK7Style(active)) {
+                drawK7(canvas, EdgeConfig.STYLE_K7_CLASSIQUE.equals(active));
             } else {
                 drawGlow(canvas);
             }
@@ -2422,6 +2543,534 @@ final class EdgeGlowView extends View {
         ColorMatrix artMatrix = new ColorMatrix();
         artMatrix.setSaturation(0.95f);
         cassetteArtColorFilter = new ColorMatrixColorFilter(artMatrix);
+    }
+
+    /**
+     * "k7-etiquette" and "k7-classique": the lock screen's ports of the web player's two K7 display
+     * modes — one illustration of a real compact cassette (index.html's #k7, the "K7 modes"
+     * section of style.css), coordinate for coordinate off the same 320x200 viewBox, of which
+     * only the label and the shell change between the two:
+     *
+     *  - Étiquette: a pre-recorded tape, its plastic tinted by the album's main colour, the
+     *    album art printed across the whole label under a frosted strip, title and artist in
+     *    black marker (Permanent Marker).
+     *  - Classique: a blank tape recorded at home — neutral smoked, translucent plastic with the
+     *    mechanism showing through (tape packs, the tape's path round the guide rollers, pressure
+     *    pad), a plain label tinted from the palette with a ruled paper strip, title and artist in
+     *    pencil (Reenie Beanie, thickened by a hairline stroke like the web version's).
+     *
+     * Same box as drawCassette(): screen-filling, cropped, capped at CASSETTE_MAX_BOX_ASPECT, a
+     * quarter turn in portrait. What moves is src/k7.js's K7Tape, ported in advanceK7(): packs
+     * sized from playback, reels turning anticlockwise while playing, a fast rewind on a new
+     * track. What the web version has and this doesn't, on purpose: the Walkman lid and its keys
+     * (this screen keeps its own transport row, see LockScreenVisualizerActivity), the tilt-driven
+     * glints, and Classique's glow behind the shell — this redraws up to 30 times a second for as
+     * long as the lock screen is up.
+     */
+    private void drawK7(Canvas canvas, boolean classique) {
+        if (displayWidth <= 0 || displayHeight <= 0) refreshDisplaySize();
+        float screenW = displayWidth > 0 ? displayWidth : getWidth();
+        float screenH = displayHeight > 0 ? displayHeight : getHeight();
+        if (screenW <= 0 || screenH <= 0) return;
+        refreshOrigin();
+        float cx = screenW * 0.5f - viewLocation[0];
+        float cy = screenH * 0.5f - viewLocation[1];
+
+        boolean rotate = screenH > screenW;
+        float boxW = rotate ? screenH : screenW;
+        float boxH = rotate ? screenW : screenH;
+        boxW = Math.min(boxW, boxH * CASSETTE_MAX_BOX_ASPECT);
+        float scale = Math.max(boxW / CASSETTE_VIEWBOX_WIDTH, boxH / CASSETTE_VIEWBOX_HEIGHT);
+
+        buildK7Shapes();
+        loadK7Fonts();
+        Paint p = vinylPaint;
+        p.reset();
+        p.setAntiAlias(true);
+
+        int c1 = paletteColorAt(0f);
+        int c2 = paletteColorAt(1f);
+        int c3 = paletteColorAt(2f);
+        float shown = Math.max(0f, Math.min(1f, k7Shown < 0f ? cassetteProgress() : k7Shown));
+        float packA = K7_PACK_FULL - shown * (K7_PACK_FULL - K7_PACK_EMPTY);
+        float packB = K7_PACK_EMPTY + shown * (K7_PACK_FULL - K7_PACK_EMPTY);
+
+        canvas.save();
+        canvas.translate(cx, cy);
+        if (rotate) canvas.rotate(90);
+        canvas.scale(scale, scale);
+        canvas.translate(-CASSETTE_VIEWBOX_WIDTH * 0.5f, -CASSETTE_VIEWBOX_HEIGHT * 0.5f);
+
+        // The shell, its top-left light and the moulded bezel.
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(classique ? Color.argb(158, 72, 66, 62) : mixColor(c1, 0xFF262222, 0.56f));
+        canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
+        strokeK7(p, classique ? Color.argb(71, 255, 255, 255) : Color.argb(153, 0, 0, 0), classique ? 1f : 1.5f);
+        canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(k7LightShader);
+        canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
+        p.setShader(null);
+        strokeK7(p, Color.argb(classique ? 41 : 15, 255, 255, 255), 1f);
+        canvas.drawRoundRect(12, 12, 308, 188, 7, 7, p);
+
+        if (classique) drawK7Internals(canvas, p, packA, packB);
+
+        // Through the window: the dark cavity, both tape packs, the clearer centre pane with its
+        // tape-length scale, then the reels turning inside it.
+        canvas.save();
+        canvas.clipPath(k7WindowPath);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(0xFF0F0C0B);
+        canvas.drawRect(70, 62, 250, 106, p);
+        drawK7Pack(canvas, p, K7_REEL_A_X, packA);
+        drawK7Pack(canvas, p, K7_REEL_B_X, packB);
+        p.setColor(Color.argb(64, 0, 0, 0));
+        canvas.drawRect(130, 66, 190, 102, p);
+        strokeK7(p, Color.argb(140, 232, 226, 214), 0.6f);
+        canvas.drawPath(k7ScalePath, p);
+        drawK7Reel(canvas, p, K7_REEL_A_X, k7ReelADeg, 0f, 0f);
+        drawK7Reel(canvas, p, K7_REEL_B_X, k7ReelBDeg, 20f, 25f);
+        canvas.restore();
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(k7GlassShader);
+        canvas.drawPath(k7WindowPath, p);
+        p.setShader(null);
+
+        // The label: one sheet with the window punched out of it.
+        canvas.save();
+        canvas.clipPath(k7LabelClipPath);
+        if (classique) {
+            drawK7ClassiqueFace(canvas, p, c1, c2);
+        } else {
+            drawK7EtiquetteFace(canvas, p);
+        }
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(k7LabelShadeShader);
+        canvas.drawRect(26, 22, 294, 142, p);
+        p.setShader(null);
+        canvas.restore();
+        strokeK7(p, Color.argb(46, 255, 255, 255), 1f);
+        canvas.drawRoundRect(26, 22, 294, 142, 5, 5, p);
+        strokeK7(p, Color.argb(140, 0, 0, 0), 2.2f);
+        canvas.drawPath(k7WindowPath, p);
+        strokeK7(p, Color.argb(31, 255, 255, 255), 0.6f);
+        canvas.drawRoundRect(70.8f, 62.8f, 249.2f, 105.2f, 21.2f, 21.2f, p);
+
+        drawK7Writing(canvas, p, classique, c3);
+
+        // The bottom head-access section: ledge, trapezoid, capstan and guide holes, screws.
+        strokeK7(p, classique ? Color.argb(36, 255, 255, 255) : Color.argb(115, 0, 0, 0), 1f);
+        canvas.drawLine(8, 148, 312, 148, p);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(classique ? Color.argb(9, 255, 255, 255) : Color.argb(13, 0, 0, 0));
+        canvas.drawPath(k7TrapezoidPath, p);
+        strokeK7(p, classique ? Color.argb(56, 255, 255, 255) : Color.argb(128, 0, 0, 0), 1f);
+        canvas.drawPath(k7TrapezoidPath, p);
+        strokeK7(p, Color.argb(classique ? 31 : 20, 255, 255, 255), 1f);
+        canvas.drawLine(61, 151, 259, 151, p);
+        int holeFill = classique ? 0xFF020203 : 0xFF050506;
+        int holeStroke = Color.argb(classique ? 46 : 18, 255, 255, 255);
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 0) {
+                p.setStyle(Paint.Style.FILL);
+                p.setColor(holeFill);
+            } else {
+                strokeK7(p, holeStroke, 0.6f);
+            }
+            canvas.drawCircle(98, 178, 5, p);
+            canvas.drawCircle(222, 178, 5, p);
+            canvas.drawRoundRect(122, 173, 129, 180, 1.2f, 1.2f, p);
+            canvas.drawRoundRect(191, 173, 198, 180, 1.2f, 1.2f, p);
+        }
+        drawK7Screw(canvas, p, 16, 16, -18);
+        drawK7Screw(canvas, p, 304, 16, 35);
+        drawK7Screw(canvas, p, 16, 184, 70);
+        drawK7Screw(canvas, p, 304, 184, -40);
+        drawK7Screw(canvas, p, 160, 161, 12);
+
+        canvas.restore();
+        p.setShader(null);
+        p.setColorFilter(null);
+    }
+
+    /** K7 Classique only: the mechanism seen through the smoked shell — both packs (big enough,
+     *  when full, to peek out from under the label), the tape leaving each by its outer edge,
+     *  round the corner rollers and along the bottom past the pressure pad, then the smoke tint
+     *  and the moulded ribs over all of it. See .k7__internals in the web version. */
+    private void drawK7Internals(Canvas canvas, Paint p, float packA, float packB) {
+        drawK7Pack(canvas, p, K7_REEL_A_X, packA);
+        drawK7Pack(canvas, p, K7_REEL_B_X, packB);
+
+        k7InternalTapePath.rewind();
+        k7InternalTapePath.moveTo(K7_REEL_A_X - packA, K7_REEL_Y);
+        k7InternalTapePath.lineTo(29.6f, 174);
+        k7InternalTapePath.quadTo(29.6f, 185.4f, 40, 185.4f);
+        k7InternalTapePath.lineTo(280, 185.4f);
+        k7InternalTapePath.quadTo(290.4f, 185.4f, 290.4f, 174);
+        k7InternalTapePath.lineTo(K7_REEL_B_X + packB, K7_REEL_Y);
+        strokeK7(p, 0xFF6E4424, 1.9f);
+        p.setStrokeJoin(Paint.Join.ROUND);
+        canvas.drawPath(k7InternalTapePath, p);
+        p.setStrokeJoin(Paint.Join.MITER);
+
+        for (float rx : K7_ROLLER_X) {
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.argb(41, 225, 220, 210));
+            canvas.drawCircle(rx, 175, 10, p);
+            strokeK7(p, Color.argb(115, 235, 230, 220), 1.2f);
+            canvas.drawCircle(rx, 175, 10, p);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.argb(71, 235, 230, 220));
+            canvas.drawCircle(rx, 175, 4.2f, p);
+            strokeK7(p, Color.argb(128, 235, 230, 220), 0.6f);
+            canvas.drawCircle(rx, 175, 4.2f, p);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0xFFBDB7AD);
+            canvas.drawCircle(rx, 175, 1.4f, p);
+        }
+        for (float gx : K7_GUIDE_X) {
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.argb(89, 200, 195, 185));
+            canvas.drawCircle(gx, 183, 2.6f, p);
+            strokeK7(p, Color.argb(128, 230, 225, 215), 0.5f);
+            canvas.drawCircle(gx, 183, 2.6f, p);
+        }
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(Color.argb(89, 150, 155, 165));
+        canvas.drawRoundRect(146, 168, 174, 177, 1, 1, p);
+        strokeK7(p, Color.argb(115, 210, 215, 225), 0.6f);
+        canvas.drawRoundRect(146, 168, 174, 177, 1, 1, p);
+        strokeK7(p, Color.argb(179, 200, 205, 215), 0.9f);
+        canvas.drawPath(k7SpringPath, p);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(Color.argb(204, 203, 191, 154));
+        canvas.drawRoundRect(153, 181, 167, 185.5f, 0.8f, 0.8f, p);
+
+        p.setColor(Color.argb(71, 58, 52, 48));
+        canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
+        strokeK7(p, Color.argb(13, 255, 255, 255), 0.5f);
+        canvas.drawLines(k7RibLines, p);
+    }
+
+    /** One wound tape pack: a disc of tape, lighter towards the hub, at whatever radius the tape's
+     *  progress gives it. One unit-radius shader moved and scaled into place, not one per size. */
+    private void drawK7Pack(Canvas canvas, Paint p, float x, float radius) {
+        k7TapeMatrix.setScale(radius, radius);
+        k7TapeMatrix.postTranslate(x, K7_REEL_Y);
+        k7TapeShader.setLocalMatrix(k7TapeMatrix);
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(k7TapeShader);
+        canvas.drawCircle(x, K7_REEL_Y, radius, p);
+        p.setShader(null);
+    }
+
+    /** One reel: its clear flange with six spokes and its teeth turn with it; the hub's own shading
+     *  stays put, lit from the same top-left as everything else. flangeTurn/teethTurn are the fixed
+     *  offsets the web version gives the right-hand reel, so the two never look like copies. */
+    private void drawK7Reel(Canvas canvas, Paint p, float x, float angleDeg, float flangeTurn,
+                            float teethTurn) {
+        canvas.save();
+        canvas.translate(x, K7_REEL_Y);
+        canvas.rotate(angleDeg);
+
+        canvas.save();
+        canvas.rotate(flangeTurn);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(Color.argb(18, 230, 228, 222));
+        canvas.drawCircle(0, 0, 30, p);
+        strokeK7(p, Color.argb(82, 235, 232, 225), 1.4f);
+        canvas.drawCircle(0, 0, 30, p);
+        strokeK7(p, Color.argb(36, 235, 232, 225), 0.8f);
+        canvas.drawCircle(0, 0, 25, p);
+        strokeK7(p, Color.argb(56, 235, 232, 225), 1.6f);
+        canvas.drawPath(k7SpokesPath, p);
+        canvas.restore();
+
+        canvas.rotate(-angleDeg);
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(k7HubShader);
+        canvas.drawCircle(0, 0, 13.5f, p);
+        p.setShader(null);
+        p.setColor(0xFF1B1614);
+        canvas.drawCircle(0, 0, 8.5f, p);
+
+        canvas.rotate(angleDeg + teethTurn);
+        p.setColor(0xFFDCD7CC);
+        for (int i = 0; i < 6; i++) {
+            canvas.drawRoundRect(-1.2f, -8.6f, 1.2f, -5.4f, 0.6f, 0.6f, p);
+            canvas.rotate(60);
+        }
+        canvas.restore();
+    }
+
+    /** K7 Étiquette's label: the album art across the whole of it, a little desaturated, with a
+     *  frosted strip across the top for the text — a plain panel until the first art arrives. */
+    private void drawK7EtiquetteFace(Canvas canvas, Paint p) {
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(0xFF4A5560);
+        canvas.drawRect(26, 22, 294, 142, p);
+        drawK7Art(canvas, p, 26, 22, 268, 120, k7ArtColorFilter);
+        p.setColor(Color.argb(97, 255, 255, 255));
+        canvas.drawRect(26, 22, 294, 49, p);
+    }
+
+    /** K7 Classique's label: a muted grey-blue pulled a little toward the album's main colour, a
+     *  ruled paper strip, and two stripes in the album's first two colours. */
+    private void drawK7ClassiqueFace(Canvas canvas, Paint p, int c1, int c2) {
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(mixColor(c1, 0xFF4A5560, 0.28f));
+        canvas.drawRect(26, 22, 294, 142, p);
+        p.setColor(0xFFECE6D8);
+        canvas.drawRect(26, 22, 294, 53, p);
+        strokeK7(p, 0xFF9AA3B0, 0.4f);
+        canvas.drawLine(44, 39.5f, 286, 39.5f, p);
+        canvas.drawLine(44, 50.5f, 286, 50.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(c1, 255));
+        canvas.drawRect(26, 124, 294, 127, p);
+        p.setColor(withAlpha(c2, 255));
+        canvas.drawRect(26, 131, 294, 134, p);
+    }
+
+    /** The current album art, cropped to fill (x, y, w, h) — the same bitmap "vinyl" and
+     *  "cassette" use, see setAlbumArt(). Draws nothing without one. */
+    private void drawK7Art(Canvas canvas, Paint p, float x, float y, float w, float h,
+                           ColorMatrixColorFilter filter) {
+        Bitmap art = vinylBitmap;
+        BitmapShader shader = vinylShader;
+        if (art == null || shader == null || art.isRecycled()) return;
+        float artScale = Math.max(w / art.getWidth(), h / art.getHeight());
+        vinylMatrix.setScale(artScale, artScale);
+        vinylMatrix.postTranslate(
+            x - (art.getWidth() * artScale - w) * 0.5f,
+            y - (art.getHeight() * artScale - h) * 0.5f
+        );
+        shader.setLocalMatrix(vinylMatrix);
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(shader);
+        p.setColorFilter(filter);
+        canvas.drawRect(x, y, x + w, y + h, p);
+        p.setShader(null);
+        p.setColorFilter(null);
+    }
+
+    /** What's written on the label: title and artist in each style's own hand, and on
+     *  Classique the side letter, a thumbnail of the art, the brand and the coloured dot. */
+    private void drawK7Writing(Canvas canvas, Paint p, boolean classique, int c3) {
+        fitK7Text(classique);
+        Paint t = k7TextPaint;
+        t.setTextAlign(Paint.Align.LEFT);
+        t.setLetterSpacing(0f);
+        if (classique) {
+            t.setStyle(Paint.Style.FILL);
+            t.setTypeface(Typeface.DEFAULT_BOLD);
+            t.setTextSize(12f);
+            t.setColor(0xFF2B2A33);
+            canvas.drawText("A", 31, 45, t);
+
+            t.setTypeface(k7PencilFont);
+            t.setStyle(Paint.Style.FILL_AND_STROKE);
+            t.setStrokeWidth(0.35f);
+            t.setStrokeJoin(Paint.Join.ROUND);
+            t.setColor(0xFF26324F);
+            t.setTextSize(k7TitleSize);
+            canvas.drawText(k7TitleFitted, 46, 38, t);
+            t.setColor(Color.argb(204, 0x26, 0x32, 0x4F));
+            t.setTextSize(k7ArtistSize);
+            canvas.drawText(k7ArtistFitted, 46, 49, t);
+            t.setStyle(Paint.Style.FILL);
+
+            drawK7Art(canvas, p, 34, 67, 30, 30, null);
+            strokeK7(p, Color.argb(89, 255, 255, 255), 0.6f);
+            canvas.drawRect(34, 67, 64, 97, p);
+
+            t.setTypeface(Typeface.DEFAULT_BOLD);
+            t.setTextSize(6.5f);
+            t.setLetterSpacing(0.8f / 6.5f);
+            t.setTextAlign(Paint.Align.CENTER);
+            t.setColor(0xFFE9E6DF);
+            canvas.drawText("VIZUZIK", 49, 108, t);
+            t.setLetterSpacing(0f);
+            t.setTextAlign(Paint.Align.LEFT);
+
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(withAlpha(c3, 255));
+            canvas.drawCircle(272, 84, 7, p);
+        } else {
+            t.setStyle(Paint.Style.FILL);
+            t.setTypeface(k7MarkerFont);
+            t.setColor(0xFF111111);
+            t.setTextSize(k7TitleSize);
+            canvas.drawText(k7TitleFitted, 34, 35, t);
+            t.setTextSize(k7ArtistSize);
+            canvas.drawText(k7ArtistFitted, 34, 45.5f, t);
+        }
+    }
+
+    /** Fits title and artist to the label once per text or style change, the same way main.js's
+     *  fitSvgText() does: shrunk to at most K7_TEXT_MIN_SCALE, then cut with an ellipsis. */
+    private void fitK7Text(boolean classique) {
+        String key = (classique ? "c" : "e") + '\0' + k7Title + '\0' + k7Artist;
+        if (key.equals(k7FitKey)) return;
+        k7FitKey = key;
+        Paint t = k7TextPaint;
+        t.setLetterSpacing(0f);
+        t.setTypeface(classique ? k7PencilFont : k7MarkerFont);
+        float maxWidth = classique ? K7_TEXT_MAX_WIDTH_CLASSIQUE : K7_TEXT_MAX_WIDTH_ETIQUETTE;
+        float[] size = new float[1];
+        k7TitleFitted = fitK7Line(t, k7Title, classique ? 17f : 12f, maxWidth, size);
+        k7TitleSize = size[0];
+        k7ArtistFitted = fitK7Line(t, k7Artist, classique ? 13f : 9f, maxWidth, size);
+        k7ArtistSize = size[0];
+    }
+
+    private static String fitK7Line(Paint t, String text, float baseSize, float maxWidth, float[] outSize) {
+        t.setTextSize(baseSize);
+        outSize[0] = baseSize;
+        float width = t.measureText(text);
+        if (width <= maxWidth) return text;
+        float size = baseSize * Math.max(K7_TEXT_MIN_SCALE, maxWidth / width);
+        t.setTextSize(size);
+        outSize[0] = size;
+        if (t.measureText(text) <= maxWidth) return text;
+        // The longest prefix that still fits with its ellipsis, found by halving.
+        int fits = 1;
+        int tooLong = text.length();
+        while (tooLong - fits > 1) {
+            int middle = (fits + tooLong) >>> 1;
+            if (t.measureText(ellipsize(text, middle)) <= maxWidth) fits = middle;
+            else tooLong = middle;
+        }
+        return ellipsize(text, fits);
+    }
+
+    private static String ellipsize(String text, int length) {
+        // Never cut between the two halves of an emoji.
+        if (length > 0 && Character.isHighSurrogate(text.charAt(length - 1))) length--;
+        return text.substring(0, length).replaceAll("\\s+$", "") + "…";
+    }
+
+    /** One screw: a small metal head, lit from the top-left, with its slot at its own angle. */
+    private void drawK7Screw(Canvas canvas, Paint p, float x, float y, float angleDeg) {
+        k7TapeMatrix.setTranslate(x, y);
+        k7MetalShader.setLocalMatrix(k7TapeMatrix);
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(k7MetalShader);
+        canvas.drawCircle(x, y, 4, p);
+        p.setShader(null);
+        canvas.save();
+        canvas.rotate(angleDeg, x, y);
+        strokeK7(p, 0xFF141110, 1f);
+        p.setStrokeCap(Paint.Cap.ROUND);
+        canvas.drawLine(x - 2.6f, y, x + 2.6f, y, p);
+        p.setStrokeCap(Paint.Cap.BUTT);
+        canvas.restore();
+    }
+
+    private static void strokeK7(Paint p, int color, float width) {
+        p.setStyle(Paint.Style.STROKE);
+        p.setColor(color);
+        p.setStrokeWidth(width);
+    }
+
+    /** color-mix(in srgb, a amount, b) — how the web version tints its shell and label. */
+    private static int mixColor(int a, int b, float amount) {
+        return Color.rgb(
+            clamp255(Math.round(Color.red(a) * amount + Color.red(b) * (1f - amount))),
+            clamp255(Math.round(Color.green(a) * amount + Color.green(b) * (1f - amount))),
+            clamp255(Math.round(Color.blue(a) * amount + Color.blue(b) * (1f - amount)))
+        );
+    }
+
+    /** Both handwriting fonts, once. A font that can't be loaded leaves the system one in its
+     *  place (a null Typeface) rather than the label empty. */
+    private void loadK7Fonts() {
+        if (k7FontsLoaded) return;
+        k7FontsLoaded = true;
+        try {
+            k7MarkerFont = ResourcesCompat.getFont(getContext(), R.font.permanent_marker);
+        } catch (Exception e) {
+            Log.w(TAG, "loadK7Fonts marker", e);
+        }
+        try {
+            k7PencilFont = ResourcesCompat.getFont(getContext(), R.font.reenie_beanie);
+        } catch (Exception e) {
+            Log.w(TAG, "loadK7Fonts pencil", e);
+        }
+        k7FitKey = null;
+    }
+
+    /**
+     * The K7 styles' fixed shapes and shaders, built on the first frame that draws one and never
+     * after — all in the fixed viewBox, like buildCassetteShaders(). Gradients the web version
+     * sizes to each shape's own box (objectBoundingBox) are worked out here from that box.
+     */
+    private void buildK7Shapes() {
+        if (k7LightShader != null) return;
+        k7WindowPath.addRoundRect(70, 62, 250, 106, 22, 22, Path.Direction.CW);
+        k7LabelClipPath.addRoundRect(26, 22, 294, 142, 5, 5, Path.Direction.CW);
+        k7LabelClipPath.addRoundRect(70, 62, 250, 106, 22, 22, Path.Direction.CW);
+        k7LabelClipPath.setFillType(Path.FillType.EVEN_ODD);
+        k7TrapezoidPath.moveTo(60, 150);
+        k7TrapezoidPath.lineTo(260, 150);
+        k7TrapezoidPath.lineTo(250, 192);
+        k7TrapezoidPath.lineTo(70, 192);
+        k7TrapezoidPath.close();
+        k7SpringPath.moveTo(140, 180);
+        k7SpringPath.quadTo(160, 176, 180, 180);
+        // Six spokes between the hub and the flange's rim, every 60°.
+        for (int i = 0; i < 6; i++) {
+            double a = Math.toRadians(i * 60);
+            float cos = (float) Math.cos(a);
+            float sin = (float) Math.sin(a);
+            k7SpokesPath.moveTo(14 * cos, 14 * sin);
+            k7SpokesPath.lineTo(29 * cos, 29 * sin);
+        }
+        k7ScalePath.moveTo(134, 99);
+        k7ScalePath.lineTo(186, 99);
+        for (int i = 0; i < 8; i++) {
+            float x = 136 + i * 7;
+            k7ScalePath.moveTo(x, 99);
+            k7ScalePath.lineTo(x, 99 - (i % 2 == 0 ? 4f : 2.5f));
+        }
+        // The moulded ribs across the bottom section, one every two units.
+        k7RibLines = new float[20 * 4];
+        for (int i = 0; i < 20; i++) {
+            float y = 150.5f + i * 2;
+            k7RibLines[i * 4] = 12;
+            k7RibLines[i * 4 + 1] = y;
+            k7RibLines[i * 4 + 2] = 308;
+            k7RibLines[i * 4 + 3] = y;
+        }
+
+        // The shell's light: centred a quarter across and a tenth down its 304x184 box, reaching
+        // 0.9 of it each way — an ellipse, as the web version's box-relative radial gradient is.
+        RadialGradient light = new RadialGradient(0, 0, 1,
+            withAlpha(Color.WHITE, 33), withAlpha(Color.WHITE, 0), Shader.TileMode.CLAMP);
+        Matrix lightMatrix = new Matrix();
+        lightMatrix.setScale(304 * 0.9f, 184 * 0.9f);
+        lightMatrix.postTranslate(8 + 304 * 0.25f, 8 + 184 * 0.1f);
+        light.setLocalMatrix(lightMatrix);
+        k7LightShader = light;
+        k7LabelShadeShader = new LinearGradient(0, 22, 0, 142,
+            withAlpha(Color.WHITE, 20), withAlpha(Color.BLACK, 46), Shader.TileMode.CLAMP);
+        k7GlassShader = new LinearGradient(70, 62, 70 + 180 * 0.6f, 106,
+            new int[] { withAlpha(Color.WHITE, 41), withAlpha(Color.WHITE, 5), withAlpha(Color.WHITE, 18) },
+            new float[] { 0f, 0.45f, 1f }, Shader.TileMode.CLAMP);
+        // A reel hub's off-white plastic, lit from the top-left, in the reel's own (0,0)-centred
+        // space — see drawK7Reel().
+        k7HubShader = new RadialGradient(-4.05f, -5.4f, 21.6f,
+            new int[] { 0xFFFBF9F4, 0xFFDCD7CC, 0xFFA39D91 },
+            new float[] { 0f, 0.7f, 1f }, Shader.TileMode.CLAMP);
+        k7MetalShader = new RadialGradient(-1.2f, -1.6f, 6.4f,
+            0xFF9B9690, 0xFF2C2826, Shader.TileMode.CLAMP);
+        k7TapeShader = new RadialGradient(0, 0, 1,
+            new int[] { 0xFF6B4429, 0xFF6B4429, 0xFF3D2616, 0xFF2A1A10 },
+            new float[] { 0f, 0.3f, 0.97f, 1f }, Shader.TileMode.CLAMP);
+        ColorMatrix artMatrix = new ColorMatrix();
+        artMatrix.setSaturation(0.9f);
+        k7ArtColorFilter = new ColorMatrixColorFilter(artMatrix);
     }
 
     /**

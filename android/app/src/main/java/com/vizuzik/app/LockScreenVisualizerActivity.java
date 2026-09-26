@@ -87,7 +87,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     /** Toggled between play/pause artwork in updatePlayPauseIcon(), the only mutable thing about
      *  the transport row built in buildTransportControls() below. */
     private ImageButton playPauseButton;
-    /** "baladeur" and "vinyl" only (see buildMetaColumn()) — null for "bars"/"cassette", so
+    /** "baladeur" and "vinyl" only (see buildMetaColumn()) — null for "bars"/"cassette"/K7, so
      *  onNowPlayingChanged() below guards every write to them. */
     private TextView titleView;
     private TextView artistView;
@@ -211,6 +211,8 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             // real screen rather than tucked inside the record the way "baladeur"'s own is (see
             // buildBaladeurOverlay()) — the record has no screen of its own to hold it, and "bars"/
             // "cassette" keep the lock screen text-free entirely, same as before this was added.
+            // The two K7 styles write title and artist on the cassette's own label instead (see
+            // EdgeGlowView.drawK7()), so they get the transport row alone too.
             if (LockScreenVisualizerPreference.STYLE_VINYL.equals(standaloneStyle)) {
                 root.addView(buildDiscMeta());
             }
@@ -429,7 +431,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         glowView.applyConfig(EdgeConfig.read(this));
-        // Its own, shorter style choice (Barres/Cassette/Disque/Baladeur) rather than EdgeConfig's own
+        // Its own, shorter style choice (Barres/Cassette/K7/Disque/Baladeur) rather than EdgeConfig's own
         // "style" field the line above just read — the two pickers are deliberately separate, see
         // LockScreenVisualizerPreference and EdgeGlowView.setStandaloneStyle().
         glowView.setStandaloneStyle(LockScreenVisualizerPreference.getStyle(this));
@@ -505,6 +507,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
             // off the lock screen entirely, same as before either of the others got one.
             if (titleView != null) titleView.setText(nowPlaying.title);
             if (artistView != null) artistView.setText(nowPlaying.artist);
+            // The two K7 styles write them on the cassette's own label instead (see
+            // EdgeGlowView.drawK7()), and rewind the tape for the new track.
+            glowView.setK7Text(nowPlaying.title, nowPlaying.artist);
+            glowView.k7TrackChanged();
             try {
                 glowView.setPalette(OverlayPalette.extract(nowPlaying.albumArt));
                 glowView.setAlbumArt(nowPlaying.albumArt);
