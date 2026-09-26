@@ -316,7 +316,9 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      * section, where EdgeGlowView.k7ControlCenters() says it is — rather than pinned to the real
      * screen's bottom edge, where they ran over the cassette's own edge and screws. Held upright,
      * that section runs down the left side of the screen (the illustration is turned a quarter),
-     * so the buttons then stand in a column there; their icons stay upright either way. Sized from
+     * so the buttons then stand in a column there, and their icons turn a quarter with it: this
+     * screen doesn't follow the phone's rotation, so the cassette is read by turning the phone on
+     * its side, and the buttons are then read that way too, as a row under the label. Sized from
      * the cassette's own scale, within touchable bounds, and placed again whenever the view is
      * laid out afresh (a rotation, a fold).
      *
@@ -364,6 +366,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
                     int padding = Math.round(size * 0.28f);
                     button.setPadding(padding, padding, padding, padding);
                 }
+                button.setRotation(glowViewRef.k7ControlsRotated() ? 90f : 0f);
                 button.setX(centers[i * 2] - size * 0.5f);
                 button.setY(centers[i * 2 + 1] - size * 0.5f);
                 button.setVisibility(android.view.View.VISIBLE);

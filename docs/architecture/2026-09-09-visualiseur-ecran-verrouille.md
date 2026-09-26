@@ -374,7 +374,9 @@ propres boutons précédent/lecture-pause/suivant, conçus contre les touchers a
 posés sur la partie basse de la cassette (le trapèze) plutôt qu'à distance fixe du bas de l'écran,
 où ils chevauchaient le bord de la coque et ses vis (`EdgeGlowView.k7ControlCenters()`,
 `LockScreenVisualizerActivity.buildK7Controls()`). En portrait, l'illustration étant tournée d'un
-quart de tour, ils forment une colonne le long du côté gauche de l'écran, icônes à l'endroit. Les reflets
+quart de tour, ils forment une colonne le long du côté gauche de l'écran, et leurs icônes tournent
+avec elle : cet écran ne suit pas la rotation du téléphone, la cassette se lit donc téléphone
+tourné sur le côté, et les boutons se lisent alors de la même façon, en rangée sous l'étiquette. Les reflets
 qui suivent l'inclinaison du téléphone (un capteur de plus, allumé en continu) et le halo coloré
 derrière K7 Classique : décoratifs, sur une vue redessinée jusqu'à 30 fois par seconde.
 

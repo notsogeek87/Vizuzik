@@ -451,6 +451,9 @@ final class EdgeGlowView extends View {
     private RadialGradient k7TapeShader;
     private final Matrix k7TapeMatrix = new Matrix();
     private final Matrix k7ViewMatrix = new Matrix();
+    // Whether k7Scale() last found the illustration turned a quarter (a portrait screen) — see
+    // k7ControlsRotated().
+    private boolean k7Rotated;
     private ColorMatrixColorFilter k7ArtColorFilter;
     // The last artwork handed over for "vinyl" — see setAlbumArt(). Read from the main thread
     // only (set from DeezerMediaBridge's callback, which also runs on the main thread), so a
@@ -2703,6 +2706,7 @@ final class EdgeGlowView extends View {
         boxW = Math.min(boxW, boxH * CASSETTE_MAX_BOX_ASPECT);
         float scale = Math.max(boxW / CASSETTE_VIEWBOX_WIDTH, boxH / CASSETTE_VIEWBOX_HEIGHT);
 
+        k7Rotated = rotate;
         out.setTranslate(-CASSETTE_VIEWBOX_WIDTH * 0.5f, -CASSETTE_VIEWBOX_HEIGHT * 0.5f);
         out.postScale(scale, scale);
         if (rotate) out.postRotate(90);
@@ -2730,6 +2734,13 @@ final class EdgeGlowView extends View {
         out[5] = K7_CONTROLS_Y;
         matrix.mapPoints(out);
         return scale;
+    }
+
+    /** Whether the K7 illustration is drawn turned a quarter (a portrait screen), as of the last
+     *  k7ControlCenters() — the buttons' icons then turn with it, see
+     *  LockScreenVisualizerActivity.buildK7Controls(). */
+    boolean k7ControlsRotated() {
+        return k7Rotated;
     }
 
     /** K7 Classique only: the mechanism seen through the smoked shell — both packs (big enough,
