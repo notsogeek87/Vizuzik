@@ -50,10 +50,18 @@ jobs:
       # buildType), quelle que soit la version : on la renomme pour que le
       # fichier téléchargé (artifact ou asset de release) porte la version
       # au lieu d'un nom générique identique à chaque run.
+      # Hors main (staging, PR, lancement manuel), le nom de la branche est
+      # ajouté : on sait tout de suite quelle modification contient l'APK de
+      # test installé, sans devoir retrouver le run qui l'a produit.
       - name: Renommer l'APK avec sa version
         id: apk
         run: |
-          NAME="Vizuzik-${{ steps.version.outputs.name }}.apk"
+          SUFFIX=""
+          if [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref_name }}" != "main" ]; then
+            BRANCH="${{ github.head_ref || github.ref_name }}"
+            SUFFIX="-$(echo "$BRANCH" | tr '/' '-')"
+          fi
+          NAME="Vizuzik-${{ steps.version.outputs.name }}${SUFFIX}.apk"
           SRC="android/app/build/outputs/apk/debug/app-debug.apk"
           DEST="android/app/build/outputs/apk/debug/$NAME"
           mv "$SRC" "$DEST"
