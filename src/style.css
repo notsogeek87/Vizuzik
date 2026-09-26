@@ -1447,6 +1447,12 @@ body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   overflow-wrap: anywhere;
 }
 
+/* The lock-screen journal is one event per line — keep the line breaks, give it the full width. */
+.edge-diagnostics__list dd[data-key="ecran-verrouille"] {
+  grid-column: 1 / -1;
+  white-space: pre-wrap;
+}
+
 .app-hide__hint {
   font-size: 0.8rem;
   line-height: 1.4;

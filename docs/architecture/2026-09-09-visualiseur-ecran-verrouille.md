@@ -453,6 +453,14 @@ visualiseur, indéfiniment. Correctif : une transition éteint → doze survenan
 (`AOD_AFTER_SLEEP_IGNORE_MS`) après la mise en veille est ignorée. Un vrai toucher dans ces 10 s
 continue de marcher, mais demande le deuxième toucher (réveil complet, `SCREEN_ON`).
 
+**Troisième étape : mesurer plutôt que deviner.** 10 s était une valeur au jugé, trop longue à
+l'usage. La fenêtre passe à 2 s, et un journal (`LockScreenVisualizerController.journal()`, les 25
+derniers évènements : changements d'état d'écran, diffusions `SCREEN_OFF`/`SCREEN_ON`, décision
+prise et sa raison, avec l'écart en ms depuis le précédent) s'affiche dans le bloc « Diagnostic
+(avancé) » du panneau. But : relever sur le Fold la séquence réelle de One UI — délai de l'AOD
+système après la mise en veille, éventuel état distinct (`doze` vs `doze_suspend`) entre AOD système
+et toucher — et remplacer la fenêtre par la règle que ces mesures justifient.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.

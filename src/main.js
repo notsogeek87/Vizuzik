@@ -1500,6 +1500,10 @@ const DIAGNOSTIC_ROWS = [
           ` · barre ${fmt(d.scanWidestSeekBarFraction)}${d.scanSawWideSeekBar ? "✓" : "✗"}` +
           ` · pochette ${fmt(d.scanTallestImageFraction)} décalée ${fmt(d.scanTallestImageOffsetFraction)}${d.scanSawLargeArtwork ? "✓" : "✗"}`,
   ],
+  // The lock screen's own journal (LockScreenVisualizerController.journal()): every display state
+  // change and wake decision, oldest first, with the gap since the previous one — what the "wake"
+  // trigger's rule for telling a tap from One UI's own AOD is being measured from.
+  ["ecran-verrouille", "Journal écran verrouillé", (d) => d.lockScreenEvents || "aucun évènement"],
 ];
 
 function fmt(value) {

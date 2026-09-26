@@ -702,6 +702,7 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
         result.put("vinylViewTop", OverlayDiagnostics.vinylViewTop);
         result.put("requirePlayerScreenSetting", OverlayDiagnostics.requirePlayerScreen);
         result.put("onlyOverMusicAppSetting", OverlayDiagnostics.onlyOverMusicApp);
+        result.put("lockScreenEvents", LockScreenVisualizerController.getInstance().journal());
         call.resolve(result);
     }
 

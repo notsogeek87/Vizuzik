@@ -70,8 +70,21 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
      * Any OFF → DOZE this soon after the screen went off is taken as the system's, not a touch; a
      * real tap that early still works, it just needs the second touch that fully wakes the phone
      * (ACTION_SCREEN_ON).
+     *
+     * First set to 10 s, a guess that fixed the loop but made a real tap in that window need a
+     * second touch. Down to 2 s while the real One UI sequence is measured with the event journal
+     * below (see recordEvent()), to be replaced by whatever rule that measurement supports.
      */
-    private static final long AOD_AFTER_SLEEP_IGNORE_MS = 10_000;
+    private static final long AOD_AFTER_SLEEP_IGNORE_MS = 2_000;
+
+    /** Diagnostic only: the last screen-state changes and the decision taken on each, shown in
+     *  the settings panel's "Diagnostic (avancé)" block (DeezerMediaPlugin.getOverlayDiagnostics())
+     *  so the One UI sequence can be read off a real device rather than guessed. */
+    private static final int JOURNAL_SIZE = 25;
+    private final long[] journalTimes = new long[JOURNAL_SIZE];
+    private final String[] journalEvents = new String[JOURNAL_SIZE];
+    private int journalNext;
+    private int journalCount;
 
     /**
      * Catches the first touch on a sleeping screen in "wake" mode. With Samsung's AOD set to
@@ -95,13 +108,18 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             int state = currentDisplayState();
             int previous = lastDisplayState;
             lastDisplayState = state;
+            if (state == previous) return;
+            recordEvent("écran " + stateName(previous) + " → " + stateName(state));
             if (previous == Display.STATE_ON && state != Display.STATE_ON) {
                 screenOffAtMs = SystemClock.elapsedRealtime();
             }
             boolean dozing = state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND;
-            boolean justWentToSleep =
-                SystemClock.elapsedRealtime() - screenOffAtMs < AOD_AFTER_SLEEP_IGNORE_MS;
-            if (previous == Display.STATE_OFF && dozing && !justWentToSleep) maybeShowOnWake();
+            if (previous != Display.STATE_OFF || !dozing) return;
+            if (SystemClock.elapsedRealtime() - screenOffAtMs < AOD_AFTER_SLEEP_IGNORE_MS) {
+                recordEvent("  ignoré : juste après la mise en veille");
+                return;
+            }
+            maybeShowOnWake("AOD");
         }
 
         @Override
@@ -123,10 +141,12 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             // setTurnScreenOn() causes.
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                recordEvent("diffusion SCREEN_OFF");
                 screenOffAtMs = SystemClock.elapsedRealtime();
                 maybeShow();
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
-                maybeShowOnWake();
+                recordEvent("diffusion SCREEN_ON");
+                maybeShowOnWake("SCREEN_ON");
             }
         }
     };
@@ -164,6 +184,44 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
         DisplayManager displayManager = appContext.getSystemService(DisplayManager.class);
         Display display = displayManager == null ? null : displayManager.getDisplay(Display.DEFAULT_DISPLAY);
         return display == null ? Display.STATE_UNKNOWN : display.getState();
+    }
+
+    private static String stateName(int state) {
+        switch (state) {
+            case Display.STATE_OFF: return "éteint";
+            case Display.STATE_ON: return "allumé";
+            case Display.STATE_DOZE: return "doze";
+            case Display.STATE_DOZE_SUSPEND: return "doze_suspend";
+            default: return "état " + state;
+        }
+    }
+
+    /** Written on the main thread (display listener, receiver, maybeShowOnWake()), read by
+     *  journal() from the plugin's thread — hence both synchronized. */
+    private synchronized void recordEvent(String event) {
+        journalTimes[journalNext] = SystemClock.elapsedRealtime();
+        journalEvents[journalNext] = event;
+        journalNext = (journalNext + 1) % JOURNAL_SIZE;
+        if (journalCount < JOURNAL_SIZE) journalCount++;
+    }
+
+    /** Oldest first, one line per event: seconds before now, then the gap in ms since the
+     *  previous event — the gap is what the rule to be chosen will be based on. */
+    synchronized String journal() {
+        if (journalCount == 0) return "";
+        long now = SystemClock.elapsedRealtime();
+        StringBuilder out = new StringBuilder();
+        int start = (journalNext - journalCount + JOURNAL_SIZE) % JOURNAL_SIZE;
+        long previous = -1;
+        for (int i = 0; i < journalCount; i++) {
+            int index = (start + i) % JOURNAL_SIZE;
+            long time = journalTimes[index];
+            out.append(String.format(java.util.Locale.ROOT, "-%.1fs", (now - time) / 1000f));
+            out.append(previous < 0 ? "        " : String.format(java.util.Locale.ROOT, " +%5dms", time - previous));
+            out.append("  ").append(journalEvents[index]).append('\n');
+            previous = time;
+        }
+        return out.toString();
     }
 
     @Override
@@ -207,24 +265,34 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
      * isKeyguardLocked() rather than isInteractive(): the screen is on by definition here; what
      * matters is that it woke onto the lock screen, not onto an unlocked phone.
      */
-    void maybeShowOnWake() {
+    void maybeShowOnWake(String source) {
         if (appContext == null) return;
-        if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
-        if (!LockScreenVisualizerPreference.isWakeTrigger(appContext)) return;
-        if (MainActivity.isForeground()) return;
+        String skipped = wakeSkipReason();
+        if (skipped != null) {
+            recordEvent("  " + source + " ignoré : " + skipped);
+            return;
+        }
+        recordEvent("  " + source + " → visualiseur lancé");
+        postFullScreenNotification();
+    }
+
+    /** Null when maybeShowOnWake() should go ahead, otherwise why not — in words, for the journal. */
+    private String wakeSkipReason() {
+        if (!LockScreenVisualizerPreference.isEnabled(appContext)) return "réglage désactivé";
+        if (!LockScreenVisualizerPreference.isWakeTrigger(appContext)) return "mode continu";
+        if (MainActivity.isForeground()) return "Vizuzik à l'écran";
         // Waking into the AOD and then fully (the visualizer's own setTurnScreenOn()) sends both
         // signals one after the other; the second must not post a notification that no new
         // Activity launch would ever cancel.
-        if (LockScreenVisualizerActivity.isShowing()) return;
+        if (LockScreenVisualizerActivity.isShowing()) return "déjà affiché";
 
         KeyguardManager keyguardManager =
             (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);
-        if (keyguardManager == null || !keyguardManager.isKeyguardLocked()) return;
+        if (keyguardManager == null || !keyguardManager.isKeyguardLocked()) return "pas verrouillé";
 
         DeezerMediaBridge.NowPlaying nowPlaying = DeezerMediaBridge.getInstance().getLastNowPlaying();
-        if (nowPlaying == null || !nowPlaying.isPlaying) return;
-
-        postFullScreenNotification();
+        if (nowPlaying == null || !nowPlaying.isPlaying) return "pas en lecture";
+        return null;
     }
 
     /**
