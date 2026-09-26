@@ -9,8 +9,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.hardware.display.DisplayManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
+import android.view.Display;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -52,6 +56,43 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
 
     private Context appContext;
     private boolean receiverRegistered;
+    private boolean displayListenerRegistered;
+    /** Last state seen for the built-in display (Display.STATE_*), so a change can be read as a
+     *  transition — see displayListener. */
+    private int lastDisplayState = Display.STATE_UNKNOWN;
+
+    /**
+     * Catches the first touch on a sleeping screen in "wake" mode. With Samsung's AOD set to
+     * "Appuyer pour afficher", that touch does not wake the phone: it brings up the AOD, a
+     * low-power "doze" display state that Android does not count as the screen being on — no
+     * ACTION_SCREEN_ON, so maybeShowOnWake() would only run after a second touch fully wakes it.
+     * What an app can see is the display itself changing state, OFF → DOZE (or DOZE_SUSPEND, the
+     * static AOD variant): that transition is the AOD appearing, and the full-screen intent then
+     * brings the visualizer up (its setTurnScreenOn() leaving doze for a real wake).
+     *
+     * Only OFF → DOZE counts. An AOD set to "Toujours afficher" goes straight ON → DOZE when the
+     * screen turns off — reacting to that would bring back exactly the "relit as soon as it goes
+     * off" behaviour "wake" mode exists to avoid. Known cost: an AOD that also lights up for an
+     * incoming notification makes the same OFF → DOZE transition, and this cannot tell the two
+     * apart.
+     */
+    private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
+        @Override
+        public void onDisplayChanged(int displayId) {
+            if (displayId != Display.DEFAULT_DISPLAY) return;
+            int state = currentDisplayState();
+            int previous = lastDisplayState;
+            lastDisplayState = state;
+            boolean dozing = state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND;
+            if (previous == Display.STATE_OFF && dozing) maybeShowOnWake();
+        }
+
+        @Override
+        public void onDisplayAdded(int displayId) {}
+
+        @Override
+        public void onDisplayRemoved(int displayId) {}
+    };
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -91,6 +132,20 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
             );
             receiverRegistered = true;
         }
+        if (!displayListenerRegistered) {
+            DisplayManager displayManager = appContext.getSystemService(DisplayManager.class);
+            if (displayManager != null) {
+                lastDisplayState = currentDisplayState();
+                displayManager.registerDisplayListener(displayListener, new Handler(Looper.getMainLooper()));
+                displayListenerRegistered = true;
+            }
+        }
+    }
+
+    private int currentDisplayState() {
+        DisplayManager displayManager = appContext.getSystemService(DisplayManager.class);
+        Display display = displayManager == null ? null : displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+        return display == null ? Display.STATE_UNKNOWN : display.getState();
     }
 
     @Override
@@ -128,8 +183,8 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     }
 
     /**
-     * "wake" mode's only way in: the user has just woken the screen and is looking at the real
-     * lock screen while music plays — show the visualizer over it, for the time
+     * "wake" mode's way in: the user has just woken the screen — fully (ACTION_SCREEN_ON) or only
+     * into the AOD (see displayListener) — onto the lock screen while music plays — show the visualizer over it, for the time
      * LockScreenVisualizerActivity reads from LockScreenVisualizerPreference.getDurationSec().
      * isKeyguardLocked() rather than isInteractive(): the screen is on by definition here; what
      * matters is that it woke onto the lock screen, not onto an unlocked phone.
@@ -139,6 +194,10 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
         if (!LockScreenVisualizerPreference.isEnabled(appContext)) return;
         if (!LockScreenVisualizerPreference.isWakeTrigger(appContext)) return;
         if (MainActivity.isForeground()) return;
+        // Waking into the AOD and then fully (the visualizer's own setTurnScreenOn()) sends both
+        // signals one after the other; the second must not post a notification that no new
+        // Activity launch would ever cancel.
+        if (LockScreenVisualizerActivity.isShowing()) return;
 
         KeyguardManager keyguardManager =
             (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);

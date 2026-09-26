@@ -433,6 +433,19 @@ quand l'écran est *déjà* allumé sur le keyguard (c'est le comportement AOSP 
 direct tant que le keyguard est affiché — mais One UI n'a pas été testé ici), plutôt que de
 s'afficher en simple bandeau.
 
+**Premier retour terrain (Z Fold8, AOD en « Appuyer pour afficher ») : il fallait deux touchers.**
+Le premier toucher fait apparaître l'AOD Samsung, pas l'écran : c'est un état d'affichage
+basse consommation (« doze ») qu'Android ne compte pas comme un écran allumé — pas de
+`SCREEN_ON`, donc rien avant que le deuxième toucher réveille vraiment le téléphone. Expérimental :
+`LockScreenVisualizerController` écoute aussi l'état de l'écran lui-même (`DisplayManager.
+DisplayListener`) et traite la transition **éteint → doze** comme ce premier toucher. Seule cette
+transition compte : une AOD « Toujours afficher » passe d'allumé à doze dès la mise en veille, et y
+réagir reviendrait au mode continu. Limite connue : une AOD qui s'allume aussi à l'arrivée d'une
+notification fait la même transition, que rien ne permet de distinguer. `LockScreenVisualizerActivity.
+isShowing()` évite qu'enchaîner doze puis vrai réveil (le `setTurnScreenOn()` du visualiseur) ne
+poste une seconde notification. Non vérifié : que Samsung délivre bien ce changement d'état à
+l'app pendant le doze.
+
 ## Ce qui n'a pas été fait, et pourquoi
 
 - **Pas de duplication du moteur de rendu.** Voir ci-dessus.

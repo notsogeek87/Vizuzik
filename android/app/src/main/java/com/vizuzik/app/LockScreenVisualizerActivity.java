@@ -108,6 +108,13 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
      *  rights. Never posted in "continuous" mode, which stays up for as long as the music plays. */
     private final Runnable displayTimeoutExpired = this::finish;
     private long displayTimeoutMs;
+    /** Between onStart() and onStop() — read by LockScreenVisualizerController.maybeShowOnWake()
+     *  so a second wake signal for the same wake-up doesn't post another notification. */
+    private static volatile boolean showing;
+
+    static boolean isShowing() {
+        return showing;
+    }
     private String lastTrackKey;
     private boolean lastIsPlaying;
     private boolean hasLastIsPlaying;
@@ -513,6 +520,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     @Override
     protected void onStart() {
         super.onStart();
+        showing = true;
         glowView.applyConfig(EdgeConfig.read(this));
         // Its own, shorter style choice (Barres/Cassette/K7/Disque/Baladeur) rather than EdgeConfig's own
         // "style" field the line above just read — the two pickers are deliberately separate, see
@@ -566,12 +574,19 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         super.onNewIntent(intent);
         // launchMode="singleTask" (see AndroidManifest.xml) means a second trigger while this is
         // already showing lands here instead of starting another instance — nothing to do beyond
-        // acknowledging it: the view is already live and already current.
+        // acknowledging it: the view is already live and already current — beyond dropping the
+        // full-screen-intent notification that got it here, same as onCreate() does.
+        try {
+            NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID);
+        } catch (Exception e) {
+            Log.w(TAG, "cancel notification", e);
+        }
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        showing = false;
         // Anything taking this out of the foreground — the user actually unlocking, the real
         // keyguard's own bouncer appearing over it, a call — means this Activity has finished the
         // one thing it exists to do. There is nothing to resume back into.
