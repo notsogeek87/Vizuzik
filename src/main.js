@@ -1535,11 +1535,21 @@ const K7_LID_KEY_BUTTONS = { previous: els.previous, "play-pause": els.playPause
 // before they arrive.
 const K7_LID_SLIDE_MS = 700;
 let k7LidSlideTimer = null;
+function endK7LidSlide() {
+  clearTimeout(k7LidSlideTimer);
+  document.body.classList.remove("k7-lid-sliding");
+}
 function slideK7Lid() {
   document.body.classList.add("k7-lid-sliding");
   clearTimeout(k7LidSlideTimer);
-  k7LidSlideTimer = setTimeout(() => document.body.classList.remove("k7-lid-sliding"), K7_LID_SLIDE_MS);
+  k7LidSlideTimer = setTimeout(endK7LidSlide, K7_LID_SLIDE_MS);
 }
+
+// A rotation landing within that window would still animate across the screen otherwise: cut
+// the slide short the moment orientation actually flips. This doesn't close the window on its
+// own — the new layout can be worked out before the event arrives, hence the timeout above as
+// the fallback — but ending it early whenever the event does arrive in time can only shorten it.
+window.matchMedia("(orientation: landscape)").addEventListener("change", endK7LidSlide);
 
 // No display mode forces the phone into a particular orientation — cassette mode used to lock
 // landscape the way a video player forces landscape for fullscreen, but that fought the phone's

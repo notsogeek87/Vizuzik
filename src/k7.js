@@ -138,8 +138,8 @@ export class K7Tape {
     const [ax, ay] = tangentPoint(REEL_A_X, packA, TAPE_ROLLER_A_X, 1);
     const [bx, by] = tangentPoint(REEL_B_X, packB, TAPE_ROLLER_B_X, -1);
     const d =
-      `M${ax.toFixed(2)} ${ay.toFixed(2)} L29.6 174 Q29.6 185.4 40 185.4 ` +
-      `L280 185.4 Q290.4 185.4 290.4 174 L${bx.toFixed(2)} ${by.toFixed(2)}`;
+      `M${ax.toFixed(2)} ${ay.toFixed(2)} L${TAPE_ROLLER_A_X} ${TAPE_ROLLER_Y} Q${TAPE_ROLLER_A_X} 185.4 40 185.4 ` +
+      `L280 185.4 Q${TAPE_ROLLER_B_X} 185.4 ${TAPE_ROLLER_B_X} ${TAPE_ROLLER_Y} L${bx.toFixed(2)} ${by.toFixed(2)}`;
     for (const tape of this.tapes) tape.setAttribute("d", d);
   }
 }
