@@ -809,7 +809,9 @@ function setLockScreenVisualizerEnabled(enabled) {
 // live like the general Edge Visualizer's own "style". Same reasoning as the toggle above for
 // keeping its own localStorage key rather than folding it into readEdgeSettingsFromForm().
 const LOCKSCREEN_VISUALIZER_STYLE_KEY = "vizuzik:lockScreenVisualizerStyle";
-const LOCKSCREEN_VISUALIZER_STYLES = ["bars", "cassette", "vinyl", "baladeur"];
+const LOCKSCREEN_VISUALIZER_STYLES = [
+  "bars", "cassette", "vinyl", "baladeur", "k7-etiquette", "k7-classique",
+];
 // "vinyl" ("Disque"): the default style once the lock-screen visualizer itself defaults to on.
 const LOCKSCREEN_VISUALIZER_DEFAULT_STYLE = "vinyl";
 
