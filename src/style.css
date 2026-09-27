@@ -176,10 +176,11 @@ body:not([data-mode="cover"]) .fx {
   opacity: 1;
 }
 
-/* Cassette and baladeur mode replace the canvas scene and the disc with one fixed
-   full-screen illustration — nothing here reacts to the beat, on purpose (see .cassette and
-   .baladeur below). */
+/* Cassette, K7 and baladeur mode replace the canvas scene and the disc with one fixed
+   full-screen illustration — nothing here reacts to the beat, on purpose (see .cassette, .k7
+   and .baladeur below). */
 body[data-mode="cassette"] .fx,
+body[data-mode^="k7-"] .fx,
 body[data-mode="baladeur"] .fx {
   opacity: 0;
 }
@@ -188,6 +189,7 @@ body[data-mode="baladeur"] .fx {
    its footprint): the illustration already fills the screen behind everything, so a
    reserved square here would only ever push the title/controls off-centre under it. */
 body[data-mode="cassette"] .stage,
+body[data-mode^="k7-"] .stage,
 body[data-mode="baladeur"] .stage {
   display: none;
 }
@@ -520,6 +522,640 @@ body[data-state="playing"] .cassette__tape {
   stop-color: rgb(var(--c2));
 }
 
+/* ============================================================ K7 modes */
+
+/* "K7 Étiquette" and "K7 Classique": one shared illustration of a real compact cassette (see
+   index.html's #k7), offered alongside cassette mode rather than replacing it. Same stage as
+   cassette — a fixed, full-screen layer the canvas and disc make way for — and the same sizing:
+   capped at --cassette-max-box-aspect, centred, and rotated a quarter turn when the phone is
+   held upright. Only the label changes between the two modes (see .k7__face). */
+.k7 {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s var(--ease-out);
+  background: var(--void);
+}
+
+body[data-mode^="k7-"] .k7 {
+  opacity: 1;
+}
+
+.k7__art {
+  display: block;
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
+  height: 100%;
+  margin-inline: auto;
+}
+
+@media (orientation: portrait) {
+  .k7__art {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(100vh, calc(var(--cassette-max-box-aspect) * 100vw));
+    height: 100vw;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+}
+
+/* The title/artist are written on the cassette's own paper strip (see setK7Text() in main.js),
+   so the floating card would only repeat them. Visually hidden rather than display:none, so it
+   stays readable to a screen reader (the illustration itself is aria-hidden). */
+body[data-mode^="k7-"] .meta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.k7__shell {
+  fill: url(#k7-shell);
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1.5;
+}
+
+/* K7 Étiquette: a pre-recorded tape's coloured plastic, tinted by the album's main colour — a
+   dark shell sank into the black screen around it. One flat tint rather than the default's
+   top-to-bottom darkening, which only pushed the bottom back into the black. The plain value
+   first is what an older WebView without color-mix() keeps. */
+body[data-mode="k7-etiquette"] .k7__shell-stop {
+  stop-color: #3a3431;
+  stop-color: color-mix(in srgb, rgb(var(--c1)) 56%, #262222);
+}
+
+body[data-mode="k7-etiquette"] .k7__trapezoid {
+  fill: rgba(0, 0, 0, 0.05);
+}
+
+/* The K7 modes carry their own controls, on the Walkman lid (see .k7__lid): the app's usual
+   transport row and scrub bar stay in the DOM — the lid's keys click them, so it's the same
+   logic — but are never shown here. Nor is the bottom scrim that sets them off elsewhere: on
+   the lid it only darkened the metal.
+   Exception: the lid's keys are hit-tested purely by pointer coordinates (see K7Lid.hit() in
+   k7.js), which a TV remote's D-pad can't drive. There the lid stays off-screen instead (below)
+   and the app's own controls stay put, as in every other mode. */
+body[data-mode^="k7-"]:not([data-platform="tv"]) .controls,
+body[data-mode^="k7-"]:not([data-platform="tv"]) .progress {
+  display: none;
+}
+
+body[data-mode^="k7-"][data-platform="tv"] .k7__lid-layer {
+  display: none;
+}
+
+body[data-mode^="k7-"] .scrim {
+  opacity: 0;
+}
+
+/* The top bar (capture badge, mode toggle) comes and goes with the lid, like cassette mode's
+   controls with its tap (see .cassette-controls-hidden further down). */
+body[data-mode^="k7-"].cassette-controls-hidden .topbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+
+.k7__lid-plate {
+  fill: url(#k7-lid-metal);
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1.2;
+}
+
+#k7-lid-brush line {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 0.3;
+}
+
+.k7__lid-glass {
+  fill: url(#k7-lid-glass);
+}
+
+.k7__lid-streak {
+  fill: rgba(255, 255, 255, 0.07);
+}
+
+.k7__lid-streak--thin {
+  fill: rgba(255, 255, 255, 0.09);
+}
+
+.k7__lid-rim {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 2;
+}
+
+.k7__lid-rimlight {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 0.7;
+}
+
+/* The lid's own layer, laid exactly over the cassette: same box as .k7__art (whose rules it
+   shares, portrait rotation included), stacked on it instead of below it, and promoted to its
+   own compositing layer so the lid and the cassette repaint independently. */
+/* The lid: shut over the cassette while the controls show, slid right off the screen — towards
+   the cassette's bottom edge — once a tap has tucked them, the default on entering a K7 mode
+   (see applyDisplayMode() in main.js). It slides as one solid layer and never fades: a
+   half-transparent lid let the cassette show through on top of its keys mid-slide, and moving
+   the whole layer (the separate translate property, so portrait's rotation is left alone) is
+   done by the compositor without repainting anything. */
+.k7__lid-layer {
+  transition: none;
+}
+
+/* Only for the move a tap asked for (see slideK7Lid() in main.js): never when the phone turns,
+   which also moves the tucked-away lid, from below the screen to its left or back. */
+body.k7-lid-sliding .k7__lid-layer {
+  transition: translate 0.55s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/* Their own compositing layers only while a K7 mode is on screen, not for the whole session. */
+body[data-mode^="k7-"] .k7__lid-layer {
+  will-change: translate;
+}
+
+body.cassette-controls-hidden .k7__lid-layer {
+  translate: 0 100vh;
+}
+
+@media (orientation: landscape) {
+  .k7__lid-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+}
+
+@media (orientation: portrait) {
+  body.cassette-controls-hidden .k7__lid-layer {
+    translate: -100vw 0;
+  }
+}
+
+.k7__lid-edge {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 0.8;
+}
+
+/* The cassette's own short scale would show through under the lid's long one. */
+body[data-mode^="k7-"]:not(.cassette-controls-hidden) .k7__scale {
+  opacity: 0;
+}
+
+.k7__lid-ruler {
+  fill: none;
+  stroke: rgba(236, 230, 218, 0.75);
+  stroke-width: 0.6;
+}
+
+.k7__lid-needle line {
+  stroke: #e0402f;
+  stroke-width: 1.2;
+}
+
+.k7__lid-needle path {
+  fill: #e0402f;
+}
+
+.k7__lid-brand {
+  font: 800 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 2.4px;
+  fill: #2b2b30;
+}
+
+.k7__lid-text {
+  font: 700 6px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 1.4px;
+  fill: #3a3a40;
+}
+
+.k7__lid-lcd {
+  fill: #1b2016;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 0.6;
+}
+
+.k7__lid-lcdtext {
+  font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace;
+  fill: #b8e07a;
+}
+
+/* Flush keys in the lid's own metal, set off by an engraved groove rather than sunk in a dark
+   well; play/pause stays pressed down while playing, with a thin red mark. */
+.k7__lid-groove {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.28);
+  stroke-width: 0.7;
+}
+
+.k7__lid-groove-light {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 0.6;
+}
+
+.k7__lid-keycap {
+  fill: url(#k7-lid-key);
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 0.5;
+}
+
+.k7__lid-keyshine {
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 0.5;
+}
+
+.k7__lid-key.is-pressed .k7__lid-keycap,
+body[data-state="playing"] .k7__lid-key--play-pause .k7__lid-keycap {
+  fill: url(#k7-lid-key-down);
+}
+
+.k7__lid-key.is-pressed .k7__lid-keyshine,
+body[data-state="playing"] .k7__lid-key--play-pause .k7__lid-keyshine {
+  display: none;
+}
+
+.k7__lid-icon {
+  fill: #44454b;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.k7__lid-icon--pause,
+body[data-state="playing"] .k7__lid-icon--play {
+  display: none;
+}
+
+body[data-state="playing"] .k7__lid-icon--pause {
+  display: inline;
+}
+
+.k7__lid-accent {
+  fill: #c0392b;
+  opacity: 0;
+}
+
+body[data-state="playing"] .k7__lid-accent {
+  opacity: 1;
+}
+
+/* Held upright, the whole illustration is turned a quarter; the key symbols are turned back so
+   they still read the right way up. */
+@media (orientation: portrait) {
+  .k7__lid-icon {
+    transform: rotate(-90deg);
+  }
+}
+
+/* K7 Classique: a blank tape recorded at home, so a neutral shell rather than a coloured one —
+   smoked, translucent plastic, with the mechanism showing through it (.k7__internals) and the
+   album's colours only in the glow behind it (.k7__halo), which also tints the smoke. */
+.k7__halo,
+.k7__internals {
+  display: none;
+}
+
+body[data-mode="k7-classique"] .k7__halo,
+body[data-mode="k7-classique"] .k7__internals {
+  display: inline;
+}
+
+/* The glow reaches past the illustration's own box. */
+body[data-mode="k7-classique"] .k7__art {
+  overflow: visible;
+}
+
+.k7__halo-stop--1 {
+  stop-color: rgb(var(--c1));
+  stop-opacity: 0.8;
+}
+
+.k7__halo-stop--2 {
+  stop-color: rgb(var(--c2));
+  stop-opacity: 0.38;
+}
+
+.k7__halo-stop--3 {
+  stop-color: rgb(var(--c2));
+  stop-opacity: 0;
+}
+
+body[data-mode="k7-classique"] .k7__shell {
+  fill: rgba(72, 66, 62, 0.62);
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1;
+}
+
+body[data-mode="k7-classique"] .k7__bezel {
+  stroke: rgba(255, 255, 255, 0.16);
+}
+
+body[data-mode="k7-classique"] .k7__trapezoid {
+  fill: rgba(255, 255, 255, 0.035);
+  stroke: rgba(255, 255, 255, 0.22);
+}
+
+body[data-mode="k7-classique"] .k7__trapezoid-light {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+body[data-mode="k7-classique"] .k7__ledge {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+body[data-mode="k7-classique"] .k7__hole {
+  fill: #020203;
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.k7__tape {
+  fill: none;
+  stroke: #6e4424;
+  stroke-width: 1.9;
+  stroke-linejoin: round;
+}
+/* Through the window there is no smoke over it: a shade darker, about the packs' own edge, so
+   it reads as the same tape coming out of them rather than a lighter strip. */
+.k7__tape--window {
+  stroke: #5a3820;
+}
+
+.k7__roller-rim {
+  fill: rgba(225, 220, 210, 0.16);
+  stroke: rgba(235, 230, 220, 0.45);
+  stroke-width: 1.2;
+}
+
+.k7__roller-core {
+  fill: rgba(235, 230, 220, 0.28);
+  stroke: rgba(235, 230, 220, 0.5);
+  stroke-width: 0.6;
+}
+
+.k7__roller-pin {
+  fill: #bdb7ad;
+}
+
+.k7__guide {
+  fill: rgba(200, 195, 185, 0.35);
+  stroke: rgba(230, 225, 215, 0.5);
+  stroke-width: 0.5;
+}
+
+.k7__shield {
+  fill: rgba(150, 155, 165, 0.35);
+  stroke: rgba(210, 215, 225, 0.45);
+  stroke-width: 0.6;
+}
+
+.k7__spring {
+  fill: none;
+  stroke: rgba(200, 205, 215, 0.7);
+  stroke-width: 0.9;
+}
+
+.k7__felt {
+  fill: rgba(203, 191, 154, 0.8);
+}
+
+.k7__smoke {
+  fill: rgba(58, 52, 48, 0.28);
+}
+
+#k7-ribs line {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 0.5;
+}
+
+.k7__bezel {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.06);
+}
+
+/* Each tape pack is bigger than the window it shows through, as on a real cassette: only its
+   inner part (and the hub) is visible there. Sized from playback by src/k7.js (their r
+   attribute): the left/"supply" pack starts full and empties toward its hub, the right one
+   fills. */
+.k7__pack {
+  fill: url(#k7-tape);
+}
+
+.k7__scale {
+  fill: none;
+  stroke: rgba(232, 226, 214, 0.55);
+  stroke-width: 0.6;
+}
+
+/* The reels (.k7__hub) are turned by src/k7.js, frame by frame, through their transform
+   attribute — not by a CSS animation like cassette mode's. Android's WebView may hand an
+   animated transform on an SVG element to the compositor, which then draws it on a layer of its
+   own, above the rest of the page: with the lid shut, the turning reels (and patches of the
+   cassette around them) kept flickering through on top of it, and only while playing. */
+
+.k7__flange-rim {
+  fill: rgba(230, 228, 222, 0.07);
+  stroke: rgba(235, 232, 225, 0.32);
+  stroke-width: 1.4;
+}
+
+.k7__flange-ring {
+  fill: none;
+  stroke: rgba(235, 232, 225, 0.14);
+  stroke-width: 0.8;
+}
+
+.k7__flange-spokes {
+  fill: none;
+  stroke: rgba(235, 232, 225, 0.22);
+  stroke-width: 1.6;
+}
+
+.k7__teeth {
+  fill: #dcd7cc;
+}
+
+/* Only one label shows at a time — whichever K7 mode is on screen. */
+.k7__face,
+.k7__writing {
+  display: none;
+}
+
+body[data-mode="k7-etiquette"] .k7__face--etiquette,
+body[data-mode="k7-etiquette"] .k7__writing--etiquette,
+body[data-mode="k7-classique"] .k7__face--classique,
+body[data-mode="k7-classique"] .k7__writing--classique {
+  display: inline;
+}
+
+/* Shows until the first track's art loads, and at the edges of a "slice"-cropped one. */
+.k7__label-blank {
+  fill: #4a5560;
+}
+
+.k7__art-image {
+  filter: saturate(0.9);
+}
+
+.k7__paper {
+  fill: #ece6d8;
+}
+
+.k7__band {
+  fill: #fff;
+  fill-opacity: 0.38;
+}
+
+/* K7 Classique's label: a muted grey-blue, like the reference cassette's, pulled a little toward
+   the album's own main colour so each record gets its own tint. The plain fill first is what an
+   older WebView without color-mix() keeps. */
+.k7__label-tint {
+  fill: #4a5560;
+  fill: color-mix(in srgb, rgb(var(--c1)) 28%, #4a5560);
+}
+
+.k7__rule {
+  fill: none;
+  stroke: #9aa3b0;
+  stroke-width: 0.4;
+}
+
+.k7__stripe--1 {
+  fill: rgb(var(--c1));
+}
+
+.k7__stripe--2 {
+  fill: rgb(var(--c2));
+}
+
+.k7__dot {
+  fill: rgb(var(--c3));
+}
+
+.k7__label-frame {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.k7__window-rim {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2.2;
+}
+
+.k7__window-rim-light {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 0.6;
+}
+
+.k7__side {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  fill: #2b2a33;
+}
+
+/* The title/artist, handwritten on the label: black marker pen across K7 Étiquette's frosted strip
+   (bold enough to read over any album art), pencil on K7 Classique's ruled paper. Both fonts are
+   bundled rather than left to whatever "cursive" resolves to on the device, and each keeps its
+   own licence next to it — see public/fonts/README.md before moving or dropping either file. */
+@font-face {
+  font-family: "Permanent Marker";
+  src: url("/fonts/permanent-marker-latin-400.woff2") format("woff2");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Reenie Beanie";
+  src: url("/fonts/reenie-beanie-latin-400.woff2") format("woff2");
+  font-display: swap;
+}
+
+.k7__writing--etiquette .k7__hand {
+  font-family: "Permanent Marker", cursive;
+  fill: #111;
+}
+
+.k7__writing--etiquette .k7__hand--title {
+  font-size: 12px;
+}
+
+.k7__writing--etiquette .k7__hand--artist {
+  font-size: 9px;
+}
+
+/* Reenie Beanie only comes in one, fairly thin weight: a hairline stroke in the ink's own colour
+   thickens it into a pencil pressed a little harder, without touching the font file itself. */
+.k7__writing--classique .k7__hand {
+  font-family: "Reenie Beanie", cursive;
+  color: #26324f;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0.35px;
+  stroke-linejoin: round;
+}
+
+.k7__writing--classique .k7__hand--title {
+  font-size: 17px;
+}
+
+.k7__writing--classique .k7__hand--artist {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.k7__thumb-frame {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 0.6;
+}
+
+.k7__brand {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 6.5px;
+  letter-spacing: 0.8px;
+  text-anchor: middle;
+  fill: #e9e6df;
+}
+
+.k7__ledge {
+  stroke: rgba(0, 0, 0, 0.45);
+}
+
+.k7__trapezoid {
+  fill: rgba(0, 0, 0, 0.12);
+  stroke: rgba(0, 0, 0, 0.5);
+}
+
+.k7__trapezoid-light {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.k7__hole {
+  fill: #050506;
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 0.6;
+}
+
+.k7__screw circle {
+  fill: url(#k7-metal);
+}
+
+.k7__screw line {
+  stroke: #141110;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
 /* ============================================================ top bar */
 
 .topbar {
@@ -638,6 +1274,8 @@ body[data-mode="aurora"] .mode-toggle .icon-aurora,
 body[data-mode="nebula"] .mode-toggle .icon-nebula,
 body[data-mode="cocoon"] .mode-toggle .icon-cocoon,
 body[data-mode="cassette"] .mode-toggle .icon-cassette,
+body[data-mode="k7-etiquette"] .mode-toggle .icon-k7-etiquette,
+body[data-mode="k7-classique"] .mode-toggle .icon-k7-classique,
 body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   display: block;
   animation: icon-pop 0.45s var(--ease-spring);
@@ -2056,6 +2694,10 @@ body[data-platform="tv"][data-mode="cassette"] .artist {
 
   .ambient__art {
     transform: none !important;
+  }
+
+  .k7__lid-layer {
+    transition: none;
   }
 
   .disc {
