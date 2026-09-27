@@ -421,7 +421,7 @@ final class EdgeGlowView extends View {
     private float k7Shown = -1f;
     private boolean k7Rewinding;
     private float k7RewindFrom;
-    private long k7RewindStartMs;
+    private float k7RewindElapsedMs;
     private float k7RewindDurationMs;
     private float k7ReelADeg;
     private float k7ReelBDeg;
@@ -730,7 +730,7 @@ final class EdgeGlowView extends View {
     void k7TrackChanged() {
         if (k7Shown < K7_JUMP) return;
         k7RewindFrom = k7Shown;
-        k7RewindStartMs = SystemClock.elapsedRealtime();
+        k7RewindElapsedMs = 0f;
         k7RewindDurationMs = Math.max(K7_REWIND_MIN_S, K7_REWIND_FULL_S * k7Shown) * 1000f;
         k7Rewinding = true;
     }
@@ -914,7 +914,8 @@ final class EdgeGlowView extends View {
         if (!isK7Style(activeStyle())) return;
         float played = cassetteProgress();
         if (k7Rewinding) {
-            float t = Math.min(1f, (SystemClock.elapsedRealtime() - k7RewindStartMs) / k7RewindDurationMs);
+            k7RewindElapsedMs += dt * 1000f;
+            float t = Math.min(1f, k7RewindElapsedMs / k7RewindDurationMs);
             float eased = t < 0.5f ? 2f * t * t : 1f - (2f - 2f * t) * (2f - 2f * t) / 2f;
             k7Shown = k7RewindFrom * (1f - eased);
             if (t >= 1f) k7Rewinding = false;
