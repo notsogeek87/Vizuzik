@@ -564,11 +564,10 @@
           <rect class="k7__lid-accent" x="154" y="181" width="12" height="1.4" rx="0.7" />
         </g>
       </svg>
-      <!-- The lid's moving parts, in a layer of their own over it: the glints following the
-           tilt, the ruler's needle, the LCD's digits. Kept apart so that redrawing them — every
-           second for the time, and whenever the sensors report a tilt — never repaints the
-           heavy lid underneath (brushed-metal pattern, clips, keys), which is what let the
-           cassette show through it in patches on Android. -->
+      <!-- The lid's moving parts, in a layer of their own over it: the ruler's needle and the
+           LCD's digits. Kept apart so that redrawing them — every second for the time — never
+           repaints the heavy lid underneath (brushed-metal pattern, clips, keys), which is what
+           let the cassette show through it in patches on Android. -->
       <svg class="k7__art k7__lid-layer k7__lid-live" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
         <g class="k7__lid">
           <g clip-path="url(#k7-lid-metal-clip)">
@@ -576,8 +575,7 @@
               <rect x="120" y="-40" width="160" height="280" fill="url(#k7-lid-sweep)" transform="rotate(22 200 100)" />
             </g>
           </g>
-          <!-- The glass's own glints: moved by the tilt too, less than the metal's light band, so
-               the glass reads as sitting on a different plane from the plate. -->
+          <!-- The glass's own glints, a fixed highlight rather than the metal's light band. -->
           <g clip-path="url(#k7-lid-glass-clip)">
             <g class="k7__lid-glints">
               <path class="k7__lid-streak" d="M60 16 L95 16 L40 118 L5 118 Z" />

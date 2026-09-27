@@ -156,33 +156,15 @@ const RULER_END = 242;
 // the lid rather than seeking.
 const RULER_ZONE = { left: 62, right: 258, top: 86, bottom: 112 };
 
-// How far, in degrees, a tilt keeps moving the glint before it stops; and how quickly the glint's
-// rest position follows however the phone is being held, so it drifts back to centre.
-const TILT_RANGE = 25;
-const TILT_REST_FOLLOW = 0.005;
-// A phone lying still still reports a little sensor noise: smoothed out, and below this many
-// degrees of change the glint isn't redrawn at all.
-const TILT_SMOOTHING = 0.25;
-const TILT_DEADBAND = 0.4;
-
 export class K7Lid {
   constructor(root) {
     this.svg = root.querySelector(".k7__lid-layer");
     this.needle = root.querySelector(".k7__lid-needle");
     this.time = root.querySelector("#k7-lid-time");
-    this.sweep = root.querySelector(".k7__lid-sweep");
-    this.glints = root.querySelector(".k7__lid-glints");
     this.keys = {};
     for (const key of root.querySelectorAll(".k7__lid-key")) this.keys[key.dataset.key] = key;
-    this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.shownTime = null;
     this.shownNeedle = null;
-    this.tiltRest = null;
-    this.listening = false;
-    this.glint = null;
-    this.glintFrame = null;
-    this.shownGlint = null;
-    this.onOrientation = (event) => this._onOrientation(event);
   }
 
   /**
@@ -231,23 +213,6 @@ export class K7Lid {
     }
   }
 
-  /** Only listens to the motion sensors while the lid is actually shut on screen. */
-  setActive(active) {
-    const listen = active && !this.reducedMotion.matches && "DeviceOrientationEvent" in window;
-    if (listen === this.listening) return;
-    this.listening = listen;
-    if (listen) {
-      this.tiltRest = null;
-      window.addEventListener("deviceorientation", this.onOrientation);
-    } else {
-      window.removeEventListener("deviceorientation", this.onOrientation);
-      this.sweep.removeAttribute("transform");
-      this.glints.removeAttribute("transform");
-      this.shownGlint = null;
-      this.glint = null;
-    }
-  }
-
   _toViewBox(clientX, clientY) {
     const matrix = this.svg.getScreenCTM();
     return matrix ? new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse()) : null;
@@ -255,45 +220,5 @@ export class K7Lid {
 
   _rulerRatio(p) {
     return clamp((p.x - RULER_START) / (RULER_END - RULER_START), 0, 1);
-  }
-
-  // Moves the light band across the lid's metal as the phone tilts, the way a real brushed
-  // aluminium plate catches the light — and the window's glints with it, less far, so glass and
-  // plate read as two planes rather than one flat picture.
-  _onOrientation(event) {
-    if (event.gamma == null || event.beta == null) return;
-    // The sensor reports the device's own axes; turn them into the screen's.
-    const angle = (screen.orientation && screen.orientation.angle) || 0;
-    let x = event.gamma;
-    let y = event.beta;
-    if (angle === 90) [x, y] = [event.beta, -event.gamma];
-    else if (angle === 180) [x, y] = [-event.gamma, -event.beta];
-    else if (angle === 270) [x, y] = [-event.beta, event.gamma];
-    if (!this.tiltRest) this.tiltRest = { x, y };
-    this.tiltRest.x += (x - this.tiltRest.x) * TILT_REST_FOLLOW;
-    this.tiltRest.y += (y - this.tiltRest.y) * TILT_REST_FOLLOW;
-    const dx = clamp(x - this.tiltRest.x, -TILT_RANGE, TILT_RANGE);
-    const dy = clamp(y - this.tiltRest.y, -TILT_RANGE, TILT_RANGE);
-    // And the screen's into the illustration's: upright, it is turned a quarter clockwise.
-    const upright = window.innerHeight > window.innerWidth;
-    const target = { x: upright ? dy : dx, y: upright ? -dx : dy };
-    if (!this.glint) this.glint = target;
-    this.glint.x += (target.x - this.glint.x) * TILT_SMOOTHING;
-    this.glint.y += (target.y - this.glint.y) * TILT_SMOOTHING;
-    // The sensor fires faster than the screen redraws: at most one repaint per frame, and none
-    // for a move too small to see.
-    if (this.glintFrame == null) this.glintFrame = requestAnimationFrame(() => this._drawGlint());
-  }
-
-  _drawGlint() {
-    this.glintFrame = null;
-    if (!this.listening || !this.glint) return;
-    const { x, y } = this.glint;
-    if (this.shownGlint && Math.abs(x - this.shownGlint.x) < TILT_DEADBAND && Math.abs(y - this.shownGlint.y) < TILT_DEADBAND) {
-      return;
-    }
-    this.shownGlint = { x, y };
-    this.sweep.setAttribute("transform", `translate(${(x * 4).toFixed(1)} ${(y * 1.5).toFixed(1)})`);
-    this.glints.setAttribute("transform", `translate(${(x * 2.4).toFixed(1)} ${(y * 0.9).toFixed(1)})`);
   }
 }

@@ -1501,7 +1501,6 @@ function applyDisplayMode(announce) {
   if (displayMode !== appliedMode) {
     appliedMode = displayMode;
     document.body.classList.toggle("cassette-controls-hidden", isK7Mode(displayMode));
-    syncK7Lid();
     // Written while the mode was hidden, the label text couldn't be measured (see fitSvgText()).
     if (isK7Mode(displayMode)) refitK7Text();
   }
@@ -1520,11 +1519,6 @@ function isCassetteMode(mode) {
 // In the K7 modes the controls are the Walkman lid's: shut over the cassette while they show.
 function k7LidShut() {
   return isK7Mode(displayMode) && !document.body.classList.contains("cassette-controls-hidden");
-}
-
-// The lid only listens to the motion sensors while it is actually shut on screen.
-function syncK7Lid() {
-  k7Lid.setActive(k7LidShut() && !els.player.hidden);
 }
 
 const K7_LID_KEY_BUTTONS = { previous: els.previous, "play-pause": els.playPause, next: els.next };
@@ -1879,7 +1873,6 @@ function endGesture(event, cancelled) {
     // fully unobstructed view of the cassette (see .cassette-controls-hidden in style.css).
     if (isK7Mode(displayMode)) slideK7Lid();
     document.body.classList.toggle("cassette-controls-hidden");
-    syncK7Lid();
   }
 }
 
@@ -1900,7 +1893,6 @@ function showScreen(screen) {
   els.modeToggle.hidden = screen !== "player";
   els.empty.hidden = screen !== "empty";
   els.permission.hidden = screen !== "permission";
-  syncK7Lid();
 
   if (screen === "player") {
     visualizer.start();

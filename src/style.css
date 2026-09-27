@@ -658,8 +658,7 @@ body[data-mode^="k7-"].cassette-controls-hidden .topbar {
 }
 
 /* The lid's own layer, laid exactly over the cassette: same box as .k7__art (whose rules it
-   shares, portrait rotation included), stacked on it instead of below it, and promoted to its
-   own compositing layer so the lid and the cassette repaint independently. */
+   shares, portrait rotation included), stacked on it instead of below it. */
 /* The lid: shut over the cassette while the controls show, slid right off the screen — towards
    the cassette's bottom edge — once a tap has tucked them, the default on entering a K7 mode
    (see applyDisplayMode() in main.js). It slides as one solid layer and never fades: a
@@ -671,13 +670,12 @@ body[data-mode^="k7-"].cassette-controls-hidden .topbar {
 }
 
 /* Only for the move a tap asked for (see slideK7Lid() in main.js): never when the phone turns,
-   which also moves the tucked-away lid, from below the screen to its left or back. */
+   which also moves the tucked-away lid, from below the screen to its left or back. Promoted to
+   its own compositing layer only for that ~0.55s move, not for as long as a K7 mode is on
+   screen: held any longer, it sat over the cassette's own constantly-repainted reels and tape
+   (see K7Tape.draw()) on Android's WebView as two competing layers, which is what flickered. */
 body.k7-lid-sliding .k7__lid-layer {
   transition: translate 0.55s cubic-bezier(0.34, 1.3, 0.64, 1);
-}
-
-/* Their own compositing layers only while a K7 mode is on screen, not for the whole session. */
-body[data-mode^="k7-"] .k7__lid-layer {
   will-change: translate;
 }
 
