@@ -250,22 +250,28 @@ body[data-mode="cassette"] .cassette {
    box on the screen too. */
 .cassette__art {
   display: block;
-  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100dvh));
   height: 100%;
   margin-inline: auto;
 }
 
 /* The illustration is drawn cassette-side up, i.e. landscape. Held that way it needs no
    help; held upright, it's rotated 90° and re-measured against the swapped viewport
-   (100vh/100vw, capped the same way as the base rule above) so the rotated box still runs
-   edge to edge instead of leaving letterboxing, short of that same aspect-ratio cap. */
+   (100dvh/100dvw, capped the same way as the base rule above) so the rotated box still runs
+   edge to edge instead of leaving letterboxing, short of that same aspect-ratio cap.
+   Dynamic (dvh/dvw) rather than plain vh/vw: a physical rotation resizes the visual
+   viewport in more than one step as the browser/WebView chrome settles into the new
+   orientation, and vh/vw can resolve against a stale, pre-rotation size for a frame or two
+   — swapped width/height plus a 90° transform makes that transient render as the box
+   snapping back to its old (landscape) layout before catching up. dvh/dvw track the actual
+   current viewport instead of a cached one, so the box lands on its final size right away. */
 @media (orientation: portrait) {
   .cassette__art {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: min(100vh, calc(var(--cassette-max-box-aspect) * 100vw));
-    height: 100vw;
+    width: min(100dvh, calc(var(--cassette-max-box-aspect) * 100dvw));
+    height: 100dvw;
     transform: translate(-50%, -50%) rotate(90deg);
   }
 }
@@ -546,18 +552,21 @@ body[data-mode^="k7-"] .k7 {
 
 .k7__art {
   display: block;
-  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100dvh));
   height: 100%;
   margin-inline: auto;
 }
 
+/* dvh/dvw rather than vh/vw: see the matching comment on .cassette__art above — plain
+   viewport units can briefly resolve against the pre-rotation size, which reads as this box
+   snapping back to its old layout for a frame before catching up. */
 @media (orientation: portrait) {
   .k7__art {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: min(100vh, calc(var(--cassette-max-box-aspect) * 100vw));
-    height: 100vw;
+    width: min(100dvh, calc(var(--cassette-max-box-aspect) * 100dvw));
+    height: 100dvw;
     transform: translate(-50%, -50%) rotate(90deg);
   }
 }
