@@ -1547,25 +1547,21 @@ function slideK7Lid() {
 // the fallback — but ending it early whenever the event does arrive in time can only shorten it.
 window.matchMedia("(orientation: landscape)").addEventListener("change", endK7LidSlide);
 
-// No display mode forces the phone into a particular orientation — cassette mode used to lock
-// landscape the way a video player forces landscape for fullscreen, but that fought the phone's
-// own rotation: held upright (its normal, expected orientation, same as every other mode), the
-// app switcher showed cassette mode's card sideways, and getting back to portrait meant leaving
-// the app or physically turning the phone. Cassette mode is drawn cassette-side up (landscape)
-// regardless: the CSS rotation trick (see @media (orientation: portrait) on .cassette__art in
-// style.css) turns the illustration itself upright when the phone is, exactly like a Walkman
-// held in the hand rather than propped up sideways.
+// Cassette mode and the two K7 modes are drawn cassette-side up (landscape) and never rotate to
+// fake an upright view — held that way, the screen is locked in landscape natively instead, the
+// way a video player forces landscape for fullscreen. Every other mode leaves orientation alone.
 // Guarded against re-firing on every applyDisplayMode(false) call (nowPlayingChanged fires
 // that often) so the native side isn't asked to re-apply the same orientation repeatedly.
 let orientationLockedFor = null;
 function syncOrientationLock() {
-  // A TV never rotates, so it never needs "unspecified" — and on at least one box, leaving it
-  // unspecified let Android pick that device's *reversed* landscape as the natural one,
-  // rendering the whole UI upside down (see the fixed, non-reversed LANDSCAPE used below, same
-  // fix as lockLandscape() itself already applies natively).
-  if (isTv) {
-    if (orientationLockedFor === "tv") return;
-    orientationLockedFor = "tv";
+  // Neither a TV nor a locked cassette/K7 mode ever rotates, so neither needs "unspecified" —
+  // and on at least one TV box, leaving it unspecified let Android pick that device's *reversed*
+  // landscape as the natural one, rendering the whole UI upside down (see the fixed,
+  // non-reversed LANDSCAPE used below, same fix as lockLandscape() itself already applies
+  // natively).
+  if (isTv || isK7Mode(displayMode) || displayMode === "cassette") {
+    if (orientationLockedFor === "landscape") return;
+    orientationLockedFor = "landscape";
     DeezerMedia.lockLandscape().catch(() => {});
     return;
   }

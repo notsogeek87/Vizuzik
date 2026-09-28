@@ -248,32 +248,14 @@ body[data-mode="cassette"] .cassette {
    lock-screen's native port of this same illustration. The letterboxing is split evenly either
    side (margin-inline: auto) rather than all on the right, the way drawCassette() centres the
    box on the screen too. */
+/* The illustration is drawn cassette-side up, i.e. landscape, and stays that way: cassette mode
+   locks the screen in landscape natively (see syncOrientationLock() in main.js) instead of
+   rotating the artwork in software to fake an upright view. */
 .cassette__art {
   display: block;
-  width: min(100%, calc(var(--cassette-max-box-aspect) * 100dvh));
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
   height: 100%;
   margin-inline: auto;
-}
-
-/* The illustration is drawn cassette-side up, i.e. landscape. Held that way it needs no
-   help; held upright, it's rotated 90° and re-measured against the swapped viewport
-   (100dvh/100dvw, capped the same way as the base rule above) so the rotated box still runs
-   edge to edge instead of leaving letterboxing, short of that same aspect-ratio cap.
-   Dynamic (dvh/dvw) rather than plain vh/vw: a physical rotation resizes the visual
-   viewport in more than one step as the browser/WebView chrome settles into the new
-   orientation, and vh/vw can resolve against a stale, pre-rotation size for a frame or two
-   — swapped width/height plus a 90° transform makes that transient render as the box
-   snapping back to its old (landscape) layout before catching up. dvh/dvw track the actual
-   current viewport instead of a cached one, so the box lands on its final size right away. */
-@media (orientation: portrait) {
-  .cassette__art {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: min(100dvh, calc(var(--cassette-max-box-aspect) * 100dvw));
-    height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
 }
 
 @keyframes cassette-reel-spin {
@@ -552,23 +534,9 @@ body[data-mode^="k7-"] .k7 {
 
 .k7__art {
   display: block;
-  width: min(100%, calc(var(--cassette-max-box-aspect) * 100dvh));
+  width: min(100%, calc(var(--cassette-max-box-aspect) * 100vh));
   height: 100%;
   margin-inline: auto;
-}
-
-/* dvh/dvw rather than vh/vw: see the matching comment on .cassette__art above — plain
-   viewport units can briefly resolve against the pre-rotation size, which reads as this box
-   snapping back to its old layout for a frame before catching up. */
-@media (orientation: portrait) {
-  .k7__art {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: min(100dvh, calc(var(--cassette-max-box-aspect) * 100dvw));
-    height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
 }
 
 /* The title/artist are written on the cassette's own paper strip (see setK7Text() in main.js),
@@ -667,15 +635,21 @@ body[data-mode^="k7-"].cassette-controls-hidden .topbar {
 }
 
 /* The lid's own layer, laid exactly over the cassette: same box as .k7__art (whose rules it
-   shares, portrait rotation included), stacked on it instead of below it. */
+   shares), stacked on it instead of below it. */
 /* The lid: shut over the cassette while the controls show, slid right off the screen — towards
    the cassette's bottom edge — once a tap has tucked them, the default on entering a K7 mode
    (see applyDisplayMode() in main.js). It slides as one solid layer and never fades: a
    half-transparent lid let the cassette show through on top of its keys mid-slide, and moving
-   the whole layer (the separate translate property, so portrait's rotation is left alone) is
-   done by the compositor without repainting anything. */
+   the whole layer via the separate translate property is done by the compositor without
+   repainting anything.
+   Positioned absolute over the art box: landscape is the only orientation these modes are ever
+   shown in (see syncOrientationLock() in main.js, which locks it natively). */
 .k7__lid-layer {
   transition: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 /* Only for the move a tap asked for (see slideK7Lid() in main.js): never when the phone turns,
@@ -690,21 +664,6 @@ body.k7-lid-sliding .k7__lid-layer {
 
 body.cassette-controls-hidden .k7__lid-layer {
   translate: 0 100vh;
-}
-
-@media (orientation: landscape) {
-  .k7__lid-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-  }
-}
-
-@media (orientation: portrait) {
-  body.cassette-controls-hidden .k7__lid-layer {
-    translate: -100vw 0;
-  }
 }
 
 .k7__lid-edge {
@@ -812,14 +771,6 @@ body[data-state="playing"] .k7__lid-icon--pause {
 
 body[data-state="playing"] .k7__lid-accent {
   opacity: 1;
-}
-
-/* Held upright, the whole illustration is turned a quarter; the key symbols are turned back so
-   they still read the right way up. */
-@media (orientation: portrait) {
-  .k7__lid-icon {
-    transform: rotate(-90deg);
-  }
 }
 
 /* K7 Classique: a blank tape recorded at home, so a neutral shell rather than a coloured one —
@@ -2100,40 +2051,36 @@ body[data-mode="cassette"] .progress {
   padding: 16px 20px 10px;
 }
 
-/* Nothing forces the phone into landscape for this mode (see syncOrientationLock() in main.js —
-   held upright is the normal, expected way to use it, same as every other mode), but someone
-   can still turn the phone sideways themselves, and landscape leaves much less vertical room
-   than portrait's tall column: this tightens the title/artist card and progress bar up to keep
-   everything comfortably on screen whenever that happens. The transport buttons themselves are
-   deliberately left alone here: they're the same .control elements every other mode uses at
-   their one fixed size, and cassette mode shouldn't be the only one where they shrink depending
-   on orientation. */
-@media (orientation: landscape) {
-  body[data-mode="cassette"] .player {
-    gap: 0.85rem;
-    padding:
-      calc(env(safe-area-inset-top, 0px) + 14px)
-      calc(env(safe-area-inset-right, 0px) + 22px)
-      calc(env(safe-area-inset-bottom, 0px) + 14px)
-      calc(env(safe-area-inset-left, 0px) + 22px);
-  }
+/* Cassette mode locks the screen in landscape (see syncOrientationLock() in main.js), which
+   leaves much less vertical room than portrait's tall column: this tightens the title/artist
+   card and progress bar up to keep everything comfortably on screen. The transport buttons
+   themselves are deliberately left alone here: they're the same .control elements every other
+   mode uses at their one fixed size, and cassette mode shouldn't be the only one where they
+   shrink. */
+body[data-mode="cassette"] .player {
+  gap: 0.85rem;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 14px)
+    calc(env(safe-area-inset-right, 0px) + 22px)
+    calc(env(safe-area-inset-bottom, 0px) + 14px)
+    calc(env(safe-area-inset-left, 0px) + 22px);
+}
 
-  body[data-mode="cassette"] .title {
-    font-size: clamp(1.05rem, 3.6vw, 1.4rem);
-  }
+body[data-mode="cassette"] .title {
+  font-size: clamp(1.05rem, 3.6vw, 1.4rem);
+}
 
-  body[data-mode="cassette"] .artist {
-    font-size: clamp(0.8rem, 2.4vw, 0.95rem);
-  }
+body[data-mode="cassette"] .artist {
+  font-size: clamp(0.8rem, 2.4vw, 0.95rem);
+}
 
-  body[data-mode="cassette"] .meta {
-    padding: 8px 20px;
-  }
+body[data-mode="cassette"] .meta {
+  padding: 8px 20px;
+}
 
-  body[data-mode="cassette"] .progress {
-    width: min(70vw, 460px);
-    padding: 12px 16px 8px;
-  }
+body[data-mode="cassette"] .progress {
+  width: min(70vw, 460px);
+  padding: 12px 16px 8px;
 }
 
 /* ============================================================ baladeur mode */
