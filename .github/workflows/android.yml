@@ -12,6 +12,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v5
 
@@ -29,22 +31,20 @@ jobs:
 
       - run: npm run cap:sync
 
-      # versionCode/versionName ne sont pas figés dans build.gradle : ce run
-      # de CI leur donne une valeur unique et strictement croissante (run_number),
-      # nécessaire pour que les vraies releases (voir plus bas) portent chacune
-      # une version distincte au lieu de rester bloquées en "1.0".
+      # versionCode/versionName sont dérivés de BUILD_NUMBER dans android/app/build.gradle :
+      # versionCode = run_number, versionName = <appVersionBase>.<run_number>. Les deux augmentent à
+      # chaque run ; le tag de release est v<versionName> (ex. v1.0.152), toujours supérieur au précédent
+      # (un tag « v1.0-25 » serait lu comme une pré-version < 1.0 et n'enclencherait jamais de mise à jour).
       - name: Déterminer la version
         id: version
         run: |
+          BASE=$(grep '^appVersionBase=' android/gradle.properties | cut -d= -f2)
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-          echo "name=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "name=$BASE.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Build debug APK
         working-directory: android
-        run: |
-          ./gradlew assembleDebug --no-daemon -q \
-            -PvizuzikVersionCode=${{ steps.version.outputs.code }} \
-            -PvizuzikVersionName=${{ steps.version.outputs.name }}
+        run: ./gradlew assembleDebug --no-daemon -q
 
       # Gradle nomme toujours sa sortie "app-debug.apk" (nom fixe lié au
       # buildType), quelle que soit la version : on la renomme pour que le
@@ -76,10 +76,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${{ steps.version.outputs.name }}"
+          cat > release-notes.md <<EOF
+          ## Vizuzik $TAG
+
+          Run #${{ github.run_number }} (${{ github.sha }}). APK signé avec la clé debug committée (pas de clé de production), identique pour tous les builds.
+
+          ### Installation
+
+          - **Vizuzik est déjà installé** : ouvrez l'app. Elle vérifie les mises à jour à chaque ouverture : touchez « Installer », autorisez l'installation d'applications inconnues si Android le demande, puis confirmez « Mettre à jour ». Vos réglages sont conservés. Vous pouvez aussi toucher « Rechercher une mise à jour » dans les réglages (engrenage).
+          - **Première installation (manuelle)** : téléchargez \`${{ steps.apk.outputs.name }}\` ci-dessous, ouvrez-le, autorisez la source si Android bloque l'installation (Réglages → Installer des applications inconnues), puis touchez « Installer ». Les mises à jour suivantes seront proposées dans l'app.
+          EOF
           gh release create "$TAG" \
             "${{ steps.apk.outputs.path }}" \
             --title "Vizuzik $TAG" \
-            --notes "Run #${{ github.run_number }} (${{ github.sha }}). Signé avec la clé debug (pas de clé de production configurée)." \
+            --notes-file release-notes.md \
             --target "${{ github.sha }}"
 
       # Les artifacts d'Actions sont hébergés sur Azure Blob Storage, souvent

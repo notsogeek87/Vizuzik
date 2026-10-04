@@ -25,7 +25,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(DeezerMediaPlugin.class);
+        registerPlugin(AppUpdatePlugin.class);
         super.onCreate(savedInstanceState);
+        AppUpdater.INSTANCE.init(getApplicationContext());
+        new UpdateDialogs(this).start();
         EdgeOverlayController.getInstance().init(getApplicationContext());
         // Also started from NowPlayingListenerService, which is the earlier of the two whenever
         // notification access is granted. Started here too for the process that comes up via the
@@ -47,6 +50,14 @@ public class MainActivity extends BridgeActivity {
     // Capacitor's BridgeActivity declares both public (not the usual protected from Activity
     // itself), so overriding with the normally-expected protected fails to compile — Java
     // forbids narrowing an overridden method's access.
+    // À chaque ouverture de l'app (et à chaque retour au premier plan) : vérifie s'il existe une
+    // version plus récente. La fenêtre qui en découle est celle de UpdateDialogs.
+    @Override
+    public void onStart() {
+        super.onStart();
+        AppUpdater.INSTANCE.checkOnOpen();
+    }
+
     @Override
     public void onResume() {
         super.onResume();

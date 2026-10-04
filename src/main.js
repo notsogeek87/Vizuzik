@@ -5,6 +5,7 @@ import { extractPalette } from "./palette.js";
 import { PlaybackProgress } from "./progress.js";
 
 const DeezerMedia = registerPlugin("DeezerMedia");
+const AppUpdate = registerPlugin("AppUpdate");
 
 const els = {
   background: document.getElementById("background"),
@@ -30,6 +31,8 @@ const els = {
   edgeSettingsOpen: document.getElementById("edge-settings-open"),
   edgeSettingsSheet: document.getElementById("edge-settings-sheet"),
   edgeSettingsClose: document.getElementById("edge-settings-close"),
+  updateCheck: document.getElementById("update-check"),
+  updateStatus: document.getElementById("update-status"),
   edgeOverlayEnabled: document.getElementById("edge-overlay-enabled"),
   edgeLockscreenEnabled: document.getElementById("edge-lockscreen-enabled"),
   edgeLockscreenHint: document.getElementById("edge-lockscreen-hint"),
@@ -1626,6 +1629,28 @@ els.edgeSettingsOpen.addEventListener("click", () => {
   syncLockScreenPermissions();
 });
 els.edgeSettingsClose.addEventListener("click", closeEdgeSettingsSheet);
+// « Rechercher une mise à jour » : la vérification et la fenêtre guidée sont natives (AppUpdater /
+// UpdateDialogs) ; on n'affiche ici que le résultat sous le bouton.
+els.updateCheck.addEventListener("click", async () => {
+  els.updateCheck.disabled = true;
+  els.updateStatus.textContent = "Recherche en cours…";
+  try {
+    const r = await AppUpdate.checkForUpdate();
+    els.updateStatus.textContent =
+      {
+        upToDate: "Vous utilisez la dernière version.",
+        available: r.version ? `La version ${r.version} est disponible.` : "Une mise à jour est disponible.",
+        busy: "Une mise à jour est déjà en cours.",
+        disabled: "Indisponible sur cette variante de l'app.",
+        error: r.message || "La recherche a échoué.",
+      }[r.status] || "";
+  } catch (err) {
+    // Aperçu web (vite dev) ou ancienne version native sans le plugin AppUpdate.
+    els.updateStatus.textContent = "Indisponible hors de l'app Android.";
+  } finally {
+    els.updateCheck.disabled = false;
+  }
+});
 els.edgeSettingsSheet.addEventListener("click", (event) => {
   if (event.target === els.edgeSettingsSheet) closeEdgeSettingsSheet();
 });

@@ -5,6 +5,8 @@
 *.aar
 *.ap_
 *.aab
+# La bibliothèque de mise à jour est vendorée (dépôt Maven versionné) : son .aar doit être commité.
+!libs/lielugit-maven/**/*.aar
 
 # Files for the ART/Dalvik VM
 *.dex

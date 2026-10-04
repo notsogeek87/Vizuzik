@@ -950,6 +950,18 @@
           <label><input id="edge-right" type="checkbox" /> Droite</label>
         </div>
 
+        <!-- Mises à jour : l'app vérifie déjà à chaque ouverture (AppUpdater côté natif) ; ce bouton
+             relance la même vérification à la demande. La fenêtre qui guide l'installation est native. -->
+        <div class="edge-settings__row edge-settings__row--stacked">
+          <span>
+            Mises à jour
+            <small id="update-status" aria-live="polite">Vizuzik vérifie à chaque ouverture.</small>
+          </span>
+          <div class="edge-settings__buttons">
+            <button id="update-check" type="button" class="grant-button">Rechercher une mise à jour</button>
+          </div>
+        </div>
+
         <!-- Ce que la surcouche fait réellement, en direct. Replié par défaut : ce n'est pas un
              réglage, c'est de quoi diagnostiquer « le disque est transparent » ou « le lecteur
              n'est pas détecté » sans avoir à deviner — voir OverlayDiagnostics côté natif. -->

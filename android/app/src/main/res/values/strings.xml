@@ -15,4 +15,30 @@
         aucune autre app n\'est concernée, et rien de ce qui est lu n\'est conservé ni envoyé
         où que ce soit.
     </string>
+
+    <!-- Mises à jour automatiques (lielugit-updater) : fenêtre native affichée à l'ouverture. -->
+    <string name="update_available_title">Mise à jour disponible</string>
+    <string name="update_available_intro">La version %1$s de Vizuzik est prête.</string>
+    <string name="update_step_download">Touchez « Installer » : la mise à jour se télécharge.</string>
+    <string name="update_step_allow_source">Si Android demande d\'autoriser Vizuzik à installer des applications, activez l\'option, puis revenez en arrière.</string>
+    <string name="update_step_confirm">Confirmez avec « Mettre à jour » quand Android le propose.</string>
+    <string name="update_data_kept">Vos réglages sont conservés.</string>
+    <string name="update_action_install">Installer</string>
+    <string name="update_action_later">Plus tard</string>
+    <string name="update_action_ok">OK</string>
+    <string name="update_downloading_title">Téléchargement…</string>
+    <string name="update_downloaded_title">Mise à jour téléchargée</string>
+    <string name="update_downloaded_intro">Il ne reste qu\'à l\'installer.</string>
+    <string name="update_downloaded_step_install">Touchez « Installer », puis confirmez avec « Mettre à jour ».</string>
+    <string name="update_permission_intro">Android doit d\'abord autoriser Vizuzik à installer des applications.</string>
+    <string name="update_permission_step_open">Touchez « Installer » : les réglages Android s\'ouvrent.</string>
+    <string name="update_permission_step_enable">Activez « Autoriser depuis cette source », puis revenez en arrière.</string>
+    <string name="update_permission_step_retry">Touchez de nouveau « Installer » et confirmez.</string>
+    <string name="update_error_title">Mise à jour impossible</string>
+    <string name="update_error_network">Réseau indisponible. Réessayez plus tard.</string>
+    <string name="update_error_rate_limit">Trop de requêtes vers GitHub. Réessayez plus tard.</string>
+    <string name="update_error_no_release">Aucune version publiée trouvée.</string>
+    <string name="update_error_no_apk">Aucun APK compatible dans la dernière version.</string>
+    <string name="update_error_not_allowed">Autorisez l\'installation d\'applications inconnues pour Vizuzik.</string>
+    <string name="update_error_generic">La mise à jour a échoué : %1$s</string>
 </resources>

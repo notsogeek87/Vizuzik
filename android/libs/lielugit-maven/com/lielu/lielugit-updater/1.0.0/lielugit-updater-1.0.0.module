@@ -1,0 +1,137 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.lielu",
+    "module": "lielugit-updater",
+    "version": "1.0.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14.3"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "lielugit-updater-1.0.0.aar",
+          "url": "lielugit-updater-1.0.0.aar",
+          "size": 107102,
+          "sha512": "e3425b1a5d33ae7e98c1bf868f6c79ee25b521a7e77d452bef008f6c59ee069d18ecacb7fd8a3723f185f29fe2e43542b0ef78822137f04a7a78dcaf66bf217d",
+          "sha256": "872cb8ee0fb64e8497d2b22342ebe639823686ffa6c8db0be6a8008eaca0f780",
+          "sha1": "e3b21e6ad42c639baabcacf0b1d010edaf9da8d9",
+          "md5": "1083d6c9edcab503836a9e1b7a878a13"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.core",
+          "module": "core",
+          "version": {
+            "requires": "1.15.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "lielugit-updater-1.0.0.aar",
+          "url": "lielugit-updater-1.0.0.aar",
+          "size": 107102,
+          "sha512": "e3425b1a5d33ae7e98c1bf868f6c79ee25b521a7e77d452bef008f6c59ee069d18ecacb7fd8a3723f185f29fe2e43542b0ef78822137f04a7a78dcaf66bf217d",
+          "sha256": "872cb8ee0fb64e8497d2b22342ebe639823686ffa6c8db0be6a8008eaca0f780",
+          "sha1": "e3b21e6ad42c639baabcacf0b1d010edaf9da8d9",
+          "md5": "1083d6c9edcab503836a9e1b7a878a13"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "lielugit-updater-1.0.0-sources.jar",
+          "url": "lielugit-updater-1.0.0-sources.jar",
+          "size": 20456,
+          "sha512": "55239541e27881df642bfcd320399acceeebb4a7bb9d45c86fc390c8aa77461e775f2f771bfdce92f6048e1d5451334079cfb78d958109f56e281d8438c52a37",
+          "sha256": "d6d9d83d7abcca503674702c400cd86eb7642b166550c4c6dd01ee3e9caadb0c",
+          "sha1": "433dc0a6035fa9dabc3a1b4b9eb9a9e268b3f10a",
+          "md5": "b897e786c31969f97576b01fbbc4cad3"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "lielugit-updater-1.0.0-javadoc.jar",
+          "url": "lielugit-updater-1.0.0-javadoc.jar",
+          "size": 360375,
+          "sha512": "59f744863650e8b71c0c2090d10694ac63d23419f4985e97711d25ed57cba6ac97123e4ae481bd5e8505435baf972b543cbebf7d212dc2b04a634259e50a97a8",
+          "sha256": "00f8871178342b1c661fd194b65625aced789a779c29e6f95435f2dc278099e1",
+          "sha1": "d87244059b0ede805de64e2225e22edb71fa8be2",
+          "md5": "a2c5bcceb7dbc57b64f4c80ab3f3f2e5"
+        }
+      ]
+    }
+  ]
+}
