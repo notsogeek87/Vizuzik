@@ -3,6 +3,7 @@ package com.vizuzik.app;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.os.Build;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -128,7 +129,10 @@ final class LockScreenVisualizerController implements DeezerMediaBridge.Listener
     private void postFullScreenNotification() {
         try {
             NotificationManager manager = appContext.getSystemService(NotificationManager.class);
-            if (manager != null && manager.getNotificationChannel(CHANNEL_ID) == null) {
+            // Les canaux de notification n'existent qu'à partir d'Android 8 (API 26) ; en dessous, rien à créer.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && manager != null
+                && manager.getNotificationChannel(CHANNEL_ID) == null) {
                 NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Visualiseur écran verrouillé",

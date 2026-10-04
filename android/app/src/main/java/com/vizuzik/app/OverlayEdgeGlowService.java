@@ -436,7 +436,8 @@ public class OverlayEdgeGlowService extends Service
         try {
             android.hardware.input.InputManager input =
                 (android.hardware.input.InputManager) getSystemService(INPUT_SERVICE);
-            if (input != null) {
+            // getMaximumObscuringOpacityForTouch() date d'Android 12 (API 31) ; plus bas, on garde le repli.
+            if (input != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 return Math.min(0.8f, input.getMaximumObscuringOpacityForTouch());
             }
         } catch (Exception e) {
@@ -541,7 +542,9 @@ public class OverlayEdgeGlowService extends Service
     }
 
     private void startForegroundNotification() {
-        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
+        // Les canaux de notification n'existent qu'à partir d'Android 8 (API 26) ; en dessous, rien à créer.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            && notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Effets par-dessus l'app de musique",

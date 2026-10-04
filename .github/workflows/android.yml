@@ -42,6 +42,10 @@ jobs:
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "name=$BASE.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
+      - name: Tests unitaires et lint
+        working-directory: android
+        run: ./gradlew testDebugUnitTest lintDebug --no-daemon -q
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon -q

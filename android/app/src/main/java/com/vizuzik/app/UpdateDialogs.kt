@@ -2,6 +2,7 @@ package com.vizuzik.app
 
 import android.content.Context
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ProgressBar
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -89,8 +90,10 @@ class UpdateDialogs(private val activity: AppCompatActivity) {
                         }
                     progressBar = bar
                     val pad = (24 * activity.resources.displayMetrics.density).toInt()
+                    // Marges via un conteneur : setView(view, l, t, r, b) est une API réservée à appcompat.
+                    val container = FrameLayout(activity).apply { setPadding(pad, pad / 2, pad, 0); addView(bar) }
                     builder(R.string.update_downloading_title)
-                        .setView(bar, pad, pad / 2, pad, 0)
+                        .setView(container)
                         .setCancelable(false)
                         .show()
                 }

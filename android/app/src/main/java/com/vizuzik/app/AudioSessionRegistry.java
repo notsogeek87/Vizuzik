@@ -5,7 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.audiofx.AudioEffect;
-import android.os.Build;
+import androidx.core.content.ContextCompat;
 import android.util.Log;
 
 import java.util.LinkedHashSet;
@@ -80,11 +80,8 @@ final class AudioSessionRegistry {
         try {
             // Broadcast by the music app's own process rather than the system, so API 33+ requires
             // saying so explicitly or registerReceiver() throws outright on an API 34+ target.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.getApplicationContext().registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
-            } else {
-                context.getApplicationContext().registerReceiver(receiver, filter);
-            }
+            ContextCompat.registerReceiver(
+                context.getApplicationContext(), receiver, filter, ContextCompat.RECEIVER_EXPORTED);
             started = true;
         } catch (Exception e) {
             // Leaves started false so a later caller retries; capture simply stays unavailable
