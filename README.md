@@ -86,8 +86,8 @@ cd android
 ./gradlew assembleRelease            # idem : aucune clé de production n'est configurée pour l'instant
 ```
 
-Sans `-PvizuzikVersionCode=…  -PvizuzikVersionName=…` (voir plus bas), un build local retombe sur
-`versionCode=1` / `versionName="1.0"`.
+Sans variable `BUILD_NUMBER` (ou `-PbuildNumber=N`), un build local retombe sur `versionCode=1` /
+`versionName="1.0.1"` (`appVersionBase` dans `android/gradle.properties`, plus le numéro de build).
 
 ## Releases GitHub
 
@@ -95,13 +95,16 @@ Sans `-PvizuzikVersionCode=…  -PvizuzikVersionName=…` (voir plus bas), un bu
 il n'y a pas encore de clé de production, voir plus haut) à chaque push et publie une vraie
 release GitHub à chaque push sur `main` :
 
-- tag `v1.0.<run_number>` (le numéro de run GitHub Actions, donc strictement croissant à chaque
+- tag `v<appVersionBase>.<run_number>` (ex. `v1.0.152`) (le numéro de run GitHub Actions, donc strictement croissant à chaque
   publication) ;
-- asset `Vizuzik-1.0.<run_number>.apk`, signé avec la clé debug committée — stable d'une release à
+- asset `Vizuzik-<appVersionBase>.<run_number>.apk`, signé avec la clé debug committée — stable d'une release à
   l'autre.
 
 Les push sur `staging`, les pull requests et les déclenchements manuels publient à la place une
 pre-release roulante `debug-<branche>` (retag à chaque run, pas destinée à la distribution).
+
+L'app vérifie ces releases à chaque ouverture et propose l'installation — voir
+[Mises à jour de l'app](docs/guides/mises-a-jour.md).
 
 ## Documentation
 

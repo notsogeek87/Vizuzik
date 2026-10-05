@@ -26,6 +26,9 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
   — pourquoi aucune app tierce ne peut dessiner sur la vraie AOD Samsung/Android, ce que fait
   réellement ce mécanisme à la place (une Activity par-dessus l'écran verrouillé, écran gardé
   allumé), et son coût en batterie.
+- [Mises à jour automatiques depuis les releases GitHub](architecture/2026-10-04-mises-a-jour-automatiques.md)
+  — la vérification à chaque ouverture, la bibliothèque vendorée, et pourquoi `versionCode` et
+  le tag de release dérivent tous deux du numéro de run CI.
 
 ### API interne
 - [`Visualizer`](api/visualizer.md) — le moteur de rendu des scènes.
@@ -39,6 +42,8 @@ Deezer ou Spotify en cours, avec un moteur visuel réactif à l'audio.
   l'utilisateur et comment il en change.
 - [Edge Visualizer](guides/edge-visualizer.md) — le contour lumineux par-dessus l'app de musique :
   parcours d'activation, ce qui le fait réagir, le panneau de réglages, et ses limites.
+- [Mises à jour de l'app](guides/mises-a-jour.md) — la fenêtre d'installation, le bouton des
+  réglages et la première installation manuelle.
 
 ### Archives
 Documentation conservée pour la trace du raisonnement, mais qui ne décrit plus le code actuel.
