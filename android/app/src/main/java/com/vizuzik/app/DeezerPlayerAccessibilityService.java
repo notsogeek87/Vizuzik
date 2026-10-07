@@ -104,7 +104,17 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     // ART_TALL_MAX_HEIGHT_FRACTION: the cover alone already reaches ~50% down, and the scrubber comes
     // after it) — so a scrubber found in the bottom band reserved for a docked bar is that docked
     // bar's, never the full player's, however wide it measures.
-    private static final float DOCKED_BAR_ZONE_TOP_FRACTION = 0.82f;
+    //
+    // Lowered from 0.82 after the disc was still seen over Deezer's home tab on a tablet: there the
+    // docked bar is a floating pill lifted off the bottom edge, its progress line starting at about
+    // 0.819 of the window's height — a hair *under* the old limit, so the bar passed as a scrubber.
+    // The full player's own scrubber sits above the transport controls, comfortably higher.
+    private static final float DOCKED_BAR_ZONE_TOP_FRACTION = 0.74f;
+    // How much of a scrubber's or a cover's area has to be inside the window for it to count.
+    // isVisibleToUser() answers yes for a node that is merely partly on screen, and a player
+    // collapsed into a bottom sheet keeps its tree — cover, scrubber and all — mostly below the
+    // visible edge: indistinguishable from the open player without looking at where it actually is.
+    private static final float MIN_VISIBLE_AREA_FRACTION = 0.9f;
 
     // While the player is showing, it is re-checked this often even with no event to prompt it.
     // Events only ever come from the tracked apps (see the config's packageNames), so nothing
@@ -308,6 +318,15 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             return topFraction >= DOCKED_BAR_ZONE_TOP_FRACTION;
         }
 
+        /** Whether at least MIN_VISIBLE_AREA_FRACTION of the bounds lies inside this window. */
+        boolean mostlyInsideWindow(Rect bounds) {
+            long area = (long) bounds.width() * bounds.height();
+            if (area <= 0) return false;
+            Rect inside = new Rect(bounds);
+            if (!inside.intersect(window)) return false;
+            return (long) inside.width() * inside.height() >= area * MIN_VISIBLE_AREA_FRACTION;
+        }
+
         /** How far the given centre sits from the nearest allowed one, as a fraction of the
          *  window's width. */
         float centerOffsetFraction(int centerX) {
@@ -365,7 +384,8 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                     if (isScrubber(node, name)) {
                         float widthFraction = bounds.width() / (float) windowWidth;
                         if (widthFraction > widestSeekBarFraction) widestSeekBarFraction = widthFraction;
-                        if (widthFraction >= minSeekBarWidthFraction && !startsInDockedBarZone(bounds)) {
+                        if (widthFraction >= minSeekBarWidthFraction && !startsInDockedBarZone(bounds)
+                            && mostlyInsideWindow(bounds)) {
                             hasWideSeekBar = true;
                         }
                     }
@@ -377,7 +397,8 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                             tallestImageOffsetFraction = offsetFraction;
                         }
                         if (heightFraction >= MIN_ARTWORK_HEIGHT_FRACTION
-                            && offsetFraction <= MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
+                            && offsetFraction <= MAX_ARTWORK_CENTER_OFFSET_FRACTION
+                            && mostlyInsideWindow(bounds)) {
                             hasLargeArtwork = true;
                             if (artworkBounds == null && looksLikeCover(bounds)) {
                                 artworkBounds = new Rect(bounds);
