@@ -5,12 +5,17 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
+
+import java.util.List;
 
 /**
  * Off by default, and asked for separately from every other permission this app uses: the one way
@@ -101,38 +106,107 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     // bar's, never the full player's, however wide it measures.
     private static final float DOCKED_BAR_ZONE_TOP_FRACTION = 0.82f;
 
+    // While the player is showing, it is re-checked this often even with no event to prompt it.
+    // Events only ever come from the tracked apps (see the config's packageNames), so nothing
+    // announces the player being left for another app, or the split-screen divider being dragged
+    // — and a "yes" nobody ever corrects is exactly the disc left over an app it was never
+    // measured for. Cheap by construction: it only runs while the answer is yes.
+    private static final long POLL_WHILE_ON_PLAYER_MS = 1000;
+    // An artwork candidate has to be roughly square to be the cover rather than a blurred
+    // full-bleed backdrop that happens to be centred and tall.
+    private static final float MIN_ARTWORK_ASPECT = 0.85f;
+    private static final float MAX_ARTWORK_ASPECT = 1.18f;
+    // ...and cannot fill its own window's width: a real cover always leaves margin.
+    private static final float MAX_ARTWORK_WIDTH_FRACTION = 0.97f;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable scheduledCheck = this::runCheck;
     private long lastCheckAtMs;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        long now = SystemClock.elapsedRealtime();
-        if (now - lastCheckAtMs < MIN_CHECK_INTERVAL_MS) return;
-        lastCheckAtMs = now;
+        long wait = MIN_CHECK_INTERVAL_MS - (SystemClock.elapsedRealtime() - lastCheckAtMs);
+        if (wait > 0) {
+            // Dropped is not the same as deferred: the *last* event of a burst is the one that
+            // says where the screen ended up, and throwing it away left the answer stuck on
+            // whatever the previous event saw — the disc kept open after navigating off the player.
+            handler.removeCallbacks(scheduledCheck);
+            handler.postDelayed(scheduledCheck, wait);
+            return;
+        }
+        runCheck();
+    }
+
+    private void runCheck() {
+        handler.removeCallbacks(scheduledCheck);
+        lastCheckAtMs = SystemClock.elapsedRealtime();
+        boolean onPlayer = false;
         try {
-            NowPlayerScreenState.setOnPlayerScreen(looksLikeNowPlayingScreen());
+            onPlayer = scanScreen();
         } catch (Exception e) {
             // Runs on events from another app's window, which this app doesn't control the shape
             // of — a node tree that throws on a walk must never be allowed to crash Vizuzik.
-            Log.w(TAG, "onAccessibilityEvent", e);
+            Log.w(TAG, "runCheck", e);
+            NowPlayerScreenState.publish(false, null, null);
         }
+        if (onPlayer) handler.postDelayed(scheduledCheck, POLL_WHILE_ON_PLAYER_MS);
     }
 
     /**
-     * Whether the window currently on screen, in one of the tracked apps, looks like their
-     * full-screen "now playing" player rather than a browse screen — a heuristic, not a lookup by
-     * resource ID, since this app's own view IDs are private to it and change across versions.
-     * Requires *both* a wide scrubber and a large piece of artwork together: either alone can
-     * belong to a docked mini-player too (see the two MIN_* fractions above for why), but a
-     * browse screen showing both at once — full-width scrubber, large cover — essentially never
-     * happens.
+     * Whether a tracked app's window currently on screen looks like its full-screen "now playing"
+     * player rather than a browse screen — a heuristic, not a lookup by resource ID, since this
+     * app's own view IDs are private to it and change across versions. Requires *both* a wide
+     * scrubber and a large piece of artwork together: either alone can belong to a docked
+     * mini-player too (see the two MIN_* fractions above for why), but a browse screen showing
+     * both at once — full-width scrubber, large cover — essentially never happens.
+     *
+     * Looks at every window rather than only the active one. On an unfolded Fold the tracked app
+     * is often one half of a split screen, beside a navigation app that holds the focus — and the
+     * active window is then the *other* app, so the player was reported absent (or, with the
+     * focus on Deezer, the disc was positioned against the whole display instead of Deezer's own
+     * pane). The window's own bounds are what the scan measures against, and what is published
+     * so the disc can be placed inside that pane and on the measured cover.
      *
      * Written without the ability to inspect Deezer's actual layout on a real device — if it
      * still turns out wrong in practice, the fix belongs here, in what counts as "looks like the
      * player", not in anything else this rests on.
      */
-    private boolean looksLikeNowPlayingScreen() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) {
+    private boolean scanScreen() {
+        Scan best = null;
+        boolean sawWindows = false;
+        List<AccessibilityWindowInfo> windows = getWindows();
+        if (windows != null && !windows.isEmpty()) {
+            sawWindows = true;
+            for (AccessibilityWindowInfo info : windows) {
+                try {
+                    if (info.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                    AccessibilityNodeInfo root = info.getRoot();
+                    if (root == null) continue;
+                    try {
+                        Scan scan = scanRoot(root);
+                        if (scan == null) continue;
+                        if (best == null || (scan.isPlayer() && !best.isPlayer())) best = scan;
+                    } finally {
+                        root.recycle();
+                    }
+                } finally {
+                    info.recycle();
+                }
+            }
+        }
+        if (!sawWindows) {
+            // No window list at all (the capability not granted yet, or a system that withholds
+            // it): the active window is all there is to ask — the answer this used to give always.
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                try {
+                    best = scanRoot(root);
+                } finally {
+                    root.recycle();
+                }
+            }
+        }
+        if (best == null) {
             // Worth its own mark: "the service is running but never gets a tree" and "it gets a
             // tree and doesn't recognise it" are different problems with different fixes, and
             // without this they look identical from the settings panel.
@@ -143,50 +217,47 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
             OverlayDiagnostics.scanWidestSeekBarFraction = -1f;
             OverlayDiagnostics.scanTallestImageFraction = -1f;
             OverlayDiagnostics.scanTallestImageOffsetFraction = -1f;
+            NowPlayerScreenState.publish(false, null, null);
             return false;
         }
-        try {
-            // The window that is *active* is not necessarily the app the event came from. Deezer
-            // goes on firing content-changed events from behind — a progress bar ticking, a list
-            // settling — while something else entirely is on screen, and getRootInActiveWindow()
-            // answers with whatever is in front, which for these purposes was Vizuzik's own
-            // webview. That is how the first reading off a device came back "23 nœuds, aucune
-            // barre, une pochette parfaitement centrée": a real answer about the wrong window.
-            CharSequence packageName = root.getPackageName();
-            String scanned = packageName != null ? packageName.toString() : "";
-            OverlayDiagnostics.scanPackage = scanned;
-            if (!MusicApps.isKnownPackage(scanned)) {
-                // Not the music app in front, so its player screen is definitionally not showing.
-                OverlayDiagnostics.markScan();
-                OverlayDiagnostics.scanNodesVisited = 0;
-                return false;
-            }
-            Rect window = new Rect();
-            root.getBoundsInScreen(window);
-            if (window.width() <= 0 || window.height() <= 0) return false;
-            Scan scan = new Scan(window.width(), window.height(), window.left, window.top);
-            scan.walk(root, 0);
-            // What the walk actually saw, thresholds aside — a heuristic that is merely mis-tuned
-            // (a cover at 30% against a 32% floor) and one looking at a tree with no SeekBar and no
-            // Image in it at all are indistinguishable from the booleans alone, and telling them
-            // apart is the difference between moving a number and rewriting the whole approach.
-            OverlayDiagnostics.markScan();
-            OverlayDiagnostics.scanNodesVisited = scan.nodesVisited;
-            OverlayDiagnostics.scanSawWideSeekBar = scan.hasWideSeekBar;
-            OverlayDiagnostics.scanSawLargeArtwork = scan.hasLargeArtwork;
-            OverlayDiagnostics.scanWidestSeekBarFraction = scan.widestSeekBarFraction;
-            OverlayDiagnostics.scanTallestImageFraction = scan.tallestImageFraction;
-            OverlayDiagnostics.scanTallestImageOffsetFraction = scan.tallestImageOffsetFraction;
-            OverlayDiagnostics.scanBudgetExhausted = scan.nodesVisited >= MAX_NODES;
-            return scan.hasWideSeekBar && scan.hasLargeArtwork;
-        } finally {
-            root.recycle();
-        }
+        // What the walk actually saw, thresholds aside — a heuristic that is merely mis-tuned
+        // (a cover at 30% against a 32% floor) and one looking at a tree with no SeekBar and no
+        // Image in it at all are indistinguishable from the booleans alone, and telling them
+        // apart is the difference between moving a number and rewriting the whole approach.
+        OverlayDiagnostics.markScan();
+        OverlayDiagnostics.scanNodesVisited = best.nodesVisited;
+        OverlayDiagnostics.scanSawWideSeekBar = best.hasWideSeekBar;
+        OverlayDiagnostics.scanSawLargeArtwork = best.hasLargeArtwork;
+        OverlayDiagnostics.scanWidestSeekBarFraction = best.widestSeekBarFraction;
+        OverlayDiagnostics.scanTallestImageFraction = best.tallestImageFraction;
+        OverlayDiagnostics.scanTallestImageOffsetFraction = best.tallestImageOffsetFraction;
+        OverlayDiagnostics.scanBudgetExhausted = best.nodesVisited >= MAX_NODES;
+        boolean player = best.isPlayer();
+        NowPlayerScreenState.publish(player, best.window, player ? best.artworkBounds : null);
+        return player;
+    }
+
+    /** Walks one window's tree, or null if it isn't one of the tracked apps' windows. The root's
+     *  own package, not the event's: the window being asked about is not necessarily the app the
+     *  event came from — the first reading off a device came back "23 nœuds, aucune barre, une
+     *  pochette parfaitement centrée", a real answer about Vizuzik's own webview. */
+    private Scan scanRoot(AccessibilityNodeInfo root) {
+        CharSequence packageName = root.getPackageName();
+        String scanned = packageName != null ? packageName.toString() : "";
+        OverlayDiagnostics.scanPackage = scanned;
+        if (!MusicApps.isKnownPackage(scanned)) return null;
+        Rect window = new Rect();
+        root.getBoundsInScreen(window);
+        if (window.width() <= 0 || window.height() <= 0) return null;
+        Scan scan = new Scan(window);
+        scan.walk(root, 0);
+        return scan;
     }
 
     /** One walk's findings and its own node budget — a plain object rather than instance fields,
      *  since nothing here should ever depend on only one walk running at a time. */
     private static final class Scan {
+        final Rect window;
         final int windowWidth;
         final int windowHeight;
         final int windowTop;
@@ -200,21 +271,31 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         int nodesVisited;
         boolean hasWideSeekBar;
         boolean hasLargeArtwork;
+        /** The cover itself, when a qualifying image is also roughly square — see MIN_ARTWORK_ASPECT.
+         *  Null whenever the only candidates were something else (a backdrop): the disc is then
+         *  placed by the layout model inside the window instead, never on a bad measurement. */
+        Rect artworkBounds;
         // The best candidate seen for each, threshold or no threshold — reported, never tested on.
         float widestSeekBarFraction = -1f;
         float tallestImageFraction = -1f;
         float tallestImageOffsetFraction = -1f;
 
-        Scan(int windowWidth, int windowHeight, int windowLeft, int windowTop) {
-            this.windowWidth = windowWidth;
-            this.windowHeight = windowHeight;
-            this.windowTop = windowTop;
+        Scan(Rect window) {
+            this.window = window;
+            this.windowWidth = window.width();
+            this.windowHeight = window.height();
+            this.windowTop = window.top;
+            int windowLeft = window.left;
             int middle = windowLeft + windowWidth / 2;
             boolean wide = windowWidth > windowHeight;
             this.artworkCenterXs = wide
                 ? new int[] { middle, windowLeft + Math.round(windowWidth * WIDE_ARTWORK_CENTER_X_FRACTION) }
                 : new int[] { middle };
             this.minSeekBarWidthFraction = wide ? WIDE_MIN_SEEKBAR_WIDTH_FRACTION : MIN_SEEKBAR_WIDTH_FRACTION;
+        }
+
+        boolean isPlayer() {
+            return hasWideSeekBar && hasLargeArtwork;
         }
 
         /** Whether bounds sit inside the bottom band reserved for a docked bar — see
@@ -257,9 +338,22 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                 AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS);
         }
 
+        /** The measured cover is wanted too, not just the yes/no: stopping at the first image that
+         *  clears the thresholds would stop at a backdrop before ever reaching the cover. */
+        private boolean isDone() {
+            return hasWideSeekBar && hasLargeArtwork && artworkBounds != null;
+        }
+
+        private boolean looksLikeCover(Rect bounds) {
+            if (bounds.width() <= 0 || bounds.height() <= 0) return false;
+            float aspect = bounds.width() / (float) bounds.height();
+            return aspect >= MIN_ARTWORK_ASPECT && aspect <= MAX_ARTWORK_ASPECT
+                && bounds.width() / (float) windowWidth <= MAX_ARTWORK_WIDTH_FRACTION;
+        }
+
         void walk(AccessibilityNodeInfo node, int depth) {
             if (node == null || depth > MAX_DEPTH) return;
-            if (hasWideSeekBar && hasLargeArtwork) return; // both found — nothing left to learn
+            if (isDone()) return; // everything wanted is found — nothing left to learn
             if (++nodesVisited > MAX_NODES) return;
 
             if (node.isVisibleToUser()) {
@@ -285,13 +379,16 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
                         if (heightFraction >= MIN_ARTWORK_HEIGHT_FRACTION
                             && offsetFraction <= MAX_ARTWORK_CENTER_OFFSET_FRACTION) {
                             hasLargeArtwork = true;
+                            if (artworkBounds == null && looksLikeCover(bounds)) {
+                                artworkBounds = new Rect(bounds);
+                            }
                         }
                     }
                 }
             }
 
             int count = node.getChildCount();
-            for (int i = 0; i < count && !(hasWideSeekBar && hasLargeArtwork); i++) {
+            for (int i = 0; i < count && !isDone(); i++) {
                 AccessibilityNodeInfo child = node.getChild(i);
                 if (child == null) continue;
                 try {
@@ -316,6 +413,7 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
 
     @Override
     public boolean onUnbind(Intent intent) {
+        handler.removeCallbacks(scheduledCheck);
         NowPlayerScreenState.setServiceConnected(false);
         return super.onUnbind(intent);
     }

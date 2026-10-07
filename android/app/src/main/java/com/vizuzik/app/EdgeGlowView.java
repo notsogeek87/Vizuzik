@@ -1128,8 +1128,13 @@ final class EdgeGlowView extends View {
             && hiddenPackages.contains(foreground);
         // Never while the calibration handle is up: the whole point of that moment is to see
         // where the anchor sits, and hiding it would leave the handle pointing at nothing.
+        // A tracked app's window the accessibility service has just seen on screen is "on
+        // screen" whatever the usage events say about who is in front: in split-screen they name
+        // the navigation app, and "only over the music app" then hid the overlay beside Deezer.
+        boolean trackedWindowVisible = NowPlayerScreenState.trackedWindowBounds() != null;
         suppressed = !calibrating
-            && ((onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen) || explicitlyHidden);
+            && ((onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen && !trackedWindowVisible)
+                || explicitlyHidden);
         suppressionResolved = true;
         // Drawing nothing is not the same as not being there. From Android 12 the mere presence
         // of this window over another app costs that app its touches unless the window is faint
@@ -1216,8 +1221,12 @@ final class EdgeGlowView extends View {
         }
         // isOnPlayerScreen() is already "the service is connected *and* it last reported the
         // player" — so this reads as: either the restriction is off, or there is a real yes.
-        boolean onPlayerScreen = !requirePlayerScreen || NowPlayerScreenState.isOnPlayerScreen();
-        if (foregroundKnown && trackedAppConfirmed && onPlayerScreen) return style;
+        // A fresh "yes" from the accessibility service also settles *which app* is in front: it
+        // only says yes for a tracked app's own window that it just saw on screen. Usage events
+        // cannot say that in split-screen, where the navigation app resumed last and so counts as
+        // "the" foreground app while Deezer sits visible beside it.
+        if (NowPlayerScreenState.isOnPlayerScreen()) return style;
+        if (!requirePlayerScreen && foregroundKnown && trackedAppConfirmed) return style;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 
@@ -1559,13 +1568,40 @@ final class EdgeGlowView extends View {
             return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
         }
 
+        // The cover as the accessibility service actually measured it, when it did: the one answer
+        // that is right in split-screen, in any pane width, and on any Deezer layout change — a
+        // model can only ever be right about the layouts it was calibrated on. Skipped while the
+        // calibration handle is up, whose whole job is correcting the model it would bypass.
+        if (!calibrating) {
+            Rect measured = NowPlayerScreenState.measuredArtworkBounds();
+            if (measured != null) {
+                float half = Math.min(measured.width(), measured.height()) * 0.5f;
+                if (half > 0) {
+                    refreshOrigin();
+                    float cx = measured.exactCenterX();
+                    float cy = measured.exactCenterY();
+                    return new ArtRect(cx - viewLocation[0], cy - viewLocation[1], half, cx, cy);
+                }
+            }
+        }
+
+        // The layout is modelled inside the tracked app's own *window*, not the display: in
+        // split-screen Deezer is a pane beside a navigation app, and a model of the whole screen
+        // put the disc in the middle of the wrong app. Falls back to the whole display when no
+        // window is known, which is exactly the full-screen case.
+        float[] area = layoutArea();
+        float areaLeft = area[2];
+        float areaTop = area[3];
+        screenW = area[0];
+        screenH = area[1];
+
         boolean wide = screenW > screenH;
         float side = wide
             ? Math.min(screenH * ART_WIDE_MAX_HEIGHT_FRACTION, screenW * 0.5f * ART_WIDE_MAX_PANE_FRACTION)
             : Math.min(screenW * ART_TALL_MAX_WIDTH_FRACTION, screenH * ART_TALL_MAX_HEIGHT_FRACTION);
         if (side <= 0) return null;
 
-        // This exact screen size's own correction — see the field comment on artCalibrations for
+        // This exact area size's own correction — see the field comment on artCalibrations for
         // why it's keyed this finely rather than just by wide/tall. Read-only lookup: unlike
         // calibrationFor(), never creates an entry, so merely rendering never plants a stray
         // default calibration for every size the phone happens to pass through.
@@ -1574,9 +1610,9 @@ final class EdgeGlowView extends View {
         float offsetY = calibration != null ? calibration[1] : 0f;
         float scale = calibration != null ? calibration[2] : 1f;
 
-        float screenCx = screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
+        float screenCx = areaLeft + screenW * (wide ? ART_WIDE_CENTER_X_FRACTION : ART_TALL_CENTER_X_FRACTION)
             + offsetX * screenW;
-        float screenCy = (wide
+        float screenCy = areaTop + (wide
             ? screenH * ART_WIDE_CENTER_Y_FRACTION
             : screenH * ART_TALL_TOP_FRACTION + side * 0.5f) + offsetY * screenH;
         // The calibration only resizes the disc about its own centre; where that centre sits is
@@ -1586,6 +1622,20 @@ final class EdgeGlowView extends View {
 
         refreshOrigin();
         return new ArtRect(screenCx - viewLocation[0], screenCy - viewLocation[1], half, screenCx, screenCy);
+    }
+
+    /** The area the Deezer layout is modelled in: {width, height, left, top} — the tracked app's
+     *  own window when the accessibility service has one on record (split-screen, a floating
+     *  window), the whole display otherwise. Also what calibrations are keyed by, so a split-screen
+     *  pane never overwrites the correction made for the same phone's full-screen layout. */
+    private float[] layoutArea() {
+        Rect window = NowPlayerScreenState.trackedWindowBounds();
+        if (window != null && window.width() > 0 && window.height() > 0) {
+            return new float[] { window.width(), window.height(), window.left, window.top };
+        }
+        float w = displayWidth > 0 ? displayWidth : getWidth();
+        float h = displayHeight > 0 ? displayHeight : getHeight();
+        return new float[] { w, h, 0f, 0f };
     }
 
     /** The screen's size, asked of WindowManager if the slow timer hasn't run yet — what the
@@ -1629,8 +1679,9 @@ final class EdgeGlowView extends View {
      * screen right now and leaves every other size's own calibration exactly as it was.
      */
     void setArtCalibrationFromScreenCentre(float screenCx, float screenCy) {
-        float screenW = displayWidth > 0 ? displayWidth : getWidth();
-        float screenH = displayHeight > 0 ? displayHeight : getHeight();
+        float[] area = layoutArea();
+        float screenW = area[0];
+        float screenH = area[1];
         if (screenW <= 0 || screenH <= 0) return;
         float[] entry = calibrationFor(currentLayoutKey());
         float savedX = entry[0];
@@ -1657,9 +1708,8 @@ final class EdgeGlowView extends View {
      *  artRect() itself reads. Exposed so OverlayEdgeGlowService knows which stored calibration a
      *  finished drag belongs to. */
     String currentLayoutKey() {
-        float screenW = displayWidth > 0 ? displayWidth : getWidth();
-        float screenH = displayHeight > 0 ? displayHeight : getHeight();
-        return EdgeConfig.formatLayoutKey(screenW, screenH);
+        float[] area = layoutArea();
+        return EdgeConfig.formatLayoutKey(area[0], area[1]);
     }
 
     /** The stored calibration for one screen size, creating a fresh 0/0/1 entry in artCalibrations

@@ -258,6 +258,22 @@ l'écran d'accueil.
   et a été abandonné (voir la
   même ADR).
 
+## Mode ouvert et écran fractionné (Z Fold)
+
+Quand le service d'accessibilité est activé, le disque (« vinyle ») ne dépend plus d'un modèle de
+l'écran entier :
+
+- Le service liste **toutes** les fenêtres à l'écran (pas seulement la fenêtre active), repère
+  celle de Deezer/Spotify et en publie les limites. En écran fractionné avec une appli de
+  navigation, le disque se place donc dans le volet de Deezer, même si le focus est sur la
+  navigation.
+- Quand le lecteur plein écran est affiché, la **pochette est mesurée** (position et taille réelles)
+  et le disque se pose dessus, au pixel près ; le modèle de mise en page ne sert que de repli.
+- Le disque disparaît dès que Deezer quitte le lecteur : le dernier événement d'une rafale n'est
+  plus ignoré, et le lecteur est revérifié chaque seconde tant qu'il est affiché.
+- Les calibrages manuels sont mémorisés par taille de fenêtre : un volet fractionné n'écrase pas le
+  calibrage du plein écran.
+
 ## Repartir de zéro
 
 L'activation est stockée dans `localStorage` sous la clé `vizuzik:edgeOverlay` (`"on"` /
