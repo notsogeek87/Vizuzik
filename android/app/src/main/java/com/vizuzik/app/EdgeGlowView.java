@@ -477,7 +477,6 @@ final class EdgeGlowView extends View {
     // see-through. Nothing outside drawVinyl() ever touches this.
     private final Paint vinylPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Shader vinylVignette;
-    private Shader vinylShadow;
     private float vinylShadersForHalf;
 
     // The bars style used to draw whatever the capture last handed over, raw, which flickers:
@@ -2141,13 +2140,9 @@ final class EdgeGlowView extends View {
 
         canvas.save();
         canvas.translate(art.cx, art.cy);
-        // The shadow is cast by the record, not turned by it, so it goes down before the rotation
-        // — and outside it, since what shows of it is the ring past the record's own edge.
         vinylPaint.reset();
         vinylPaint.setAntiAlias(true);
         vinylPaint.setStyle(Paint.Style.FILL);
-        vinylPaint.setShader(vinylShadow);
-        canvas.drawCircle(0, 0, half * VINYL_SHADOW_REACH, vinylPaint);
 
         canvas.rotate(vinylAngleDeg);
         // An opaque disc under the artwork before anything else. Nothing behind this window may
@@ -2182,10 +2177,10 @@ final class EdgeGlowView extends View {
         canvas.restore();
     }
 
-    /** The shadow and the vignette depend on nothing but the disc's size, so they are rebuilt
+    /** The vignette depends on nothing but the disc's size, so they are rebuilt
      *  only when that changes — a fold, a calibration, not every frame. */
     private void buildVinylShaders(float half) {
-        if (vinylShadow != null && vinylVignette != null && Math.abs(half - vinylShadersForHalf) < 0.5f) {
+        if (vinylVignette != null && Math.abs(half - vinylShadersForHalf) < 0.5f) {
             return;
         }
         vinylShadersForHalf = half;
@@ -2193,12 +2188,6 @@ final class EdgeGlowView extends View {
             0, 0, half,
             new int[] { withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 0), withAlpha(Color.BLACK, 46), withAlpha(Color.BLACK, 130) },
             new float[] { 0f, 0.55f, 0.86f, 1f },
-            Shader.TileMode.CLAMP
-        );
-        vinylShadow = new RadialGradient(
-            0, 0, half * VINYL_SHADOW_REACH,
-            new int[] { withAlpha(Color.BLACK, 120), withAlpha(Color.BLACK, 120), withAlpha(Color.BLACK, 0) },
-            new float[] { 0f, 1f / VINYL_SHADOW_REACH, 1f },
             Shader.TileMode.CLAMP
         );
     }
