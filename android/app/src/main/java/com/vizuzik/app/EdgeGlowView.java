@@ -2149,39 +2149,7 @@ final class EdgeGlowView extends View {
         vinylPaint.setShader(vinylShadow);
         canvas.drawCircle(0, 0, half * VINYL_SHADOW_REACH, vinylPaint);
 
-        // A soft, palette-coloured halo flaring out past the disc's own edge on each detected
-        // beat — colours "at the rhythm of the music", the literal ask this answers: nothing here
-        // otherwise visibly answers the music beyond the small scale "lift" a few lines down (the
-        // web player's own .disc drives an equivalent glow off --beat, see its box-shadow in
-        // style.css). Rebuilt fresh rather than cached by buildVinylShaders()'s own guard: unlike
-        // the pure-black shadow above, this has to track the travelling palette colour too, not
-        // just the disc's screen-pixel size — and it only ever actually draws on the handful of
-        // frames beatEnergy hasn't yet decayed past (see PULSE_DECAY_MS), so that cost is rare.
-        float beatPulse = clamp01(beatEnergy);
-        if (beatPulse > 0.01f) {
-            int glowColor = saturate(paletteColorAt(0f));
-            Shader beatGlow = new RadialGradient(
-                0, 0, half * VINYL_BEAT_GLOW_REACH,
-                new int[] {
-                    withAlpha(glowColor, 0),
-                    withAlpha(glowColor, clamp255((int) (beatPulse * 190))),
-                    withAlpha(glowColor, 0),
-                },
-                new float[] { 0f, 1f / VINYL_BEAT_GLOW_REACH, 1f },
-                Shader.TileMode.CLAMP
-            );
-            vinylPaint.setShader(beatGlow);
-            canvas.drawCircle(0, 0, half * VINYL_BEAT_GLOW_REACH, vinylPaint);
-            vinylPaint.setShader(null);
-        }
-
         canvas.rotate(vinylAngleDeg);
-        // A small beat-driven lift, same spirit as the web player's own disc scaling up on an
-        // impulse — the one bit of this style that answers the music rather than just turning at
-        // its own fixed rate.
-        float lift = 1f + clamp01(beatEnergy) * 0.02f;
-        canvas.scale(lift, lift);
-
         // An opaque disc under the artwork before anything else. Nothing behind this window may
         // show through the record — a cover with an alpha channel, or one that doesn't quite fill
         // the circle, would otherwise let Deezer's own still artwork ghost through the turning
@@ -2254,10 +2222,7 @@ final class EdgeGlowView extends View {
     }
 
     /** The centre label and spindle hole — what turns a circle of artwork into a record rather
-     *  than a coaster. Coloured from the same travelling palette as the rest of the overlay, its
-     *  two accent stops lifted toward white on each detected beat (see the outer glow in
-     *  drawVinyl() for the same idea, drawn larger and further out) — a second, closer-in place
-     *  the record's own colour actually answers the rhythm rather than just travelling on its own.
+     *  than a coaster. Plain and static: the record just turns, with no colour or beat effect.
      *
      *  Every colour here carries its own alpha and the paint's is reset first: sharing one Paint
      *  with the grooves above is what once left this drawn at their alpha of 26, i.e. all but
@@ -2265,20 +2230,10 @@ final class EdgeGlowView extends View {
      */
     private void drawVinylLabel(Canvas canvas, float half) {
         float labelRadius = half * VINYL_LABEL_FRACTION;
-        float labelPulse = clamp01(beatEnergy) * 0.4f;
-        int[] colors = {
-            withAlpha(VINYL_VOID_COLOR, 255),
-            withAlpha(VINYL_VOID_COLOR, 255),
-            withAlpha(lit(saturate(paletteColorAt(0f)), labelPulse), 255),
-            withAlpha(lit(saturate(paletteColorAt(1f)), labelPulse), 255),
-            withAlpha(dim(paletteColorAt(1f), 0.35f), 255),
-        };
-        float[] stops = { 0f, 0.30f, 0.42f, 0.86f, 1f };
         vinylPaint.setStyle(Paint.Style.FILL);
-        vinylPaint.setAlpha(255);
-        vinylPaint.setShader(new RadialGradient(0, 0, labelRadius, colors, stops, Shader.TileMode.CLAMP));
-        canvas.drawCircle(0, 0, labelRadius, vinylPaint);
         vinylPaint.setShader(null);
+        vinylPaint.setColor(withAlpha(VINYL_VOID_COLOR, 255));
+        canvas.drawCircle(0, 0, labelRadius, vinylPaint);
         vinylPaint.setColor(withAlpha(Color.BLACK, 255));
         canvas.drawCircle(0, 0, Math.max(1.5f * density, labelRadius * 0.16f), vinylPaint);
     }
