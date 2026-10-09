@@ -1202,6 +1202,9 @@ final class EdgeGlowView extends View {
         }
     }
 
+    /** activeStyle()'s answer for "draw nothing". */
+    private static final String STYLE_NONE = "none";
+
     /**
      * Which style to actually paint. Only "cocoon" and "vinyl" are ever swapped: both are drawn
      * against where the music app's own album art sits (see the ART_* constants), so anywhere
@@ -1265,6 +1268,11 @@ final class EdgeGlowView extends View {
         // "the" foreground app while Deezer sits visible beside it.
         if (NowPlayerScreenState.isOnPlayerScreen()) return style;
         if (!requirePlayerScreen && foregroundKnown && trackedAppConfirmed) return style;
+        // "Seulement sur l'écran du lecteur" means exactly that: off the player screen (or while
+        // Deezer is still opening / changing screen and nothing has confirmed it yet) the record
+        // is not replaced by the edge-style fallback, it just isn't there — otherwise the bars
+        // flash across the top of every transition.
+        if (requirePlayerScreen) return STYLE_NONE;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
     }
 
@@ -1277,7 +1285,9 @@ final class EdgeGlowView extends View {
             // put at all — see suppressionResolved.
             if (suppressed || !suppressionResolved) return;
             String active = activeStyle();
-            if (EdgeConfig.STYLE_BARS.equals(active)) {
+            if (STYLE_NONE.equals(active)) {
+                return;
+            } else if (EdgeConfig.STYLE_BARS.equals(active)) {
                 drawBars(canvas);
             } else if (EdgeConfig.STYLE_PARTICLES.equals(active)) {
                 drawParticles(canvas);
