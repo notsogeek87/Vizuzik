@@ -1377,6 +1377,70 @@ body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   margin: 0;
 }
 
+/* Accordéons par catégorie : une seule ligne par groupe tant qu'il est fermé, pour qu'on voie
+   d'un coup d'œil tout ce qu'il y a à régler. */
+.settings-group {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 10px;
+}
+
+.settings-group > summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+  padding: 12px 40px 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-group > summary::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(247, 248, 252, 0.6);
+  border-bottom: 2px solid rgba(247, 248, 252, 0.6);
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 0.2s;
+}
+
+.settings-group[open] > summary::after {
+  transform: translateY(-30%) rotate(-135deg);
+}
+
+.settings-group__title {
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-group > summary small {
+  font-size: 0.76rem;
+  color: rgba(247, 248, 252, 0.55);
+}
+
+.settings-group__body {
+  padding: 0 14px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-group__body > :last-child {
+  border-bottom: 0;
+}
+
+.settings-group__body .edge-diagnostics {
+  border-top: 0;
+}
+
 /* Bloc de diagnostic : volontairement dense et monospace — il est fait pour être capturé et lu
    en une fois, pas pour être joli. */
 .edge-diagnostics {

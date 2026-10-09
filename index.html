@@ -758,6 +758,9 @@
       <div class="sheet__panel edge-settings__panel" role="dialog" aria-modal="true" aria-labelledby="edge-settings-title">
         <h2 id="edge-settings-title" class="sheet__title">Réglages Edge Visualizer</h2>
 
+        <details class="settings-group" open>
+          <summary><span class="settings-group__title">Activation</span><small>Superposition sur l'app de musique</small></summary>
+          <div class="settings-group__body">
         <!-- The master switch, kept first and separated from the appearance controls below: it
              decides whether the overlay runs at all, including on its own while Vizuzik has never
              been opened, which is the one thing here that has an effect outside this app. Mirrors
@@ -769,7 +772,102 @@
           </span>
           <input id="edge-overlay-enabled" type="checkbox" />
         </label>
+          </div>
+        </details>
 
+        <details class="settings-group">
+          <summary><span class="settings-group__title">Apparence</span><small>Style, couleurs, côtés</small></summary>
+          <div class="settings-group__body">
+        <label class="edge-settings__row">
+          <span>Style</span>
+          <select id="edge-style">
+            <option value="bars">Barres (spectre)</option>
+            <option value="glow">Contour lumineux</option>
+            <option value="particles">Particules</option>
+            <option value="cocoon">Cocon (ruban tressé)</option>
+            <option value="vinyl">Vinyle (disque qui tourne)</option>
+            <option value="turntable">Platine (vinyle sur platine)</option>
+          </select>
+        </label>
+
+        <!-- Only meaningful for "Cocon" et "Vinyle" : tous deux sont dessinés par-dessus la
+             pochette de l'app de musique, donc ailleurs ils n'ont rien à afficher. See
+             activeStyle() in EdgeGlowView. -->
+        <label class="edge-settings__row">
+          <span>
+            Hors de l'app de musique
+            <small>Ce que « Cocon » et « Vinyle » affichent quand Deezer n'est pas à l'écran.</small>
+          </span>
+          <select id="edge-cocoon-fallback">
+            <option value="bars">Barres (spectre)</option>
+            <option value="glow">Contour lumineux</option>
+          </select>
+        </label>
+
+        <label class="edge-settings__row">
+          <span>Couleurs</span>
+          <select id="edge-color-mode">
+            <option value="auto">Auto (pochette)</option>
+            <option value="custom">Personnalisées</option>
+          </select>
+        </label>
+
+        <div id="edge-custom-colors" class="edge-settings__colors" hidden>
+          <input id="edge-color-1" type="color" value="#7c5cff" aria-label="Couleur 1" />
+          <input id="edge-color-2" type="color" value="#ec4899" aria-label="Couleur 2" />
+          <input id="edge-color-3" type="color" value="#38bdf8" aria-label="Couleur 3" />
+        </div>
+
+        <div class="edge-settings__edges">
+          <label><input id="edge-top" type="checkbox" checked /> Haut</label>
+          <label><input id="edge-bottom" type="checkbox" /> Bas</label>
+          <label><input id="edge-left" type="checkbox" /> Gauche</label>
+          <label><input id="edge-right" type="checkbox" /> Droite</label>
+        </div>
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span class="settings-group__title">Intensité et réactivité</span><small>Hauteur, luminosité, fréquences</small></summary>
+          <div class="settings-group__body">
+        <!-- Only the "bars" style grows: the other two are a fixed border and a ribbon sized
+             from the album art itself. -->
+        <label class="edge-settings__row edge-settings__row--slider">
+          <span>Hauteur des barres</span>
+          <input id="edge-bar-size" type="range" min="0.3" max="2" step="0.05" value="1" />
+        </label>
+        <label class="edge-settings__row edge-settings__row--slider">
+          <span>Intensité</span>
+          <input id="edge-intensity" type="range" min="0.3" max="2" step="0.05" value="1" />
+        </label>
+        <label class="edge-settings__row edge-settings__row--slider">
+          <span>Épaisseur</span>
+          <input id="edge-thickness" type="range" min="0.3" max="2" step="0.05" value="1" />
+        </label>
+        <label class="edge-settings__row edge-settings__row--slider">
+          <span>Luminosité</span>
+          <input id="edge-brightness" type="range" min="0.3" max="2" step="0.05" value="1" />
+        </label>
+        <label class="edge-settings__row edge-settings__row--slider">
+          <span>Sensibilité</span>
+          <input id="edge-sensitivity" type="range" min="0.3" max="2" step="0.05" value="1" />
+        </label>
+
+        <label class="edge-settings__row">
+          <span>Fréquences utilisées</span>
+          <select id="edge-band">
+            <option value="full">Tout le spectre</option>
+            <option value="bass">Basses</option>
+            <option value="mid">Médiums</option>
+            <option value="treble">Aigus</option>
+          </select>
+        </label>
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span class="settings-group__title">Écran verrouillé</span><small>Visualiseur quand le téléphone est verrouillé</small></summary>
+          <div class="settings-group__body">
         <!-- A different, more intrusive feature from "Mode superposition" above: it takes over
              the lock screen and keeps the display lit while music plays, instead of letting the
              phone sleep or show its own Always-On Display — there is no public API that lets a
@@ -807,7 +905,12 @@
             <option value="baladeur">Baladeur</option>
           </select>
         </label>
+          </div>
+        </details>
 
+        <details class="settings-group">
+          <summary><span class="settings-group__title">Apps et autorisations</span><small>Où le visualiseur s'affiche</small></summary>
+          <div class="settings-group__body">
         <!-- Needs "usage access" to be honoured: nothing else can tell an overlay window which
              app is actually on screen. Left on with the permission missing, the overlay simply
              keeps showing everywhere rather than hiding on a guess — see ForegroundApp. -->
@@ -855,32 +958,6 @@
           Autoriser l'accès à l'écran (Accessibilité)
         </button>
 
-        <label class="edge-settings__row">
-          <span>Style</span>
-          <select id="edge-style">
-            <option value="bars">Barres (spectre)</option>
-            <option value="glow">Contour lumineux</option>
-            <option value="particles">Particules</option>
-            <option value="cocoon">Cocon (ruban tressé)</option>
-            <option value="vinyl">Vinyle (disque qui tourne)</option>
-            <option value="turntable">Platine (vinyle sur platine)</option>
-          </select>
-        </label>
-
-        <!-- Only meaningful for "Cocon" et "Vinyle" : tous deux sont dessinés par-dessus la
-             pochette de l'app de musique, donc ailleurs ils n'ont rien à afficher. See
-             activeStyle() in EdgeGlowView. -->
-        <label class="edge-settings__row">
-          <span>
-            Hors de l'app de musique
-            <small>Ce que « Cocon » et « Vinyle » affichent quand Deezer n'est pas à l'écran.</small>
-          </span>
-          <select id="edge-cocoon-fallback">
-            <option value="bars">Barres (spectre)</option>
-            <option value="glow">Contour lumineux</option>
-          </select>
-        </label>
-
         <!-- Vizuzik ne peut pas lire la mise en page de Deezer (ni accessibilité, ni capture
              d'écran : voir TrackedAudioCapture) : elle estime où se trouve la pochette. Ces deux
              boutons sont la correction quand l'estimation tombe à côté. -->
@@ -896,61 +973,12 @@
             <button id="edge-art-reset" type="button" class="text-button">Réinitialiser</button>
           </div>
         </div>
+          </div>
+        </details>
 
-        <label class="edge-settings__row">
-          <span>Fréquences utilisées</span>
-          <select id="edge-band">
-            <option value="full">Tout le spectre</option>
-            <option value="bass">Basses</option>
-            <option value="mid">Médiums</option>
-            <option value="treble">Aigus</option>
-          </select>
-        </label>
-
-        <label class="edge-settings__row">
-          <span>Couleurs</span>
-          <select id="edge-color-mode">
-            <option value="auto">Auto (pochette)</option>
-            <option value="custom">Personnalisées</option>
-          </select>
-        </label>
-
-        <div id="edge-custom-colors" class="edge-settings__colors" hidden>
-          <input id="edge-color-1" type="color" value="#7c5cff" aria-label="Couleur 1" />
-          <input id="edge-color-2" type="color" value="#ec4899" aria-label="Couleur 2" />
-          <input id="edge-color-3" type="color" value="#38bdf8" aria-label="Couleur 3" />
-        </div>
-
-        <!-- Only the "bars" style grows: the other two are a fixed border and a ribbon sized
-             from the album art itself. -->
-        <label class="edge-settings__row edge-settings__row--slider">
-          <span>Hauteur des barres</span>
-          <input id="edge-bar-size" type="range" min="0.3" max="2" step="0.05" value="1" />
-        </label>
-        <label class="edge-settings__row edge-settings__row--slider">
-          <span>Intensité</span>
-          <input id="edge-intensity" type="range" min="0.3" max="2" step="0.05" value="1" />
-        </label>
-        <label class="edge-settings__row edge-settings__row--slider">
-          <span>Épaisseur</span>
-          <input id="edge-thickness" type="range" min="0.3" max="2" step="0.05" value="1" />
-        </label>
-        <label class="edge-settings__row edge-settings__row--slider">
-          <span>Luminosité</span>
-          <input id="edge-brightness" type="range" min="0.3" max="2" step="0.05" value="1" />
-        </label>
-        <label class="edge-settings__row edge-settings__row--slider">
-          <span>Sensibilité</span>
-          <input id="edge-sensitivity" type="range" min="0.3" max="2" step="0.05" value="1" />
-        </label>
-
-        <div class="edge-settings__edges">
-          <label><input id="edge-top" type="checkbox" checked /> Haut</label>
-          <label><input id="edge-bottom" type="checkbox" /> Bas</label>
-          <label><input id="edge-left" type="checkbox" /> Gauche</label>
-          <label><input id="edge-right" type="checkbox" /> Droite</label>
-        </div>
-
+        <details class="settings-group">
+          <summary><span class="settings-group__title">À propos</span><small>Mises à jour et diagnostic</small></summary>
+          <div class="settings-group__body">
         <!-- Mises à jour : l'app vérifie déjà à chaque ouverture (AppUpdater côté natif) ; ce bouton
              relance la même vérification à la demande. La fenêtre qui guide l'installation est native. -->
         <div class="edge-settings__row edge-settings__row--stacked">
@@ -972,6 +1000,8 @@
             Ouvrez Deezer avec la surcouche active, revenez ici, puis faites une capture de ce bloc.
           </p>
           <dl id="edge-diagnostics-list" class="edge-diagnostics__list"></dl>
+        </details>
+          </div>
         </details>
 
         <button id="edge-settings-close" type="button" class="grant-button">Fermer</button>
