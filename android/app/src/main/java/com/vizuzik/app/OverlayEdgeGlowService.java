@@ -585,6 +585,8 @@ public class OverlayEdgeGlowService extends Service
         // Gates "vinyl"'s rotation — set on every update, a track change or a bare play/pause
         // alike, not only when a new track lands below.
         glowView.setPlaying(nowPlaying.isPlaying);
+        // "Platine": the tonearm travels from the outer groove to the inner one over the track.
+        glowView.setCassetteProgress(nowPlaying.positionMs, nowPlaying.durationMs);
 
         // A real event, same two the full-screen player pulses on: a new track landing, or
         // play/pause toggling. Without AudioLevelsBridge running (no "real audio" capture

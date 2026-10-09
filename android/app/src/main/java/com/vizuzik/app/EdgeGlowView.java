@@ -2412,12 +2412,23 @@ final class EdgeGlowView extends View {
         canvas.drawCircle(0, 0, Math.max(2f * density, lr * 0.10f), p);
         canvas.restore();
 
-        // Tonearm: gimbal base top right, tube down to the headshell on the record's outer grooves.
+        // Tonearm: gimbal base top right, tube down to the headshell. The stylus starts on the
+        // outer grooves and winds towards the label as the track plays, like a real record: the
+        // arm has a fixed length and pivots, so the stylus is where that circle meets the groove
+        // radius reached by now.
         float ax = u * 0.62f, ay = -u * 0.62f;
-        float tx = px + rr * 0.28f, ty = py + rr * 0.70f;
-        float dx = tx - ax, dy = ty - ay;
-        float len = (float) Math.hypot(dx, dy);
-        float nx = dx / len, ny = dy / len;
+        float headLen = u * 0.20f;
+        float armReach = u * 1.30f;                 // pivot -> stylus
+        float grooveR = rr * (0.95f + (0.58f - 0.95f) * cassetteProgress());
+        float pcx = ax - px, pcy = ay - py;         // pivot relative to the platter centre
+        float pd = (float) Math.hypot(pcx, pcy);
+        float cosG = (pd * pd + grooveR * grooveR - armReach * armReach) / (2f * pd * grooveR);
+        double swing = Math.atan2(pcy, pcx) + Math.acos(Math.max(-1f, Math.min(1f, cosG)));
+        float sx = px + grooveR * (float) Math.cos(swing);
+        float sy = py + grooveR * (float) Math.sin(swing);
+        float len = (float) Math.hypot(sx - ax, sy - ay);
+        float nx = (sx - ax) / len, ny = (sy - ay) / len;
+        float tx = sx - nx * headLen, ty = sy - ny * headLen;
         p.setStyle(Paint.Style.FILL);
         p.setColor(withAlpha(Color.BLACK, 90));
         canvas.drawCircle(ax + u * 0.01f, ay + u * 0.015f, u * 0.15f, p);
