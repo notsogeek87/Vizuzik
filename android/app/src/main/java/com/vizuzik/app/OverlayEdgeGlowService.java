@@ -295,6 +295,15 @@ public class OverlayEdgeGlowService extends Service
         // opaque, the platform drops touches over that square (Android 12+). Every other style
         // keeps the touch-safe cap.
         params.alpha = opaque ? 1f : touchSafeAlpha;
+        // Android 12+ also clamps the alpha of a FLAG_NOT_TOUCHABLE overlay to the obscuring
+        // threshold, so alpha 1.0 alone was silently ignored and the platine stayed see-through.
+        // Opaque therefore also means touchable: the window swallows touches over its own square
+        // (which the platform was dropping there anyway) and, in exchange, is really opaque.
+        if (opaque) {
+            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        } else {
+            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        }
         OverlayDiagnostics.windowMode = small ? "small" : "full";
         OverlayDiagnostics.windowTouchable =
             (params.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
