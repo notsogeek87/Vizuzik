@@ -680,10 +680,47 @@ final class EdgeGlowView extends View {
         if (albumArt == null || albumArt.isRecycled()) {
             vinylBitmap = null;
             vinylShader = null;
+            albumHue = -1f;
             return;
         }
+        albumHue = dominantHue(albumArt);
+        albumSat = albumHueSat;
         vinylBitmap = albumArt;
         vinylShader = new BitmapShader(albumArt, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+    }
+
+    // The artwork's dominant colour as hue (degrees) and saturation, -1 hue when unknown — what
+    // drawTurntable() tints its wood and deck with. Written from setAlbumArt(), read when drawing.
+    private volatile float albumHue = -1f;
+    private volatile float albumSat = 0f;
+    private float albumHueSat;
+
+    /** Saturation-weighted average hue of a 24x24 copy of the artwork; -1 if it is essentially grey. */
+    private float dominantHue(Bitmap art) {
+        albumHueSat = 0f;
+        try {
+            Bitmap small = Bitmap.createScaledBitmap(art, 24, 24, true);
+            float x = 0f, y = 0f, sat = 0f, w = 0f;
+            float[] hsv = new float[3];
+            for (int j = 0; j < 24; j++) {
+                for (int i = 0; i < 24; i++) {
+                    Color.colorToHSV(small.getPixel(i, j), hsv);
+                    float wt = hsv[1] * hsv[2];
+                    double a = Math.toRadians(hsv[0]);
+                    x += (float) Math.cos(a) * wt;
+                    y += (float) Math.sin(a) * wt;
+                    sat += hsv[1] * wt;
+                    w += wt;
+                }
+            }
+            if (small != art) small.recycle();
+            if (w < 1f) return -1f;
+            albumHueSat = Math.min(1f, sat / w);
+            float h = (float) Math.toDegrees(Math.atan2(y, x));
+            return h < 0 ? h + 360f : h;
+        } catch (Exception e) {
+            return -1f;
+        }
     }
 
     /** Whether the track is actually playing right now — the one thing that gates "vinyl"'s
@@ -2195,6 +2232,7 @@ final class EdgeGlowView extends View {
     private static final float TURNTABLE_PLINTH = 1.07f;
     // Shaders depend only on the plinth's size, so they are rebuilt when that changes, not per frame.
     private float turntableShadersForU;
+    private float turntableHueBuilt = -2f;
     private Shader turntableWood;
     private Shader turntableDeck;
     private Shader turntableSheen;
@@ -2218,13 +2256,32 @@ final class EdgeGlowView extends View {
         float px = -u * 0.14f, py = u * 0.04f;   // platter centre
         float rr = u * 0.68f;                    // record radius
 
-        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f) {
+        float hue = albumHue;
+        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f
+            || hue != turntableHueBuilt) {
             turntableShadersForU = u;
+            turntableHueBuilt = hue;
+            int w0, w1, w2, w3, d0, d1, d2;
+            if (hue < 0f) {
+                w0 = 0xFFC4803F; w1 = 0xFF9E6129; w2 = 0xFFB67437; w3 = 0xFF8C5522;
+                d0 = 0xFF2A2A2F; d1 = 0xFF121215; d2 = 0xFF1D1D21;
+            } else {
+                // The plinth takes the cover's dominant hue (kept lively but not neon); the deck
+                // is the same hue, nearly black.
+                float sat = Math.max(0.35f, Math.min(0.75f, albumSat + 0.1f));
+                w0 = Color.HSVToColor(new float[] { hue, sat, 0.80f });
+                w1 = Color.HSVToColor(new float[] { hue, Math.min(1f, sat + 0.08f), 0.58f });
+                w2 = Color.HSVToColor(new float[] { hue, sat, 0.70f });
+                w3 = Color.HSVToColor(new float[] { hue, Math.min(1f, sat + 0.1f), 0.46f });
+                d0 = Color.HSVToColor(new float[] { hue, 0.30f, 0.20f });
+                d1 = Color.HSVToColor(new float[] { hue, 0.30f, 0.08f });
+                d2 = Color.HSVToColor(new float[] { hue, 0.30f, 0.13f });
+            }
             turntableWood = new LinearGradient(-u, -u, u, u,
-                new int[] { 0xFFC4803F, 0xFF9E6129, 0xFFB67437, 0xFF8C5522 },
+                new int[] { w0, w1, w2, w3 },
                 new float[] { 0f, 0.4f, 0.7f, 1f }, Shader.TileMode.CLAMP);
             turntableDeck = new LinearGradient(-u, -u, u, u,
-                new int[] { 0xFF2A2A2F, 0xFF121215, 0xFF1D1D21 },
+                new int[] { d0, d1, d2 },
                 new float[] { 0f, 0.5f, 1f }, Shader.TileMode.CLAMP);
             turntableSheen = new SweepGradient(0, 0,
                 new int[] { withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
@@ -2319,7 +2376,7 @@ final class EdgeGlowView extends View {
         canvas.drawCircle(0, 0, rr, p);
         p.setStyle(Paint.Style.STROKE);
         for (int i = 0; i < 22; i++) {
-            float r = rr * (0.40f + 0.58f * (i + 1f) / 22f);
+            float r = rr * (0.56f + 0.42f * (i + 1f) / 22f);
             p.setStrokeWidth(Math.max(0.8f, density * 0.45f));
             p.setColor(withAlpha(i % 4 == 0 ? 0xFF3A3B41 : 0xFF1D1E22, 255));
             canvas.drawCircle(0, 0, r, p);
@@ -2329,7 +2386,7 @@ final class EdgeGlowView extends View {
         p.setStrokeWidth(Math.max(1f, density * 0.8f));
         canvas.drawCircle(0, 0, rr - p.getStrokeWidth(), p);
         // Label: the track's artwork when there is one, plain cream otherwise.
-        float lr = rr * 0.33f;
+        float lr = rr * 0.52f;
         p.setStyle(Paint.Style.FILL);
         p.setColor(withAlpha(0xFFF2EEE4, 255));
         canvas.drawCircle(0, 0, lr, p);
@@ -2392,7 +2449,8 @@ final class EdgeGlowView extends View {
         p.setColor(withAlpha(0xFF1B1B20, 255));
         canvas.drawLine(tx, ty, tx + nx * u * 0.15f, ty + ny * u * 0.15f, p);
         p.setStrokeWidth(Math.max(3f, u * 0.05f));
-        p.setColor(withAlpha(0xFFE0A030, 255));
+        p.setColor(hue < 0f ? withAlpha(0xFFE0A030, 255)
+            : Color.HSVToColor(new float[] { hue, 0.7f, 0.95f }));
         canvas.drawLine(tx + nx * u * 0.15f, ty + ny * u * 0.15f, tx + nx * u * 0.20f, ty + ny * u * 0.20f, p);
         p.setStrokeCap(Paint.Cap.BUTT);
 
