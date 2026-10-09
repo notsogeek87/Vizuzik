@@ -14,6 +14,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
+import android.graphics.SweepGradient;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Handler;
@@ -1765,7 +1766,7 @@ final class EdgeGlowView extends View {
          * touchSafeAlpha for why the shrink doesn't buy this window any more opacity than the
          * others: it still sits over the exact spot Deezer's own skip-track swipe is performed.
          */
-        void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf);
+        void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf, boolean opaque);
     }
 
     private WindowBoundsListener windowBoundsListener;
@@ -1774,6 +1775,7 @@ final class EdgeGlowView extends View {
     // (unlike a draw, which just shows up on the next frame) is worth asking for only when it
     // would actually move something.
     private boolean lastWantedSmall;
+    private boolean lastWantedOpaque;
     private float lastWantedCx = Float.NaN;
     private float lastWantedCy = Float.NaN;
     private float lastWantedHalf = Float.NaN;
@@ -1829,16 +1831,18 @@ final class EdgeGlowView extends View {
         float cy = small ? art.screenCy : 0f;
         float half = small ? art.half * VINYL_WINDOW_MARGIN : 0f;
 
-        boolean unchanged = small == lastWantedSmall
+        boolean opaque = small && EdgeConfig.STYLE_TURNTABLE.equals(activeStyle());
+        boolean unchanged = small == lastWantedSmall && opaque == lastWantedOpaque
             && (!small || (closeEnough(cx, lastWantedCx) && closeEnough(cy, lastWantedCy)
                 && closeEnough(half, lastWantedHalf)));
         if (unchanged) return;
 
         lastWantedSmall = small;
+        lastWantedOpaque = opaque;
         lastWantedCx = cx;
         lastWantedCy = cy;
         lastWantedHalf = half;
-        windowBoundsListener.onWindowBoundsWanted(small, cx, cy, half);
+        windowBoundsListener.onWindowBoundsWanted(small, cx, cy, half, opaque);
     }
 
     /** The package updateSuppression() last saw in front, kept only so publishDiagnostics() has
@@ -2192,7 +2196,9 @@ final class EdgeGlowView extends View {
     // Shaders depend only on the plinth's size, so they are rebuilt when that changes, not per frame.
     private float turntableShadersForU;
     private Shader turntableWood;
+    private Shader turntableDeck;
     private Shader turntableSheen;
+    private Shader turntableMetal;
 
     /**
      * "Platine": a wooden turntable seen from above, drawn over Deezer's album art. The plinth is
@@ -2208,76 +2214,122 @@ final class EdgeGlowView extends View {
         if (art == null) return;
         float u = art.half * TURNTABLE_PLINTH;
         Paint p = vinylPaint;
+        float hair = Math.max(1f, density * 0.7f);
+        float px = -u * 0.14f, py = u * 0.04f;   // platter centre
+        float rr = u * 0.68f;                    // record radius
+
+        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f) {
+            turntableShadersForU = u;
+            turntableWood = new LinearGradient(-u, -u, u, u,
+                new int[] { 0xFFC4803F, 0xFF9E6129, 0xFFB67437, 0xFF8C5522 },
+                new float[] { 0f, 0.4f, 0.7f, 1f }, Shader.TileMode.CLAMP);
+            turntableDeck = new LinearGradient(-u, -u, u, u,
+                new int[] { 0xFF2A2A2F, 0xFF121215, 0xFF1D1D21 },
+                new float[] { 0f, 0.5f, 1f }, Shader.TileMode.CLAMP);
+            turntableSheen = new SweepGradient(0, 0,
+                new int[] { withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
+                    withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
+                    withAlpha(Color.WHITE, 0) },
+                new float[] { 0f, 0.08f, 0.16f, 0.5f, 0.58f, 0.66f, 1f });
+            turntableMetal = new LinearGradient(0, -u * 0.1f, 0, u * 0.1f,
+                new int[] { 0xFFE6E8EB, 0xFF9A9DA3, 0xFFD2D4D8 },
+                new float[] { 0f, 0.55f, 1f }, Shader.TileMode.CLAMP);
+        }
 
         canvas.save();
         canvas.translate(art.cx, art.cy);
         p.reset();
         p.setAntiAlias(true);
 
-        // Wooden plinth, with a few faint grain lines running along it.
+        // Wooden plinth, a few faint grain lines, and a bevel: lit top-left edge, shaded bottom-right.
         p.setStyle(Paint.Style.FILL);
-        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f) {
-            turntableShadersForU = u;
-            turntableWood = new LinearGradient(-u, -u, u, u,
-                new int[] { 0xFFC98544, 0xFFA8692F, 0xFFB87638 }, new float[] { 0f, 0.55f, 1f },
-                Shader.TileMode.CLAMP);
-            float r = u * 0.70f;
-            turntableSheen = new LinearGradient(-r, r, r, -r,
-                new int[] { withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 40), withAlpha(Color.WHITE, 0) },
-                new float[] { 0.30f, 0.45f, 0.62f }, Shader.TileMode.CLAMP);
-        }
         p.setShader(turntableWood);
-        canvas.drawRoundRect(-u, -u, u, u, u * 0.04f, u * 0.04f, p);
+        canvas.drawRoundRect(-u, -u, u, u, u * 0.035f, u * 0.035f, p);
         p.setShader(null);
         p.setStyle(Paint.Style.STROKE);
-        p.setStrokeWidth(Math.max(1f, density * 0.7f));
-        for (int i = 0; i < 9; i++) {
-            float y = -u * 0.94f + u * 0.235f * i + ((i % 3) - 1) * u * 0.03f;
-            p.setColor(withAlpha(0xFF5A3314, i % 2 == 0 ? 46 : 28));
-            canvas.drawLine(-u * 0.97f, y, u * 0.97f, y + u * 0.02f, p);
+        p.setStrokeWidth(hair);
+        for (int i = 0; i < 11; i++) {
+            float y = -u * 0.95f + u * 0.19f * i + ((i % 3) - 1) * u * 0.025f;
+            p.setColor(withAlpha(0xFF4E2B10, i % 2 == 0 ? 52 : 30));
+            canvas.drawLine(-u * 0.97f, y, u * 0.97f, y + u * 0.018f, p);
         }
-        // Lid hinge strip along the top edge.
+        p.setStrokeWidth(Math.max(1.5f, density * 1.2f));
+        p.setColor(withAlpha(0xFFFFD9A0, 90));
+        canvas.drawLine(-u * 0.97f, -u + p.getStrokeWidth() * 0.5f, u * 0.97f, -u + p.getStrokeWidth() * 0.5f, p);
+        canvas.drawLine(-u + p.getStrokeWidth() * 0.5f, -u * 0.97f, -u + p.getStrokeWidth() * 0.5f, u * 0.97f, p);
+        p.setColor(withAlpha(0xFF3A1E08, 120));
+        canvas.drawLine(-u * 0.97f, u - p.getStrokeWidth() * 0.5f, u * 0.97f, u - p.getStrokeWidth() * 0.5f, p);
+        canvas.drawLine(u - p.getStrokeWidth() * 0.5f, -u * 0.97f, u - p.getStrokeWidth() * 0.5f, u * 0.97f, p);
+
+        // Black deck inset into the wood, with a thin shadow line where it meets it.
         p.setStyle(Paint.Style.FILL);
-        p.setColor(withAlpha(0xFF1A1A1A, 255));
-        canvas.drawRect(-u, -u, u, -u * 0.955f, p);
+        p.setShader(turntableDeck);
+        canvas.drawRoundRect(-u * 0.90f, -u * 0.90f, u * 0.90f, u * 0.90f, u * 0.025f, u * 0.025f, p);
+        p.setShader(null);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(hair);
+        p.setColor(withAlpha(Color.BLACK, 200));
+        canvas.drawRoundRect(-u * 0.90f, -u * 0.90f, u * 0.90f, u * 0.90f, u * 0.025f, u * 0.025f, p);
+        p.setColor(withAlpha(Color.WHITE, 28));
+        canvas.drawRoundRect(-u * 0.885f, -u * 0.885f, u * 0.885f, u * 0.885f, u * 0.02f, u * 0.02f, p);
 
-        // Black deck inset into the wood.
-        p.setColor(withAlpha(0xFF17171A, 255));
-        canvas.drawRoundRect(-u * 0.88f, -u * 0.86f, u * 0.88f, u * 0.88f, u * 0.03f, u * 0.03f, p);
-        // Silver control strip, bottom right.
-        p.setColor(withAlpha(0xFFC9CBCF, 255));
-        canvas.drawRoundRect(u * 0.36f, u * 0.50f, u * 0.88f, u * 0.88f, u * 0.02f, u * 0.02f, p);
-        p.setColor(withAlpha(0xFF2A2A2E, 255));
-        canvas.drawCircle(u * 0.52f, u * 0.70f, u * 0.035f, p);
-        canvas.drawCircle(u * 0.74f, u * 0.64f, u * 0.025f, p);
-        canvas.drawRect(u * 0.66f, u * 0.74f, u * 0.80f, u * 0.77f, p);
-        // Anti-skating dial, right of the arm's pivot.
-        p.setColor(withAlpha(0xFFB5B7BB, 255));
-        canvas.drawCircle(u * 0.58f, u * 0.10f, u * 0.075f, p);
-        p.setColor(withAlpha(0xFF222226, 255));
-        canvas.drawCircle(u * 0.58f, u * 0.10f, u * 0.04f, p);
+        // Pitch fader (right edge): slot + knob. Two square push-buttons under the platter, left.
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(Color.BLACK, 255));
+        canvas.drawRoundRect(u * 0.78f, u * 0.18f, u * 0.82f, u * 0.78f, u * 0.02f, u * 0.02f, p);
+        p.setColor(withAlpha(Color.WHITE, 60));
+        for (int i = 0; i <= 6; i++) {
+            float ty = u * 0.18f + u * 0.10f * i;
+            canvas.drawRect(u * 0.84f, ty - hair * 0.5f, u * 0.87f, ty + hair * 0.5f, p);
+        }
+        p.setShader(turntableMetal);
+        canvas.save();
+        canvas.translate(u * 0.80f, u * 0.50f);
+        canvas.drawRoundRect(-u * 0.05f, -u * 0.025f, u * 0.05f, u * 0.025f, u * 0.01f, u * 0.01f, p);
+        canvas.restore();
+        p.setShader(null);
+        for (int i = 0; i < 2; i++) {
+            float bx = -u * 0.80f + i * u * 0.14f;
+            p.setColor(withAlpha(0xFF3A3B40, 255));
+            canvas.drawRoundRect(bx, u * 0.74f, bx + u * 0.10f, u * 0.84f, u * 0.015f, u * 0.015f, p);
+            p.setColor(withAlpha(i == 0 ? 0xFFE04A3C : 0xFF8A8C92, 255));
+            canvas.drawCircle(bx + u * 0.05f, u * 0.79f, u * 0.012f, p);
+        }
 
-        // The platter and the record on it.
-        float px = -u * 0.14f, py = u * 0.04f;
-        float rr = u * 0.70f;
+        // Platter: metal rim with strobe dots, then the record on a mat.
         canvas.save();
         canvas.translate(px, py);
-        p.setColor(withAlpha(0xFF2C2C31, 255));
+        p.setColor(withAlpha(Color.BLACK, 110));
+        canvas.drawCircle(u * 0.012f, u * 0.018f, rr + u * 0.06f, p);
+        p.setShader(turntableMetal);
+        canvas.drawCircle(0, 0, rr + u * 0.055f, p);
+        p.setShader(null);
+        p.setColor(withAlpha(0xFF2B2C30, 255));
         canvas.drawCircle(0, 0, rr + u * 0.03f, p);
+        p.setColor(withAlpha(0xFFB9BBBF, 255));
+        for (int i = 0; i < 60; i++) {
+            double a = i * Math.PI * 2 / 60;
+            canvas.drawCircle((float) Math.cos(a) * (rr + u * 0.042f), (float) Math.sin(a) * (rr + u * 0.042f),
+                Math.max(0.6f, u * 0.0045f), p);
+        }
 
         canvas.save();
         canvas.rotate(vinylAngleDeg);
-        p.setColor(withAlpha(0xFF0B0B0D, 255));
+        p.setColor(withAlpha(0xFF0A0A0C, 255));
         canvas.drawCircle(0, 0, rr, p);
         p.setStyle(Paint.Style.STROKE);
-        for (int i = 0; i < 16; i++) {
-            float r = rr * (0.36f + 0.62f * (i + 1f) / 16f);
-            p.setStrokeWidth(Math.max(1f, density * 0.5f));
-            p.setColor(withAlpha(i % 3 == 0 ? 0xFF33343A : 0xFF1E1F23, 255));
+        for (int i = 0; i < 22; i++) {
+            float r = rr * (0.40f + 0.58f * (i + 1f) / 22f);
+            p.setStrokeWidth(Math.max(0.8f, density * 0.45f));
+            p.setColor(withAlpha(i % 4 == 0 ? 0xFF3A3B41 : 0xFF1D1E22, 255));
             canvas.drawCircle(0, 0, r, p);
         }
+        // Lead-in edge.
+        p.setColor(withAlpha(0xFF2A2B30, 255));
+        p.setStrokeWidth(Math.max(1f, density * 0.8f));
+        canvas.drawCircle(0, 0, rr - p.getStrokeWidth(), p);
         // Label: the track's artwork when there is one, plain cream otherwise.
-        float lr = rr * 0.34f;
+        float lr = rr * 0.33f;
         p.setStyle(Paint.Style.FILL);
         p.setColor(withAlpha(0xFFF2EEE4, 255));
         canvas.drawCircle(0, 0, lr, p);
@@ -2292,46 +2344,63 @@ final class EdgeGlowView extends View {
             canvas.drawCircle(0, 0, lr * 0.96f, p);
             p.setShader(null);
         }
-        p.setColor(withAlpha(0xFF0B0B0D, 255));
-        canvas.drawCircle(0, 0, Math.max(1.5f * density, lr * 0.09f), p);
         canvas.restore();
 
-        // Fixed light reflection across the record — does not turn with it.
+        // Light reflections on the vinyl — fixed, they do not turn with it — then the spindle.
         p.setStyle(Paint.Style.FILL);
         p.setShader(turntableSheen);
         canvas.drawCircle(0, 0, rr, p);
         p.setShader(null);
+        p.setColor(withAlpha(0xFFC8CACE, 255));
+        canvas.drawCircle(0, 0, Math.max(2f * density, lr * 0.10f), p);
         canvas.restore();
 
-        // Tonearm: pivot top right, resting on the record's outer grooves.
-        float ax = u * 0.70f, ay = -u * 0.66f;
-        float tx = px + rr * 0.30f, ty = py + rr * 0.66f;
-        p.setStyle(Paint.Style.FILL);
-        p.setColor(withAlpha(0xFF1E1E22, 255));
-        canvas.drawCircle(ax, ay, u * 0.12f, p);
-        p.setColor(withAlpha(0xFFB9BBBF, 255));
-        canvas.drawCircle(ax, ay, u * 0.075f, p);
-        p.setStyle(Paint.Style.STROKE);
-        p.setStrokeCap(Paint.Cap.ROUND);
-        p.setStrokeWidth(Math.max(2f, u * 0.035f));
-        p.setColor(withAlpha(0xFFD9DBDF, 255));
-        canvas.drawLine(ax, ay, tx, ty, p);
-        // Counterweight behind the pivot, headshell at the tip.
+        // Tonearm: gimbal base top right, tube down to the headshell on the record's outer grooves.
+        float ax = u * 0.62f, ay = -u * 0.62f;
+        float tx = px + rr * 0.28f, ty = py + rr * 0.70f;
         float dx = tx - ax, dy = ty - ay;
         float len = (float) Math.hypot(dx, dy);
         float nx = dx / len, ny = dy / len;
-        p.setStrokeWidth(Math.max(4f, u * 0.10f));
-        p.setColor(withAlpha(0xFF111114, 255));
-        canvas.drawLine(ax - nx * u * 0.04f, ay - ny * u * 0.04f, ax - nx * u * 0.20f, ay - ny * u * 0.20f, p);
-        p.setStrokeWidth(Math.max(3f, u * 0.07f));
-        canvas.drawLine(tx - nx * u * 0.02f, ty - ny * u * 0.02f, tx + nx * u * 0.14f, ty + ny * u * 0.14f, p);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(Color.BLACK, 90));
+        canvas.drawCircle(ax + u * 0.01f, ay + u * 0.015f, u * 0.15f, p);
+        p.setColor(withAlpha(0xFF222226, 255));
+        canvas.drawCircle(ax, ay, u * 0.14f, p);
+        p.setShader(turntableMetal);
+        canvas.save();
+        canvas.translate(ax, ay);
+        canvas.drawCircle(0, 0, u * 0.095f, p);
+        canvas.restore();
+        p.setShader(null);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeCap(Paint.Cap.ROUND);
+        // Shadow of the tube, then the tube itself.
+        p.setStrokeWidth(Math.max(3f, u * 0.04f));
+        p.setColor(withAlpha(Color.BLACK, 80));
+        canvas.drawLine(ax + u * 0.015f, ay + u * 0.02f, tx + u * 0.015f, ty + u * 0.02f, p);
+        p.setColor(withAlpha(0xFFCDD0D4, 255));
+        canvas.drawLine(ax, ay, tx, ty, p);
+        p.setStrokeWidth(Math.max(1f, u * 0.012f));
+        p.setColor(withAlpha(Color.WHITE, 200));
+        canvas.drawLine(ax - ny * u * 0.01f, ay + nx * u * 0.01f, tx - ny * u * 0.01f, ty + nx * u * 0.01f, p);
+        // Counterweight behind the pivot.
+        p.setStrokeWidth(Math.max(5f, u * 0.115f));
+        p.setColor(withAlpha(0xFF15151A, 255));
+        canvas.drawLine(ax - nx * u * 0.07f, ay - ny * u * 0.07f, ax - nx * u * 0.20f, ay - ny * u * 0.20f, p);
+        // Headshell + cartridge.
+        p.setStrokeWidth(Math.max(4f, u * 0.075f));
+        p.setColor(withAlpha(0xFF1B1B20, 255));
+        canvas.drawLine(tx, ty, tx + nx * u * 0.15f, ty + ny * u * 0.15f, p);
+        p.setStrokeWidth(Math.max(3f, u * 0.05f));
+        p.setColor(withAlpha(0xFFE0A030, 255));
+        canvas.drawLine(tx + nx * u * 0.15f, ty + ny * u * 0.15f, tx + nx * u * 0.20f, ty + ny * u * 0.20f, p);
         p.setStrokeCap(Paint.Cap.BUTT);
 
         // Plinth edge: a thin dark outline so it sits on the app rather than melting into it.
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(Math.max(1.5f, density * 1.2f));
-        p.setColor(withAlpha(Color.BLACK, 150));
-        canvas.drawRoundRect(-u, -u, u, u, u * 0.04f, u * 0.04f, p);
+        p.setColor(withAlpha(Color.BLACK, 170));
+        canvas.drawRoundRect(-u, -u, u, u, u * 0.035f, u * 0.035f, p);
         canvas.restore();
     }
 

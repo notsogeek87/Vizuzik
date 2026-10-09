@@ -266,7 +266,7 @@ public class OverlayEdgeGlowService extends Service
      * NOT_TOUCHABLE — see touchSafeAlpha for why "small" cannot afford to go any more opaque than
      * that despite covering so much less of the screen.
      */
-    private void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf) {
+    private void onWindowBoundsWanted(boolean small, float screenCx, float screenCy, float outerHalf, boolean opaque) {
         if (glowView == null || windowManager == null) return;
         WindowManager.LayoutParams params = (WindowManager.LayoutParams) glowView.getLayoutParams();
         if (small) {
@@ -291,7 +291,10 @@ public class OverlayEdgeGlowService extends Service
         // read identically to Deezer: nothing arrives. Staying under the threshold, record
         // included, is the only way that gesture is delivered at all — the record reads very
         // slightly translucent for it, the same couple of percent every other style already pays.
-        params.alpha = touchSafeAlpha;
+        // "Platine" has to hide the cover for real, so it trades the touch pass-through away: fully
+        // opaque, the platform drops touches over that square (Android 12+). Every other style
+        // keeps the touch-safe cap.
+        params.alpha = opaque ? 1f : touchSafeAlpha;
         OverlayDiagnostics.windowMode = small ? "small" : "full";
         OverlayDiagnostics.windowTouchable =
             (params.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
