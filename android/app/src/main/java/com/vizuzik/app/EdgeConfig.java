@@ -33,6 +33,10 @@ final class EdgeConfig {
     // See EdgeGlowView.drawVinyl() — the track's own artwork redrawn as a spinning record over
     // Deezer's own (static) album art, the same spot "cocoon" is centred on.
     static final String STYLE_VINYL = "vinyl";
+    // See EdgeGlowView.drawTurntable() — a wooden record player drawn over Deezer's album art,
+    // large enough to hide the whole cover square, with a record spinning on its platter. Same
+    // anchor, same fallback and same player-screen rules as "vinyl" and "cocoon".
+    static final String STYLE_TURNTABLE = "turntable";
     // See EdgeGlowView.drawParticles() — sparks spawned from the four screen edges, one per
     // spectrum band that just moved, rather than one continuous shape reacting to the whole
     // spectrum at once like the other edge-confined styles.

@@ -1208,7 +1208,8 @@ final class EdgeGlowView extends View {
         // fallback logic below, which answers a different question ("is Deezer's own cover on
         // screen right now") that standalone has no way to ask.
         if (standalone && standaloneStyle != null) return standaloneStyle;
-        if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)) return style;
+        if (!EdgeConfig.STYLE_COCOON.equals(style) && !EdgeConfig.STYLE_VINYL.equals(style)
+            && !EdgeConfig.STYLE_TURNTABLE.equals(style)) return style;
         // Standalone has no tracked app's now-playing screen to model the artwork's position
         // against in the first place (see the ART_* constants) — there is no layout to have
         // measured, only Vizuzik's own plain background. Always the fallback, same one the
@@ -1246,6 +1247,8 @@ final class EdgeGlowView extends View {
                 drawCocoon(canvas);
             } else if (EdgeConfig.STYLE_VINYL.equals(active)) {
                 drawVinyl(canvas);
+            } else if (EdgeConfig.STYLE_TURNTABLE.equals(active)) {
+                drawTurntable(canvas);
             } else if (EdgeConfig.STYLE_CASSETTE.equals(active)) {
                 drawCassette(canvas);
             } else if (EdgeConfig.STYLE_BALADEUR.equals(active)) {
@@ -1818,7 +1821,7 @@ final class EdgeGlowView extends View {
      */
     private void updateWindowBounds() {
         if (windowBoundsListener == null) return;
-        ArtRect art = calibrating || suppressed || !EdgeConfig.STYLE_VINYL.equals(activeStyle())
+        ArtRect art = calibrating || suppressed || !isDiscStyle(activeStyle())
             ? null
             : artRect();
         boolean small = art != null;
@@ -1864,13 +1867,19 @@ final class EdgeGlowView extends View {
         OverlayDiagnostics.onlyOverMusicApp = onlyOverMusicApp;
         // Kept for after the fact — see OverlayDiagnostics.latchVinyl() for why the live values are
         // never the ones anyone gets to read. Last, so it copies everything set above.
-        if (EdgeConfig.STYLE_VINYL.equals(active) && !suppressed) OverlayDiagnostics.latchVinyl();
+        if (isDiscStyle(active) && !suppressed) OverlayDiagnostics.latchVinyl();
         OverlayDiagnostics.suppressed = suppressed;
         OverlayDiagnostics.foregroundKnown = foregroundKnown;
         OverlayDiagnostics.trackedAppOnScreen = trackedAppOnScreen;
         OverlayDiagnostics.trackedAppConfirmed = trackedAppConfirmed;
         OverlayDiagnostics.foregroundPackage = lastForegroundPackage;
         OverlayDiagnostics.viewVisible = getVisibility() == VISIBLE;
+    }
+
+    /** The styles drawn as an opaque object on top of Deezer's own cover, which therefore get the
+     *  shrunken, cover-sized window rather than a full-screen one. */
+    private static boolean isDiscStyle(String active) {
+        return EdgeConfig.STYLE_VINYL.equals(active) || EdgeConfig.STYLE_TURNTABLE.equals(active);
     }
 
     /** A couple of pixels of slack: this runs every tick, and re-laying out the window over a
@@ -2174,6 +2183,155 @@ final class EdgeGlowView extends View {
         drawVinylLabel(canvas, half);
         drawVinylRim(canvas, half);
 
+        canvas.restore();
+    }
+
+    // "Platine": the plinth is a square a little larger than the album cover it has to hide, and
+    // always smaller than VINYL_WINDOW_MARGIN so the shrunken overlay window still holds it.
+    private static final float TURNTABLE_PLINTH = 1.07f;
+    // Shaders depend only on the plinth's size, so they are rebuilt when that changes, not per frame.
+    private float turntableShadersForU;
+    private Shader turntableWood;
+    private Shader turntableSheen;
+
+    /**
+     * "Platine": a wooden turntable seen from above, drawn over Deezer's album art. The plinth is
+     * an opaque square slightly bigger than the cover, so the cover is hidden entirely; the record
+     * (black, with the current track's artwork on its label) turns on the platter, and the
+     * tonearm rests over it. Only the record and its label rotate — the plinth, the arm and the
+     * light reflections stay put, which is what makes it read as a real deck.
+     *
+     * Coordinates below are in units of u, the plinth's half-side, centred on the cover.
+     */
+    private void drawTurntable(Canvas canvas) {
+        ArtRect art = artRect();
+        if (art == null) return;
+        float u = art.half * TURNTABLE_PLINTH;
+        Paint p = vinylPaint;
+
+        canvas.save();
+        canvas.translate(art.cx, art.cy);
+        p.reset();
+        p.setAntiAlias(true);
+
+        // Wooden plinth, with a few faint grain lines running along it.
+        p.setStyle(Paint.Style.FILL);
+        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f) {
+            turntableShadersForU = u;
+            turntableWood = new LinearGradient(-u, -u, u, u,
+                new int[] { 0xFFC98544, 0xFFA8692F, 0xFFB87638 }, new float[] { 0f, 0.55f, 1f },
+                Shader.TileMode.CLAMP);
+            float r = u * 0.70f;
+            turntableSheen = new LinearGradient(-r, r, r, -r,
+                new int[] { withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 40), withAlpha(Color.WHITE, 0) },
+                new float[] { 0.30f, 0.45f, 0.62f }, Shader.TileMode.CLAMP);
+        }
+        p.setShader(turntableWood);
+        canvas.drawRoundRect(-u, -u, u, u, u * 0.04f, u * 0.04f, p);
+        p.setShader(null);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(Math.max(1f, density * 0.7f));
+        for (int i = 0; i < 9; i++) {
+            float y = -u * 0.94f + u * 0.235f * i + ((i % 3) - 1) * u * 0.03f;
+            p.setColor(withAlpha(0xFF5A3314, i % 2 == 0 ? 46 : 28));
+            canvas.drawLine(-u * 0.97f, y, u * 0.97f, y + u * 0.02f, p);
+        }
+        // Lid hinge strip along the top edge.
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(0xFF1A1A1A, 255));
+        canvas.drawRect(-u, -u, u, -u * 0.955f, p);
+
+        // Black deck inset into the wood.
+        p.setColor(withAlpha(0xFF17171A, 255));
+        canvas.drawRoundRect(-u * 0.88f, -u * 0.86f, u * 0.88f, u * 0.88f, u * 0.03f, u * 0.03f, p);
+        // Silver control strip, bottom right.
+        p.setColor(withAlpha(0xFFC9CBCF, 255));
+        canvas.drawRoundRect(u * 0.36f, u * 0.50f, u * 0.88f, u * 0.88f, u * 0.02f, u * 0.02f, p);
+        p.setColor(withAlpha(0xFF2A2A2E, 255));
+        canvas.drawCircle(u * 0.52f, u * 0.70f, u * 0.035f, p);
+        canvas.drawCircle(u * 0.74f, u * 0.64f, u * 0.025f, p);
+        canvas.drawRect(u * 0.66f, u * 0.74f, u * 0.80f, u * 0.77f, p);
+        // Anti-skating dial, right of the arm's pivot.
+        p.setColor(withAlpha(0xFFB5B7BB, 255));
+        canvas.drawCircle(u * 0.58f, u * 0.10f, u * 0.075f, p);
+        p.setColor(withAlpha(0xFF222226, 255));
+        canvas.drawCircle(u * 0.58f, u * 0.10f, u * 0.04f, p);
+
+        // The platter and the record on it.
+        float px = -u * 0.14f, py = u * 0.04f;
+        float rr = u * 0.70f;
+        canvas.save();
+        canvas.translate(px, py);
+        p.setColor(withAlpha(0xFF2C2C31, 255));
+        canvas.drawCircle(0, 0, rr + u * 0.03f, p);
+
+        canvas.save();
+        canvas.rotate(vinylAngleDeg);
+        p.setColor(withAlpha(0xFF0B0B0D, 255));
+        canvas.drawCircle(0, 0, rr, p);
+        p.setStyle(Paint.Style.STROKE);
+        for (int i = 0; i < 16; i++) {
+            float r = rr * (0.36f + 0.62f * (i + 1f) / 16f);
+            p.setStrokeWidth(Math.max(1f, density * 0.5f));
+            p.setColor(withAlpha(i % 3 == 0 ? 0xFF33343A : 0xFF1E1F23, 255));
+            canvas.drawCircle(0, 0, r, p);
+        }
+        // Label: the track's artwork when there is one, plain cream otherwise.
+        float lr = rr * 0.34f;
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(0xFFF2EEE4, 255));
+        canvas.drawCircle(0, 0, lr, p);
+        Bitmap bmp = vinylBitmap;
+        BitmapShader sh = vinylShader;
+        if (bmp != null && sh != null && !bmp.isRecycled()) {
+            float scale = 2f * lr / Math.min(bmp.getWidth(), bmp.getHeight());
+            vinylMatrix.setScale(scale, scale);
+            vinylMatrix.postTranslate(-bmp.getWidth() * scale * 0.5f, -bmp.getHeight() * scale * 0.5f);
+            sh.setLocalMatrix(vinylMatrix);
+            p.setShader(sh);
+            canvas.drawCircle(0, 0, lr * 0.96f, p);
+            p.setShader(null);
+        }
+        p.setColor(withAlpha(0xFF0B0B0D, 255));
+        canvas.drawCircle(0, 0, Math.max(1.5f * density, lr * 0.09f), p);
+        canvas.restore();
+
+        // Fixed light reflection across the record — does not turn with it.
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(turntableSheen);
+        canvas.drawCircle(0, 0, rr, p);
+        p.setShader(null);
+        canvas.restore();
+
+        // Tonearm: pivot top right, resting on the record's outer grooves.
+        float ax = u * 0.70f, ay = -u * 0.66f;
+        float tx = px + rr * 0.30f, ty = py + rr * 0.66f;
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(0xFF1E1E22, 255));
+        canvas.drawCircle(ax, ay, u * 0.12f, p);
+        p.setColor(withAlpha(0xFFB9BBBF, 255));
+        canvas.drawCircle(ax, ay, u * 0.075f, p);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeCap(Paint.Cap.ROUND);
+        p.setStrokeWidth(Math.max(2f, u * 0.035f));
+        p.setColor(withAlpha(0xFFD9DBDF, 255));
+        canvas.drawLine(ax, ay, tx, ty, p);
+        // Counterweight behind the pivot, headshell at the tip.
+        float dx = tx - ax, dy = ty - ay;
+        float len = (float) Math.hypot(dx, dy);
+        float nx = dx / len, ny = dy / len;
+        p.setStrokeWidth(Math.max(4f, u * 0.10f));
+        p.setColor(withAlpha(0xFF111114, 255));
+        canvas.drawLine(ax - nx * u * 0.04f, ay - ny * u * 0.04f, ax - nx * u * 0.20f, ay - ny * u * 0.20f, p);
+        p.setStrokeWidth(Math.max(3f, u * 0.07f));
+        canvas.drawLine(tx - nx * u * 0.02f, ty - ny * u * 0.02f, tx + nx * u * 0.14f, ty + ny * u * 0.14f, p);
+        p.setStrokeCap(Paint.Cap.BUTT);
+
+        // Plinth edge: a thin dark outline so it sits on the app rather than melting into it.
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(Math.max(1.5f, density * 1.2f));
+        p.setColor(withAlpha(Color.BLACK, 150));
+        canvas.drawRoundRect(-u, -u, u, u, u * 0.04f, u * 0.04f, p);
         canvas.restore();
     }
 
