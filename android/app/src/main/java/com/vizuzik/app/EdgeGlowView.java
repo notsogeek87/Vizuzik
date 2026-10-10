@@ -2521,7 +2521,7 @@ final class EdgeGlowView extends View {
         // radius reached by now.
         float ax = u * 0.62f, ay = -u * 0.62f;
         float headLen = u * 0.20f;
-        float armReach = u * 1.30f;                 // pivot -> stylus
+        float armReach = rr * 1.55f;                // pivot -> stylus: a 9" arm (~230 mm) over a 12" platter (150 mm radius)
         float grooveR = rr * (0.95f + (0.58f - 0.95f) * cassetteProgress());
         float pcx = ax - px, pcy = ay - py;         // pivot relative to the platter centre
         float pd = (float) Math.hypot(pcx, pcy);
