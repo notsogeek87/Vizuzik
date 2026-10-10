@@ -182,6 +182,29 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
      * player", not in anything else this rests on.
      */
     private boolean scanScreen() {
+        boolean player = scanScreenRaw();
+        long now = SystemClock.elapsedRealtime();
+        if (player) {
+            lastPlayerAtMs = now;
+            return true;
+        }
+        // Deezer swaps its cover (and briefly rebuilds the tree) on every track change: for a
+        // moment no large artwork, or no window at all, is found. Believing that instantly lets
+        // go of the disc and shows Deezer's own cover for a few frames. A real exit from the
+        // player outlasts this grace, so it only delays the hand-back, it never prevents it.
+        if (lastPlayerAtMs != 0 && now - lastPlayerAtMs < PLAYER_LOSS_GRACE_MS && heldWindow != null) {
+            NowPlayerScreenState.publish(true, heldWindow, heldArtwork);
+            return true;
+        }
+        return false;
+    }
+
+    private static final long PLAYER_LOSS_GRACE_MS = 900;
+    private long lastPlayerAtMs;
+    private android.graphics.Rect heldWindow;
+    private android.graphics.Rect heldArtwork;
+
+    private boolean scanScreenRaw() {
         Scan best = null;
         boolean sawWindows = false;
         List<AccessibilityWindowInfo> windows = getWindows();
@@ -244,6 +267,10 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         OverlayDiagnostics.scanBudgetExhausted = best.nodesVisited >= MAX_NODES;
         boolean player = best.isPlayer();
         NowPlayerScreenState.publish(player, best.window, player ? best.artworkBounds : null);
+        if (player) {
+            heldWindow = best.window != null ? new android.graphics.Rect(best.window) : null;
+            heldArtwork = best.artworkBounds != null ? new android.graphics.Rect(best.artworkBounds) : null;
+        }
         return player;
     }
 
