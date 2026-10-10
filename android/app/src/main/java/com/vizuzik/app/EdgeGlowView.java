@@ -876,8 +876,9 @@ final class EdgeGlowView extends View {
         // crash the entire app, not just this decorative overlay, so both are defensive about
         // anything unexpected (a null palette entry, a transient view-detach race) rather than
         // ever letting that happen for the sake of a border glow.
+        long tickStartMs = SystemClock.elapsedRealtime();
         try {
-            long now = SystemClock.elapsedRealtime();
+            long now = tickStartMs;
             long dtMs = Math.max(0, Math.min(200, now - lastFrameMs));
             lastFrameMs = now;
 
@@ -909,7 +910,11 @@ final class EdgeGlowView extends View {
             Log.w(TAG, "onTick", e);
         } finally {
             // Kept outside the try body so one bad tick doesn't also kill every tick after it.
-            handler.postDelayed(tick, FRAME_INTERVAL_MS);
+            // Fixed rate: the wait is what is left of the interval after this tick's own work, not
+            // a full interval on top of it. Otherwise every frame is as late as the work it did,
+            // and the record's turn is paced unevenly.
+            long spent = SystemClock.elapsedRealtime() - tickStartMs;
+            handler.postDelayed(tick, Math.max(1L, FRAME_INTERVAL_MS - spent));
         }
     }
 
@@ -2294,66 +2299,38 @@ final class EdgeGlowView extends View {
     private Shader turntableSheen;
     private Shader turntableMetal;
 
-    /**
-     * "Platine": a wooden turntable seen from above, drawn over Deezer's album art. The plinth is
-     * an opaque square slightly bigger than the cover, so the cover is hidden entirely; the record
-     * (black, with the current track's artwork on its label) turns on the platter, and the
-     * tonearm rests over it. Only the record and its label rotate — the plinth, the arm and the
-     * light reflections stay put, which is what makes it read as a real deck.
-     *
-     * Coordinates below are in units of u, the plinth's half-side, centred on the cover.
-     */
-    private void drawTurntable(Canvas canvas) {
-        ArtRect art = artRect();
-        if (art == null) return;
-        float u = art.half * TURNTABLE_PLINTH;
-        Paint p = vinylPaint;
-        float hair = Math.max(1f, density * 0.7f);
-        float px = -u * 0.14f, py = u * 0.04f;   // platter centre
-        float rr = u * 0.68f;                    // record radius
+    private static final int TURNTABLE_LAYER_PAD = 2;
+    private Bitmap turntableLayer;
+    private float turntableLayerU = -1f;
+    private float turntableLayerHue = -2f;
+    private final Paint turntableLayerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        float hue = albumHue;
-        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f
-            || hue != turntableHueBuilt) {
-            turntableShadersForU = u;
-            turntableHueBuilt = hue;
-            int w0, w1, w2, w3, d0, d1, d2;
-            if (hue < 0f) {
-                w0 = 0xFFC4803F; w1 = 0xFF9E6129; w2 = 0xFFB67437; w3 = 0xFF8C5522;
-                d0 = 0xFF2A2A2F; d1 = 0xFF121215; d2 = 0xFF1D1D21;
-            } else {
-                // The plinth takes the cover's dominant hue (kept lively but not neon); the deck
-                // is the same hue, nearly black.
-                float sat = Math.max(0.35f, Math.min(0.75f, albumSat + 0.1f));
-                w0 = Color.HSVToColor(new float[] { hue, sat, 0.80f });
-                w1 = Color.HSVToColor(new float[] { hue, Math.min(1f, sat + 0.08f), 0.58f });
-                w2 = Color.HSVToColor(new float[] { hue, sat, 0.70f });
-                w3 = Color.HSVToColor(new float[] { hue, Math.min(1f, sat + 0.1f), 0.46f });
-                d0 = Color.HSVToColor(new float[] { hue, 0.30f, 0.20f });
-                d1 = Color.HSVToColor(new float[] { hue, 0.30f, 0.08f });
-                d2 = Color.HSVToColor(new float[] { hue, 0.30f, 0.13f });
-            }
-            turntableWood = new LinearGradient(-u, -u, u, u,
-                new int[] { w0, w1, w2, w3 },
-                new float[] { 0f, 0.4f, 0.7f, 1f }, Shader.TileMode.CLAMP);
-            turntableDeck = new LinearGradient(-u, -u, u, u,
-                new int[] { d0, d1, d2 },
-                new float[] { 0f, 0.5f, 1f }, Shader.TileMode.CLAMP);
-            turntableSheen = new SweepGradient(0, 0,
-                new int[] { withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
-                    withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
-                    withAlpha(Color.WHITE, 0) },
-                new float[] { 0f, 0.08f, 0.16f, 0.5f, 0.58f, 0.66f, 1f });
-            turntableMetal = new LinearGradient(0, -u * 0.1f, 0, u * 0.1f,
-                new int[] { 0xFFE6E8EB, 0xFF9A9DA3, 0xFFD2D4D8 },
-                new float[] { 0f, 0.55f, 1f }, Shader.TileMode.CLAMP);
+    /** Everything on the turntable that does not move — plinth, deck, fader, platter rim and
+     *  strobe dots — drawn once into a bitmap. Re-issuing these ~150 draw calls on every frame is
+     *  what made the record's rotation stutter; now a frame is one bitmap blit plus the record. */
+    private Bitmap turntableStaticLayer(float u, float rr, float px, float py, float hair) {
+        if (turntableLayer != null && Math.abs(u - turntableLayerU) < 0.5f && turntableLayerHue == albumHue) {
+            return turntableLayer;
         }
-
-        canvas.save();
-        canvas.translate(art.cx, art.cy);
+        int size = (int) Math.ceil(2f * u) + 2 * TURNTABLE_LAYER_PAD;
+        if (size <= 0 || size > 4096) return null;
+        try {
+            if (turntableLayer == null || turntableLayer.getWidth() != size) {
+                turntableLayer = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            } else {
+                turntableLayer.eraseColor(Color.TRANSPARENT);
+            }
+        } catch (OutOfMemoryError e) {
+            turntableLayer = null;
+            return null;
+        }
+        turntableLayerU = u;
+        turntableLayerHue = albumHue;
+        Canvas canvas = new Canvas(turntableLayer);
+        canvas.translate(u + TURNTABLE_LAYER_PAD, u + TURNTABLE_LAYER_PAD);
+        Paint p = turntableLayerPaint;
         p.reset();
         p.setAntiAlias(true);
-
         // Wooden plinth, a few faint grain lines, and a bevel: lit top-left edge, shaded bottom-right.
         p.setStyle(Paint.Style.FILL);
         p.setShader(turntableWood);
@@ -2426,6 +2403,76 @@ final class EdgeGlowView extends View {
                 Math.max(0.6f, u * 0.0045f), p);
         }
 
+        canvas.restore();
+        return turntableLayer;
+    }
+
+    /**
+     * "Platine": a wooden turntable seen from above, drawn over Deezer's album art. The plinth is
+     * an opaque square slightly bigger than the cover, so the cover is hidden entirely; the record
+     * (black, with the current track's artwork on its label) turns on the platter, and the
+     * tonearm rests over it. Only the record and its label rotate — the plinth, the arm and the
+     * light reflections stay put, which is what makes it read as a real deck.
+     *
+     * Coordinates below are in units of u, the plinth's half-side, centred on the cover.
+     */
+    private void drawTurntable(Canvas canvas) {
+        ArtRect art = artRect();
+        if (art == null) return;
+        float u = art.half * TURNTABLE_PLINTH;
+        Paint p = vinylPaint;
+        float hair = Math.max(1f, density * 0.7f);
+        float px = -u * 0.14f, py = u * 0.04f;   // platter centre
+        float rr = u * 0.68f;                    // record radius
+
+        float hue = albumHue;
+        if (turntableWood == null || Math.abs(u - turntableShadersForU) > 0.5f
+            || hue != turntableHueBuilt) {
+            turntableShadersForU = u;
+            turntableHueBuilt = hue;
+            int w0, w1, w2, w3, d0, d1, d2;
+            if (hue < 0f) {
+                w0 = 0xFFC4803F; w1 = 0xFF9E6129; w2 = 0xFFB67437; w3 = 0xFF8C5522;
+                d0 = 0xFF2A2A2F; d1 = 0xFF121215; d2 = 0xFF1D1D21;
+            } else {
+                // The plinth takes the cover's dominant hue (kept lively but not neon); the deck
+                // is the same hue, nearly black.
+                float sat = Math.max(0.35f, Math.min(0.75f, albumSat + 0.1f));
+                w0 = Color.HSVToColor(new float[] { hue, sat, 0.80f });
+                w1 = Color.HSVToColor(new float[] { hue, Math.min(1f, sat + 0.08f), 0.58f });
+                w2 = Color.HSVToColor(new float[] { hue, sat, 0.70f });
+                w3 = Color.HSVToColor(new float[] { hue, Math.min(1f, sat + 0.1f), 0.46f });
+                d0 = Color.HSVToColor(new float[] { hue, 0.30f, 0.20f });
+                d1 = Color.HSVToColor(new float[] { hue, 0.30f, 0.08f });
+                d2 = Color.HSVToColor(new float[] { hue, 0.30f, 0.13f });
+            }
+            turntableWood = new LinearGradient(-u, -u, u, u,
+                new int[] { w0, w1, w2, w3 },
+                new float[] { 0f, 0.4f, 0.7f, 1f }, Shader.TileMode.CLAMP);
+            turntableDeck = new LinearGradient(-u, -u, u, u,
+                new int[] { d0, d1, d2 },
+                new float[] { 0f, 0.5f, 1f }, Shader.TileMode.CLAMP);
+            turntableSheen = new SweepGradient(0, 0,
+                new int[] { withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
+                    withAlpha(Color.WHITE, 0), withAlpha(Color.WHITE, 46), withAlpha(Color.WHITE, 0),
+                    withAlpha(Color.WHITE, 0) },
+                new float[] { 0f, 0.08f, 0.16f, 0.5f, 0.58f, 0.66f, 1f });
+            turntableMetal = new LinearGradient(0, -u * 0.1f, 0, u * 0.1f,
+                new int[] { 0xFFE6E8EB, 0xFF9A9DA3, 0xFFD2D4D8 },
+                new float[] { 0f, 0.55f, 1f }, Shader.TileMode.CLAMP);
+        }
+
+        canvas.save();
+        canvas.translate(art.cx, art.cy);
+        p.reset();
+        p.setAntiAlias(true);
+
+        Bitmap layer = turntableStaticLayer(u, rr, px, py, hair);
+        if (layer != null) canvas.drawBitmap(layer, -u - TURNTABLE_LAYER_PAD, -u - TURNTABLE_LAYER_PAD, null);
+        canvas.save();
+        canvas.translate(px, py);
+        p.setStyle(Paint.Style.FILL);
+        p.setShader(null);
         canvas.save();
         canvas.rotate(vinylAngleDeg);
         p.setColor(withAlpha(0xFF0A0A0C, 255));
