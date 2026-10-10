@@ -1938,34 +1938,96 @@ function showScreen(screen) {
  */
 let bgFront = els.background;
 let bgBack = els.backgroundNext;
+let artRequest = 0;
+let artZ = 1;
+let artCleanup = null;
+let emptyArtTimer = null;
+
+// Decoded ahead of time, so a cover is never swapped in while the WebView is still decoding it
+// (that gap is what showed as a blink of the old or an empty image).
+function preloadArt(art) {
+  if (!art) return Promise.resolve();
+  const img = new Image();
+  img.src = art;
+  const ready = img.decode ? img.decode() : new Promise((r) => { img.onload = r; img.onerror = r; });
+  return ready.catch(() => {});
+}
 
 function setArtwork(art) {
   if (art === currentArt) return;
-  currentArt = art;
-
-  bgBack.style.backgroundImage = art ? `url("${art}")` : "";
-  bgBack.style.opacity = "1";
-  bgFront.style.opacity = "0";
-  const swap = bgFront;
-  bgFront = bgBack;
-  bgBack = swap;
-
-  els.cover.style.backgroundImage = art ? `url("${art}")` : "";
-  // Plain attribute, not backgroundImage: it's an <image> inside the cassette's inline SVG,
-  // set as though it had been printed on the label — see .cassette__art-image in style.css.
-  els.cassetteArt.setAttribute("href", art || "");
-  els.k7ArtLabel.setAttribute("href", art || "");
-  els.k7ArtThumb.setAttribute("href", art || "");
-
-  extractPalette(art).then((palette) => {
-    visualizer.setPalette(palette);
-    // While the engine loops, syncPaletteVars() melts the interface into the new palette along
-    // with the canvas. Off the player screen nothing is looping, so seed the vars directly.
-    if (!visualizer.running) {
-      palette.colors.forEach((rgb, i) => {
-        root.style.setProperty(`--c${i + 1}`, rgb.join(", "));
-      });
+  // Some players publish the new title a moment before the new cover and report an empty one in
+  // between; applying that would flash the fallback artwork. An empty cover is only believed if
+  // it stays empty.
+  if (!art && currentArt) {
+    if (!emptyArtTimer) {
+      emptyArtTimer = setTimeout(() => {
+        emptyArtTimer = null;
+        if (!latestArt) applyArtwork("");
+      }, 1200);
     }
+    latestArt = "";
+    return;
+  }
+  latestArt = art;
+  if (emptyArtTimer) {
+    clearTimeout(emptyArtTimer);
+    emptyArtTimer = null;
+  }
+  applyArtwork(art);
+}
+let latestArt = "";
+
+function applyArtwork(art) {
+  if (art === currentArt) return;
+  currentArt = art;
+  const request = ++artRequest;
+
+  preloadArt(art).then(() => {
+    // A newer cover arrived while this one was decoding: only the last one is shown.
+    if (request !== artRequest) return;
+    if (artCleanup) {
+      clearTimeout(artCleanup);
+      artCleanup = null;
+    }
+    // The incoming layer fades in on top while the outgoing one stays fully opaque beneath it,
+    // and only then is switched off. Fading both at once dips through the dark backdrop halfway.
+    const outgoing = bgFront;
+    bgBack.style.transition = "none";
+    bgBack.style.opacity = "0";
+    bgBack.style.backgroundImage = art ? `url("${art}")` : "";
+    bgBack.style.zIndex = String(++artZ);
+    void bgBack.offsetWidth;
+    bgBack.style.transition = "";
+    bgBack.style.opacity = "1";
+    const incoming = bgBack;
+    bgFront = incoming;
+    bgBack = outgoing;
+    artCleanup = setTimeout(() => {
+      artCleanup = null;
+      outgoing.style.transition = "none";
+      outgoing.style.opacity = "0";
+      void outgoing.offsetWidth;
+      outgoing.style.transition = "";
+    }, 1000);
+
+    els.cover.style.backgroundImage = art ? `url("${art}")` : "";
+    // Plain attribute, not backgroundImage: it's an <image> inside the cassette's inline SVG,
+    // set as though it had been printed on the label — see .cassette__art-image in style.css.
+    els.cassetteArt.setAttribute("href", art || "");
+    els.k7ArtLabel.setAttribute("href", art || "");
+    els.k7ArtThumb.setAttribute("href", art || "");
+
+    extractPalette(art).then((palette) => {
+      if (request !== artRequest) return;
+      visualizer.setPalette(palette);
+      // While the engine loops, syncPaletteVars() melts the interface into the new palette along
+      // with the canvas. Off the player screen nothing is looping, so seed the vars directly.
+      if (!visualizer.running) {
+        palette.colors.forEach((rgb, i) => {
+          root.style.setProperty(`--c${i + 1}`, rgb.join(", "));
+        });
+      }
+    });
   });
 }
 

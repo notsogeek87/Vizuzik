@@ -59,8 +59,22 @@ export class PlaybackProgress {
     // A seek in flight would otherwise be undone by the pre-seek position still coming back
     // from the poll; the scrub itself is the more recent truth until it lands.
     if (this.scrubRatio != null) return;
-    this.duration = Math.max(0, duration);
-    this.anchorMs = clamp(position, 0, this.duration || position);
+    const nextDuration = Math.max(0, duration);
+    const nextAnchor = clamp(position, 0, nextDuration || position);
+    // Same track, playing, and the local clock is within a second of the report: that is
+    // rounding and delivery latency, not a real jump. Re-anchoring on it makes the bar and the
+    // timestamp stutter back and forth on every metadata update, so the clock is left alone.
+    if (
+      isPlaying &&
+      this.isPlaying &&
+      nextDuration > 0 &&
+      nextDuration === this.duration &&
+      Math.abs(this.positionNow() - nextAnchor) < 1000
+    ) {
+      return;
+    }
+    this.duration = nextDuration;
+    this.anchorMs = nextAnchor;
     this.anchorAt = performance.now();
     this.isPlaying = isPlaying;
     // Scrubbing is offered whenever there is a length to scrub through. The session's own

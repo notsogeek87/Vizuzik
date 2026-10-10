@@ -1871,8 +1871,8 @@ body.is-changing .artist {
 }
 
 @keyframes disc-land {
-  0% { transform: scale(0.86) rotate(-4deg); filter: brightness(2.2); }
-  55% { transform: scale(1.04) rotate(1deg); filter: brightness(1.1); }
+  0% { transform: scale(0.92) rotate(-2deg); filter: brightness(1.25); }
+  55% { transform: scale(1.02) rotate(0.5deg); filter: brightness(1.05); }
   100% { transform: scale(1) rotate(0); filter: brightness(1); }
 }
 
