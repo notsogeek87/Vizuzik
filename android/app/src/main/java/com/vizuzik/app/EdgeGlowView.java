@@ -21,7 +21,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
+import android.media.session.MediaController;
 import android.view.WindowManager;
 
 import androidx.core.content.res.ResourcesCompat;
@@ -1274,6 +1277,49 @@ final class EdgeGlowView extends View {
         // flash across the top of every transition.
         if (requirePlayerScreen) return STYLE_NONE;
         return EdgeConfig.STYLE_GLOW.equals(cocoonFallback) ? EdgeConfig.STYLE_GLOW : EdgeConfig.STYLE_BARS;
+    }
+
+    // Swipe to skip. The opaque "platine" window is touchable (see OverlayEdgeGlowService) and so
+    // swallows the gesture Deezer would otherwise receive underneath; this hands it back as
+    // previous / next on the Deezer MediaController. Every other style stays NOT_TOUCHABLE, so
+    // this never fires for them.
+    private float swipeDownX, swipeDownY;
+    private boolean swipeTracking;
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                swipeDownX = event.getX();
+                swipeDownY = event.getY();
+                swipeTracking = true;
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                swipeTracking = false;
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (swipeTracking) {
+                    swipeTracking = false;
+                    float dx = event.getX() - swipeDownX;
+                    float dy = event.getY() - swipeDownY;
+                    int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                    float min = Math.max(slop * 3f, 48f * getResources().getDisplayMetrics().density);
+                    if (Math.abs(dx) >= min && Math.abs(dx) > Math.abs(dy) * 1.5f) {
+                        MediaController controller = DeezerMediaBridge.getInstance().getController();
+                        if (controller != null) {
+                            try {
+                                if (dx < 0) controller.getTransportControls().skipToNext();
+                                else controller.getTransportControls().skipToPrevious();
+                            } catch (Exception e) {
+                                Log.w(TAG, "swipe skip", e);
+                            }
+                        }
+                    }
+                }
+                return true;
+            default:
+                return true;
+        }
     }
 
     @Override
