@@ -3321,6 +3321,9 @@ final class EdgeGlowView extends View {
         );
         shader.setLocalMatrix(vinylMatrix);
         p.setStyle(Paint.Style.FILL);
+        // A shader is drawn at the paint's own alpha: the stroke colour left on p by the caller
+        // (a faint white outline) would otherwise leave the art almost see-through.
+        p.setColor(Color.WHITE);
         p.setShader(shader);
         p.setColorFilter(filter);
         canvas.drawRect(x, y, x + w, y + h, p);
