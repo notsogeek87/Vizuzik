@@ -214,8 +214,7 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         String standaloneStyle = LockScreenVisualizerPreference.getStyle(this);
         if (LockScreenVisualizerPreference.STYLE_BALADEUR.equals(standaloneStyle)) {
             root.addView(buildBaladeurOverlay(view));
-        } else if (LockScreenVisualizerPreference.STYLE_K7_ETIQUETTE.equals(standaloneStyle)
-            || LockScreenVisualizerPreference.STYLE_K7_CLASSIQUE.equals(standaloneStyle)) {
+        } else if (LockScreenVisualizerPreference.STYLE_K7_CLASSIQUE.equals(standaloneStyle)) {
             root.addView(buildK7Controls(view));
         } else {
             root.addView(buildTransportControls());

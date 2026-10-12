@@ -17,10 +17,7 @@ const els = {
   disc: document.getElementById("disc"),
   cover: document.getElementById("cover"),
   cassetteArt: document.getElementById("cassette-art"),
-  k7ArtLabel: document.getElementById("k7-art-label"),
   k7ArtThumb: document.getElementById("k7-art-thumb"),
-  k7TitleEtiquette: document.getElementById("k7-title-etiquette"),
-  k7ArtistEtiquette: document.getElementById("k7-artist-etiquette"),
   k7TitleClassique: document.getElementById("k7-title-classique"),
   k7ArtistClassique: document.getElementById("k7-artist-classique"),
   captureStatus: document.getElementById("capture-status"),
@@ -101,7 +98,6 @@ const MODE_LABELS = {
   nebula: "Nébuleuse",
   cocoon: "Cocon",
   cassette: "Cassette",
-  "k7-etiquette": "K7 Étiquette",
   "k7-classique": "K7 Classique",
   baladeur: "Baladeur",
 };
@@ -813,7 +809,7 @@ function setLockScreenVisualizerEnabled(enabled) {
 // keeping its own localStorage key rather than folding it into readEdgeSettingsFromForm().
 const LOCKSCREEN_VISUALIZER_STYLE_KEY = "vizuzik:lockScreenVisualizerStyle";
 const LOCKSCREEN_VISUALIZER_STYLES = [
-  "bars", "cassette", "vinyl", "baladeur", "k7-etiquette", "k7-classique",
+  "bars", "cassette", "vinyl", "baladeur", "k7-classique",
 ];
 // "vinyl" ("Disque"): the default style once the lock-screen visualizer itself defaults to on.
 const LOCKSCREEN_VISUALIZER_DEFAULT_STYLE = "vinyl";
@@ -2014,7 +2010,6 @@ function applyArtwork(art) {
     // Plain attribute, not backgroundImage: it's an <image> inside the cassette's inline SVG,
     // set as though it had been printed on the label — see .cassette__art-image in style.css.
     els.cassetteArt.setAttribute("href", art || "");
-    els.k7ArtLabel.setAttribute("href", art || "");
     els.k7ArtThumb.setAttribute("href", art || "");
 
     extractPalette(art).then((palette) => {
@@ -2060,11 +2055,9 @@ function setScrollingText(span, text) {
 
 /* ------------------------------------------------------------------ K7 label text */
 
-// The K7 modes write the title/artist on the cassette's paper strip, in SVG text. SVG text
+// The K7 mode writes the title/artist on the cassette's paper strip, in SVG text. SVG text
 // neither wraps nor ellipsises on its own, so each line is fitted by hand to the strip's width:
-// first shrunk a little, then cut with an ellipsis if it still doesn't fit. Étiquette's text
-// starts further left (no side letter there), so it gets a little more room.
-const K7_TEXT_MAX_WIDTH_ETIQUETTE = 252;
+// first shrunk a little, then cut with an ellipsis if it still doesn't fit.
 const K7_TEXT_MAX_WIDTH_CLASSIQUE = 238;
 const K7_TEXT_MIN_SCALE = 0.75;
 let k7Text = { title: "", artist: "" };
@@ -2103,7 +2096,6 @@ function setK7Text(title, artist) {
 
 function refitK7Text() {
   for (const [titleEl, artistEl, maxWidth] of [
-    [els.k7TitleEtiquette, els.k7ArtistEtiquette, K7_TEXT_MAX_WIDTH_ETIQUETTE],
     [els.k7TitleClassique, els.k7ArtistClassique, K7_TEXT_MAX_WIDTH_CLASSIQUE],
   ]) {
     fitSvgText(titleEl, k7Text.title, maxWidth);
@@ -2117,7 +2109,6 @@ function refitK7Text() {
 // must not fail the rest of this module's initialization.
 if (document.fonts) {
   Promise.all([
-    document.fonts.load('12px "Permanent Marker"'),
     document.fonts.load('17px "Reenie Beanie"'),
   ])
     .then(refitK7Text)

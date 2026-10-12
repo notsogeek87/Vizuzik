@@ -512,7 +512,7 @@ body[data-state="playing"] .cassette__tape {
 
 /* ============================================================ K7 modes */
 
-/* "K7 Étiquette" and "K7 Classique": one shared illustration of a real compact cassette (see
+/* "K7 Classique": one illustration of a real compact cassette (see
    index.html's #k7), offered alongside cassette mode rather than replacing it. Same stage as
    cassette — a fixed, full-screen layer the canvas and disc make way for — and the same sizing:
    capped at --cassette-max-box-aspect, centred, and rotated a quarter turn when the phone is
@@ -555,19 +555,6 @@ body[data-mode^="k7-"] .meta {
   fill: url(#k7-shell);
   stroke: rgba(0, 0, 0, 0.6);
   stroke-width: 1.5;
-}
-
-/* K7 Étiquette: a pre-recorded tape's coloured plastic, tinted by the album's main colour — a
-   dark shell sank into the black screen around it. One flat tint rather than the default's
-   top-to-bottom darkening, which only pushed the bottom back into the black. The plain value
-   first is what an older WebView without color-mix() keeps. */
-body[data-mode="k7-etiquette"] .k7__shell-stop {
-  stop-color: #3a3431;
-  stop-color: color-mix(in srgb, rgb(var(--c1)) 56%, #262222);
-}
-
-body[data-mode="k7-etiquette"] .k7__trapezoid {
-  fill: rgba(0, 0, 0, 0.05);
 }
 
 /* The K7 modes carry their own controls, on the Walkman lid (see .k7__lid): the app's usual
@@ -946,29 +933,13 @@ body[data-mode="k7-classique"] .k7__hole {
   display: none;
 }
 
-body[data-mode="k7-etiquette"] .k7__face--etiquette,
-body[data-mode="k7-etiquette"] .k7__writing--etiquette,
 body[data-mode="k7-classique"] .k7__face--classique,
 body[data-mode="k7-classique"] .k7__writing--classique {
   display: inline;
 }
 
-/* Shows until the first track's art loads, and at the edges of a "slice"-cropped one. */
-.k7__label-blank {
-  fill: #4a5560;
-}
-
-.k7__art-image {
-  filter: saturate(0.9);
-}
-
 .k7__paper {
   fill: #ece6d8;
-}
-
-.k7__band {
-  fill: #fff;
-  fill-opacity: 0.38;
 }
 
 /* K7 Classique's label: a muted grey-blue, like the reference cassette's, pulled a little toward
@@ -1021,33 +992,13 @@ body[data-mode="k7-classique"] .k7__writing--classique {
   fill: #2b2a33;
 }
 
-/* The title/artist, handwritten on the label: black marker pen across K7 Étiquette's frosted strip
-   (bold enough to read over any album art), pencil on K7 Classique's ruled paper. Both fonts are
+/* The title/artist, handwritten on the label: pencil on K7 Classique's ruled paper. The font is
    bundled rather than left to whatever "cursive" resolves to on the device, and each keeps its
    own licence next to it — see public/fonts/README.md before moving or dropping either file. */
-@font-face {
-  font-family: "Permanent Marker";
-  src: url("/fonts/permanent-marker-latin-400.woff2") format("woff2");
-  font-display: swap;
-}
-
 @font-face {
   font-family: "Reenie Beanie";
   src: url("/fonts/reenie-beanie-latin-400.woff2") format("woff2");
   font-display: swap;
-}
-
-.k7__writing--etiquette .k7__hand {
-  font-family: "Permanent Marker", cursive;
-  fill: #111;
-}
-
-.k7__writing--etiquette .k7__hand--title {
-  font-size: 12px;
-}
-
-.k7__writing--etiquette .k7__hand--artist {
-  font-size: 9px;
 }
 
 /* Reenie Beanie only comes in one, fairly thin weight: a hairline stroke in the ink's own colour
@@ -1232,7 +1183,6 @@ body[data-mode="aurora"] .mode-toggle .icon-aurora,
 body[data-mode="nebula"] .mode-toggle .icon-nebula,
 body[data-mode="cocoon"] .mode-toggle .icon-cocoon,
 body[data-mode="cassette"] .mode-toggle .icon-cassette,
-body[data-mode="k7-etiquette"] .mode-toggle .icon-k7-etiquette,
 body[data-mode="k7-classique"] .mode-toggle .icon-k7-classique,
 body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   display: block;
@@ -2086,65 +2036,85 @@ body[data-mode="cassette"].cassette-controls-hidden .topbar {
   display: block;
 }
 
-/* Pulled out of the footer entirely and pinned near the top instead — close to where the
-   label/album art already sit — so the title/artist never compete with the reels for space,
-   regardless of how the illustration happens to be cropped on a given screen. Still its own
-   frosted card (the same chip language as .capture-status/.mode-toggle) for legibility over
-   whatever ends up behind it. */
+/* Cassette mode's text and transport sit ON the cassette's own label — the wide empty plate across
+   the top of the illustration, which nothing else uses — rather than floating over the reels
+   where they used to hide them: the title/artist on its upper half, the three buttons under it,
+   and the scrub bar tucked along the bottom edge below the reel window. The illustration is
+   drawn "slice"d into a box capped at --cassette-max-box-aspect (see .cassette__art), which in
+   the landscape this mode locks the screen to is 1.7 x the screen height, so the label's
+   position (x 22..250, y 20..78 of the 320x200 viewBox) comes out as fixed fractions of the
+   height: top 7.5vh, bottom 38.3vh, its centre 12.75vh left of the screen's. Each element is
+   pinned to one of those two lines and centred on that centre. */
+body[data-mode="cassette"] {
+  --cassette-label-top: 7.5vh;
+  --cassette-label-bottom: 38.3vh;
+  --cassette-label-center-x: calc(50% - 12.75vh);
+}
+
 body[data-mode="cassette"] .meta {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 74px);
-  left: 50%;
+  top: calc(var(--cassette-label-top) + 7px);
+  left: var(--cassette-label-center-x);
   transform: translateX(-50%);
-  max-width: min(78vw, 420px);
-  background: rgba(10, 10, 20, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border-radius: 18px;
-  padding: 12px 26px;
+  width: min(112vh, 74vw);
+  padding: 0;
   transition: opacity 0.3s ease;
 }
 
-body[data-mode="cassette"] .progress {
-  background: rgba(10, 10, 20, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  border-radius: 16px;
-  padding: 16px 20px 10px;
-}
-
-/* Cassette mode locks the screen in landscape (see syncOrientationLock() in main.js), which
-   leaves much less vertical room than portrait's tall column: this tightens the title/artist
-   card and progress bar up to keep everything comfortably on screen. The transport buttons
-   themselves are deliberately left alone here: they're the same .control elements every other
-   mode uses at their one fixed size, and cassette mode shouldn't be the only one where they
-   shrink. */
-body[data-mode="cassette"] .player {
-  gap: 0.85rem;
-  padding:
-    calc(env(safe-area-inset-top, 0px) + 14px)
-    calc(env(safe-area-inset-right, 0px) + 22px)
-    calc(env(safe-area-inset-bottom, 0px) + 14px)
-    calc(env(safe-area-inset-left, 0px) + 22px);
-}
-
 body[data-mode="cassette"] .title {
-  font-size: clamp(1.05rem, 3.6vw, 1.4rem);
+  font-size: clamp(0.95rem, 3.2vh, 1.25rem);
 }
 
 body[data-mode="cassette"] .artist {
-  font-size: clamp(0.8rem, 2.4vw, 0.95rem);
+  margin-top: 1px;
+  font-size: clamp(0.75rem, 2.3vh, 0.9rem);
 }
 
-body[data-mode="cassette"] .meta {
-  padding: 8px 20px;
+body[data-mode="cassette"] .controls {
+  position: absolute;
+  top: calc(var(--cassette-label-bottom) - 7px);
+  left: var(--cassette-label-center-x);
+  transform: translate(-50%, -100%);
+  gap: 1.1rem;
 }
 
+/* Smaller than the other modes' buttons: the label is only about 120px tall at 390px of screen
+   height, and has to hold the title/artist as well. */
+body[data-mode="cassette"] .control--secondary {
+  width: 44px;
+  height: 44px;
+}
+
+body[data-mode="cassette"] .control--secondary svg {
+  width: 20px;
+  height: 20px;
+}
+
+body[data-mode="cassette"] .control--primary {
+  width: 58px;
+  height: 58px;
+}
+
+body[data-mode="cassette"] .control--primary svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* Along the bottom of the case, over the head-access strip under the reel window. */
 body[data-mode="cassette"] .progress {
-  width: min(70vw, 460px);
-  padding: 12px 16px 8px;
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(60vw, 420px);
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+body[data-mode="cassette"] .progress__times {
+  margin-top: 3px;
+  font-size: 0.62rem;
 }
 
 /* ============================================================ baladeur mode */

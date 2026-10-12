@@ -239,7 +239,7 @@
       </svg>
     </div>
 
-    <!-- K7 modes ("K7 Étiquette", "K7 Classique"): a second, closer-to-life take on the cassette,
+    <!-- K7 modes ("K7 Classique"): a second, closer-to-life take on the cassette,
          offered alongside the original rather than replacing it. Laid out after a real compact
          cassette rather than a Walkman window: a large label covering most of the face, the two
          reel hubs and their clear flanges seen through an oval window cut into the middle of it,
@@ -434,21 +434,6 @@
         <!-- The label sheet, window punched through. -->
         <g mask="url(#k7-label-hole)">
           <g clip-path="url(#k7-label-clip)">
-            <!-- K7 Étiquette: the album art printed across the whole label. -->
-            <g class="k7__face k7__face--etiquette">
-              <rect class="k7__label-blank" x="26" y="22" width="268" height="120" />
-              <image
-                id="k7-art-label"
-                class="k7__art-image"
-                x="26"
-                y="22"
-                width="268"
-                height="120"
-                preserveAspectRatio="xMidYMid slice"
-              />
-              <!-- Frosted rather than opaque, so the art still shows through behind the text. -->
-              <rect class="k7__band" x="26" y="22" width="268" height="27" />
-            </g>
             <!-- K7 Classique: a plain label tinted from the palette, ruled paper band, stripes. -->
             <g class="k7__face k7__face--classique">
               <rect class="k7__label-tint" x="26" y="22" width="268" height="120" />
@@ -465,10 +450,6 @@
         <rect class="k7__window-rim-light" x="70.8" y="62.8" width="178.4" height="42.4" rx="21.2" />
 
         <!-- Written on the paper strip, in both modes; filled and fitted in main.js. -->
-        <g class="k7__writing k7__writing--etiquette">
-          <text id="k7-title-etiquette" class="k7__hand k7__hand--title" x="34" y="35"></text>
-          <text id="k7-artist-etiquette" class="k7__hand k7__hand--artist" x="34" y="45.5"></text>
-        </g>
         <g class="k7__writing k7__writing--classique">
           <text class="k7__side" x="31" y="45">A</text>
           <text id="k7-title-classique" class="k7__hand k7__hand--title" x="46" y="38"></text>
@@ -644,11 +625,6 @@
           <ellipse cx="12" cy="4.6" rx="2.1" ry="3.4" transform="rotate(300 12 12)" />
         </svg>
         <svg class="icon icon-cassette" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zm5.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM9 16h6v1.4H9z" /></svg>
-        <svg class="icon icon-k7-etiquette" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" />
-          <path d="M5 7h14v3.2H5z" />
-          <rect x="7" y="11.4" width="10" height="3.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.3" />
-        </svg>
         <svg class="icon icon-k7-classique" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" />
           <path d="M5.5 8h13v1.2h-13z" />
@@ -899,7 +875,6 @@
           <select id="edge-lockscreen-style">
             <option value="bars">Barres (spectre)</option>
             <option value="cassette">Cassette</option>
-            <option value="k7-etiquette">K7 Étiquette</option>
             <option value="k7-classique">K7 Classique</option>
             <option value="vinyl">Disque (vinyle qui tourne)</option>
             <option value="baladeur">Baladeur</option>

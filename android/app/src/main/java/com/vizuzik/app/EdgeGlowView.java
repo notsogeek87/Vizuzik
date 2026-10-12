@@ -236,7 +236,7 @@ final class EdgeGlowView extends View {
     // notches and brand tab drawn near its border — leaving just the reels and label with no
     // case around them.
     private static final float CASSETTE_MAX_BOX_ASPECT = 1.7f;
-    // "k7-etiquette"/"k7-classique" — see drawK7(). Same viewBox and box as "cassette" above, and
+    // "k7-classique" — see drawK7(). Same viewBox and box as "cassette" above, and
     // the same numbers as the web player's own tape mechanics (src/k7.js, K7Tape), which is where
     // each is explained: reel centres, pack radii when full and empty, one turn's duration while
     // playing and while rewinding, how long rewinding a whole side takes, and the glide over a jump.
@@ -253,9 +253,8 @@ final class EdgeGlowView extends View {
     private static final float K7_JUMP = 0.02f;
     private static final float K7_GLIDE_RATE = 8f;
     // The label text's fitting, same as main.js's fitSvgText(): shrunk to at most this much of its
-    // size, then cut with an ellipsis. Étiquette's text starts further left, so it gets more room.
+    // size, then cut with an ellipsis.
     private static final float K7_TEXT_MIN_SCALE = 0.75f;
-    private static final float K7_TEXT_MAX_WIDTH_ETIQUETTE = 252f;
     private static final float K7_TEXT_MAX_WIDTH_CLASSIQUE = 238f;
     // Half way down the cassette's bottom section (the trapezoid, y 150 to 192): where the
     // transport buttons sit in the K7 styles — see k7ControlCenters().
@@ -442,7 +441,6 @@ final class EdgeGlowView extends View {
     // but as the original TTFs in res/font: Android can't read the web's WOFF2. Loaded on the
     // first K7 frame; null (system font instead) if that fails.
     private boolean k7FontsLoaded;
-    private Typeface k7MarkerFont;
     private Typeface k7PencilFont;
     private final Paint k7TextPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     // Fixed shapes and shaders, built on the first K7 frame (see buildK7Shapes()): every one is in
@@ -979,7 +977,7 @@ final class EdgeGlowView extends View {
     }
 
     private static boolean isK7Style(String style) {
-        return EdgeConfig.STYLE_K7_ETIQUETTE.equals(style) || EdgeConfig.STYLE_K7_CLASSIQUE.equals(style);
+        return EdgeConfig.STYLE_K7_CLASSIQUE.equals(style);
     }
 
     /** Eases the drawn spectrum towards the captured one and lets the peak caps fall. */
@@ -1353,7 +1351,7 @@ final class EdgeGlowView extends View {
             } else if (EdgeConfig.STYLE_BALADEUR.equals(active)) {
                 drawBaladeur(canvas);
             } else if (isK7Style(active)) {
-                drawK7(canvas, EdgeConfig.STYLE_K7_CLASSIQUE.equals(active));
+                drawK7(canvas);
             } else {
                 drawGlow(canvas);
             }
@@ -2957,15 +2955,11 @@ final class EdgeGlowView extends View {
     }
 
     /**
-     * "k7-etiquette" and "k7-classique": the lock screen's ports of the web player's two K7 display
-     * modes — one illustration of a real compact cassette (index.html's #k7, the "K7 modes"
-     * section of style.css), coordinate for coordinate off the same 320x200 viewBox, of which
-     * only the label and the shell change between the two:
+     * "k7-classique": the lock screen's port of the web player's K7 display mode — an
+     * illustration of a real compact cassette (index.html's #k7, the "K7 modes" section of
+     * style.css), coordinate for coordinate off the same 320x200 viewBox:
      *
-     *  - Étiquette: a pre-recorded tape, its plastic tinted by the album's main colour, the
-     *    album art printed across the whole label under a frosted strip, title and artist in
-     *    black marker (Permanent Marker).
-     *  - Classique: a blank tape recorded at home — neutral smoked, translucent plastic with the
+     *  - a blank tape recorded at home — neutral smoked, translucent plastic with the
      *    mechanism showing through (tape packs, the tape's path round the guide rollers, pressure
      *    pad), a plain label tinted from the palette with a ruled paper strip, title and artist in
      *    pencil (Reenie Beanie, thickened by a hairline stroke like the web version's).
@@ -2978,7 +2972,7 @@ final class EdgeGlowView extends View {
      * glints, and Classique's glow behind the shell — this redraws up to 30 times a second for as
      * long as the lock screen is up.
      */
-    private void drawK7(Canvas canvas, boolean classique) {
+    private void drawK7(Canvas canvas) {
         if (k7Scale(k7ViewMatrix) <= 0f) return;
 
         buildK7Shapes();
@@ -3004,19 +2998,19 @@ final class EdgeGlowView extends View {
 
         // The shell, its top-left light and the moulded bezel.
         p.setStyle(Paint.Style.FILL);
-        p.setColor(classique ? Color.argb(158, 72, 66, 62) : mixColor(c1, 0xFF262222, 0.56f));
+        p.setColor(Color.argb(158, 72, 66, 62));
         canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
-        strokeK7(p, classique ? Color.argb(71, 255, 255, 255) : Color.argb(153, 0, 0, 0), classique ? 1f : 1.5f);
+        strokeK7(p, Color.argb(71, 255, 255, 255), 1f);
         canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
         p.setStyle(Paint.Style.FILL);
         p.setShader(k7LightShader);
         canvas.drawRoundRect(8, 8, 312, 192, 9, 9, p);
         p.setShader(null);
-        strokeK7(p, Color.argb(classique ? 41 : 15, 255, 255, 255), 1f);
+        strokeK7(p, Color.argb(41, 255, 255, 255), 1f);
         canvas.drawRoundRect(12, 12, 308, 188, 7, 7, p);
 
         buildK7TapePath(packA, packB);
-        if (classique) drawK7Internals(canvas, p, packA, packB);
+        drawK7Internals(canvas, p, packA, packB);
 
         // Through the window: the dark cavity, both tape packs, the clearer centre pane with its
         // tape-length scale, then the reels turning inside it.
@@ -3047,11 +3041,7 @@ final class EdgeGlowView extends View {
         // The label: one sheet with the window punched out of it.
         canvas.save();
         canvas.clipPath(k7LabelClipPath);
-        if (classique) {
-            drawK7ClassiqueFace(canvas, p, c1, c2);
-        } else {
-            drawK7EtiquetteFace(canvas, p);
-        }
+        drawK7ClassiqueFace(canvas, p, c1, c2);
         p.setStyle(Paint.Style.FILL);
         p.setShader(k7LabelShadeShader);
         canvas.drawRect(26, 22, 294, 142, p);
@@ -3064,20 +3054,20 @@ final class EdgeGlowView extends View {
         strokeK7(p, Color.argb(31, 255, 255, 255), 0.6f);
         canvas.drawRoundRect(70.8f, 62.8f, 249.2f, 105.2f, 21.2f, 21.2f, p);
 
-        drawK7Writing(canvas, p, classique, c3);
+        drawK7Writing(canvas, p, c3);
 
         // The bottom head-access section: ledge, trapezoid, capstan and guide holes, screws.
-        strokeK7(p, classique ? Color.argb(36, 255, 255, 255) : Color.argb(115, 0, 0, 0), 1f);
+        strokeK7(p, Color.argb(36, 255, 255, 255), 1f);
         canvas.drawLine(8, 148, 312, 148, p);
         p.setStyle(Paint.Style.FILL);
-        p.setColor(classique ? Color.argb(9, 255, 255, 255) : Color.argb(13, 0, 0, 0));
+        p.setColor(Color.argb(9, 255, 255, 255));
         canvas.drawPath(k7TrapezoidPath, p);
-        strokeK7(p, classique ? Color.argb(56, 255, 255, 255) : Color.argb(128, 0, 0, 0), 1f);
+        strokeK7(p, Color.argb(56, 255, 255, 255), 1f);
         canvas.drawPath(k7TrapezoidPath, p);
-        strokeK7(p, Color.argb(classique ? 31 : 20, 255, 255, 255), 1f);
+        strokeK7(p, Color.argb(31, 255, 255, 255), 1f);
         canvas.drawLine(61, 151, 259, 151, p);
-        int holeFill = classique ? 0xFF020203 : 0xFF050506;
-        int holeStroke = Color.argb(classique ? 46 : 18, 255, 255, 255);
+        int holeFill = 0xFF020203;
+        int holeStroke = Color.argb(46, 255, 255, 255);
         for (int pass = 0; pass < 2; pass++) {
             if (pass == 0) {
                 p.setStyle(Paint.Style.FILL);
@@ -3296,17 +3286,6 @@ final class EdgeGlowView extends View {
         canvas.restore();
     }
 
-    /** K7 Étiquette's label: the album art across the whole of it, a little desaturated, with a
-     *  frosted strip across the top for the text — a plain panel until the first art arrives. */
-    private void drawK7EtiquetteFace(Canvas canvas, Paint p) {
-        p.setStyle(Paint.Style.FILL);
-        p.setColor(0xFF4A5560);
-        canvas.drawRect(26, 22, 294, 142, p);
-        drawK7Art(canvas, p, 26, 22, 268, 120, k7ArtColorFilter);
-        p.setColor(Color.argb(97, 255, 255, 255));
-        canvas.drawRect(26, 22, 294, 49, p);
-    }
-
     /** K7 Classique's label: a muted grey-blue pulled a little toward the album's main colour, a
      *  ruled paper strip, and two stripes in the album's first two colours. */
     private void drawK7ClassiqueFace(Canvas canvas, Paint p, int c1, int c2) {
@@ -3349,71 +3328,61 @@ final class EdgeGlowView extends View {
 
     /** What's written on the label: title and artist in each style's own hand, and on
      *  Classique the side letter, a thumbnail of the art, the brand and the coloured dot. */
-    private void drawK7Writing(Canvas canvas, Paint p, boolean classique, int c3) {
-        fitK7Text(classique);
+    private void drawK7Writing(Canvas canvas, Paint p, int c3) {
+        fitK7Text();
         Paint t = k7TextPaint;
         t.setTextAlign(Paint.Align.LEFT);
         t.setLetterSpacing(0f);
-        if (classique) {
-            t.setStyle(Paint.Style.FILL);
-            t.setTypeface(Typeface.DEFAULT_BOLD);
-            t.setTextSize(12f);
-            t.setColor(0xFF2B2A33);
-            canvas.drawText("A", 31, 45, t);
+        t.setStyle(Paint.Style.FILL);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextSize(12f);
+        t.setColor(0xFF2B2A33);
+        canvas.drawText("A", 31, 45, t);
 
-            t.setTypeface(k7PencilFont);
-            t.setStyle(Paint.Style.FILL_AND_STROKE);
-            t.setStrokeWidth(0.35f);
-            t.setStrokeJoin(Paint.Join.ROUND);
-            t.setColor(0xFF26324F);
-            t.setTextSize(k7TitleSize);
-            canvas.drawText(k7TitleFitted, 46, 38, t);
-            t.setColor(Color.argb(204, 0x26, 0x32, 0x4F));
-            t.setTextSize(k7ArtistSize);
-            canvas.drawText(k7ArtistFitted, 46, 49, t);
-            t.setStyle(Paint.Style.FILL);
+        t.setTypeface(k7PencilFont);
+        t.setStyle(Paint.Style.FILL_AND_STROKE);
+        t.setStrokeWidth(0.35f);
+        t.setStrokeJoin(Paint.Join.ROUND);
+        t.setColor(0xFF26324F);
+        t.setTextSize(k7TitleSize);
+        canvas.drawText(k7TitleFitted, 46, 38, t);
+        t.setColor(Color.argb(204, 0x26, 0x32, 0x4F));
+        t.setTextSize(k7ArtistSize);
+        canvas.drawText(k7ArtistFitted, 46, 49, t);
+        t.setStyle(Paint.Style.FILL);
 
-            drawK7Art(canvas, p, 34, 67, 30, 30, null);
-            strokeK7(p, Color.argb(89, 255, 255, 255), 0.6f);
-            canvas.drawRect(34, 67, 64, 97, p);
+        drawK7Art(canvas, p, 34, 67, 30, 30, null);
+        strokeK7(p, Color.argb(89, 255, 255, 255), 0.6f);
+        canvas.drawRect(34, 67, 64, 97, p);
 
-            t.setTypeface(Typeface.DEFAULT_BOLD);
-            t.setTextSize(6.5f);
-            t.setLetterSpacing(0.8f / 6.5f);
-            t.setTextAlign(Paint.Align.CENTER);
-            t.setColor(0xFFE9E6DF);
-            canvas.drawText("VIZUZIK", 49, 108, t);
-            t.setLetterSpacing(0f);
-            t.setTextAlign(Paint.Align.LEFT);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextSize(6.5f);
+        t.setLetterSpacing(0.8f / 6.5f);
+        t.setTextAlign(Paint.Align.CENTER);
+        t.setColor(0xFFE9E6DF);
+        canvas.drawText("VIZUZIK", 49, 108, t);
+        t.setLetterSpacing(0f);
+        t.setTextAlign(Paint.Align.LEFT);
 
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(withAlpha(c3, 255));
-            canvas.drawCircle(272, 84, 7, p);
-        } else {
-            t.setStyle(Paint.Style.FILL);
-            t.setTypeface(k7MarkerFont);
-            t.setColor(0xFF111111);
-            t.setTextSize(k7TitleSize);
-            canvas.drawText(k7TitleFitted, 34, 35, t);
-            t.setTextSize(k7ArtistSize);
-            canvas.drawText(k7ArtistFitted, 34, 45.5f, t);
-        }
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(withAlpha(c3, 255));
+        canvas.drawCircle(272, 84, 7, p);
     }
 
     /** Fits title and artist to the label once per text or style change, the same way main.js's
      *  fitSvgText() does: shrunk to at most K7_TEXT_MIN_SCALE, then cut with an ellipsis. */
-    private void fitK7Text(boolean classique) {
-        String key = (classique ? "c" : "e") + '\0' + k7Title + '\0' + k7Artist;
+    private void fitK7Text() {
+        String key = k7Title + '\0' + k7Artist;
         if (key.equals(k7FitKey)) return;
         k7FitKey = key;
         Paint t = k7TextPaint;
         t.setLetterSpacing(0f);
-        t.setTypeface(classique ? k7PencilFont : k7MarkerFont);
-        float maxWidth = classique ? K7_TEXT_MAX_WIDTH_CLASSIQUE : K7_TEXT_MAX_WIDTH_ETIQUETTE;
+        t.setTypeface(k7PencilFont);
+        float maxWidth = K7_TEXT_MAX_WIDTH_CLASSIQUE;
         float[] size = new float[1];
-        k7TitleFitted = fitK7Line(t, k7Title, classique ? 17f : 12f, maxWidth, size);
+        k7TitleFitted = fitK7Line(t, k7Title, 17f, maxWidth, size);
         k7TitleSize = size[0];
-        k7ArtistFitted = fitK7Line(t, k7Artist, classique ? 13f : 9f, maxWidth, size);
+        k7ArtistFitted = fitK7Line(t, k7Artist, 13f, maxWidth, size);
         k7ArtistSize = size[0];
     }
 
@@ -3475,16 +3444,11 @@ final class EdgeGlowView extends View {
         );
     }
 
-    /** Both handwriting fonts, once. A font that can't be loaded leaves the system one in its
+    /** The handwriting font, once. A font that can't be loaded leaves the system one in its
      *  place (a null Typeface) rather than the label empty. */
     private void loadK7Fonts() {
         if (k7FontsLoaded) return;
         k7FontsLoaded = true;
-        try {
-            k7MarkerFont = ResourcesCompat.getFont(getContext(), R.font.permanent_marker);
-        } catch (Exception e) {
-            Log.w(TAG, "loadK7Fonts marker", e);
-        }
         try {
             k7PencilFont = ResourcesCompat.getFont(getContext(), R.font.reenie_beanie);
         } catch (Exception e) {

@@ -1,14 +1,12 @@
 # Polices embarquées
 
-Deux polices manuscrites tierces, utilisées uniquement par les modes K7 pour écrire le titre et
+Une police manuscrite tierce, utilisée uniquement par le mode K7 pour écrire le titre et
 l'artiste sur l'étiquette de la cassette. Elles ne font pas partie de Vizuzik : chacune garde sa
 propre licence, distincte de la GPL-3.0 du reste du projet.
 
 | Fichier | Police | Auteur | Licence | Utilisée par |
 |---|---|---|---|---|
-| `permanent-marker-latin-400.woff2` | Permanent Marker | Font Diner, Inc. (2010) | Apache 2.0 — [`LICENSE-permanent-marker.txt`](LICENSE-permanent-marker.txt) | K7 Étiquette |
 | `reenie-beanie-latin-400.woff2` | Reenie Beanie | Typeco (2010) | SIL Open Font License 1.1 — [`LICENSE-reenie-beanie.txt`](LICENSE-reenie-beanie.txt) | K7 Classique |
-| `android/app/src/main/res/font/permanent_marker.ttf` | Permanent Marker | Font Diner, Inc. (2010) | Apache 2.0 — même fichier de licence | K7 Étiquette, écran verrouillé |
 | `android/app/src/main/res/font/reenie_beanie.ttf` | Reenie Beanie | Typeco (2010) | SIL Open Font License 1.1 — même fichier de licence | K7 Classique, écran verrouillé |
 
 Provenance : Google Fonts, via les paquets npm Fontsource (`@fontsource/permanent-marker` et
