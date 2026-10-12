@@ -366,7 +366,9 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
                     int padding = Math.round(size * 0.28f);
                     button.setPadding(padding, padding, padding, padding);
                 }
-                button.setRotation(glowViewRef.k7ControlsRotated() ? 90f : 0f);
+                // Never turned with the cassette: the phone stays upright, so previous/next
+                // keep pointing to the screen's left and right.
+                button.setRotation(0f);
                 button.setX(centers[i * 2] - size * 0.5f);
                 button.setY(centers[i * 2 + 1] - size * 0.5f);
                 button.setVisibility(android.view.View.VISIBLE);

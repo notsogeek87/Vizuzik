@@ -3353,16 +3353,16 @@ final class EdgeGlowView extends View {
         canvas.drawText(k7ArtistFitted, 46, 49, t);
         t.setStyle(Paint.Style.FILL);
 
-        drawK7Art(canvas, p, 34, 67, 30, 30, null);
+        drawK7Art(canvas, p, 30, 58, 38, 38, null);
         strokeK7(p, Color.argb(89, 255, 255, 255), 0.6f);
-        canvas.drawRect(34, 67, 64, 97, p);
+        canvas.drawRect(30, 58, 68, 96, p);
 
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextSize(6.5f);
         t.setLetterSpacing(0.8f / 6.5f);
         t.setTextAlign(Paint.Align.CENTER);
         t.setColor(0xFFE9E6DF);
-        canvas.drawText("VIZUZIK", 49, 108, t);
+        canvas.drawText("VIZUZIK", 49, 110, t);
         t.setLetterSpacing(0f);
         t.setTextAlign(Paint.Align.LEFT);
 
