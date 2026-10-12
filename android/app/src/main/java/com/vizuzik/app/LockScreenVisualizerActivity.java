@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.media.session.MediaController;
 import android.os.Build;
 import android.os.Bundle;
@@ -85,12 +86,12 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     /** The K7 styles' buttons (see buildK7Controls()): their size in the cassette's own viewBox
      *  units — room for all three across its bottom section — and the bounds that keeps them a
      *  comfortable touch target however big or small the cassette is drawn. */
-    private static final float K7_SECONDARY_UNITS = 26f;
-    private static final float K7_PRIMARY_UNITS = 32f;
-    private static final int K7_SECONDARY_MIN_DP = 40;
-    private static final int K7_SECONDARY_MAX_DP = 56;
-    private static final int K7_PRIMARY_MIN_DP = 48;
-    private static final int K7_PRIMARY_MAX_DP = 68;
+    private static final float K7_SECONDARY_UNITS = 22f;
+    private static final float K7_PRIMARY_UNITS = 28f;
+    private static final int K7_SECONDARY_MIN_DP = 30;
+    private static final int K7_SECONDARY_MAX_DP = 44;
+    private static final int K7_PRIMARY_MIN_DP = 36;
+    private static final int K7_PRIMARY_MAX_DP = 54;
 
     private EdgeGlowView glowView;
     /** Toggled between play/pause artwork in updatePlayPauseIcon(), the only mutable thing about
@@ -311,10 +312,10 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
     }
 
     /**
-     * The two K7 styles only: the same three buttons, but on the cassette itself — its bottom
-     * section, where EdgeGlowView.k7ControlCenters() says it is — rather than pinned to the real
-     * screen's bottom edge, where they ran over the cassette's own edge and screws. Held upright,
-     * that section runs down the left side of the screen (the illustration is turned a quarter),
+     * The K7 style only: the same three buttons, but inlaid in the cassette's label — the free
+     * band under the window, where EdgeGlowView.k7ControlCenters() says it is, clear of the
+     * title/artist strip above — rather than pinned to the real screen's bottom edge. Held
+     * upright, that band runs down the left side of the screen (the illustration is turned a quarter),
      * so the buttons then stand in a column there, and their icons turn a quarter with it: this
      * screen doesn't follow the phone's rotation, so the cassette is read by turning the phone on
      * its side, and the buttons are then read that way too, as a row under the label. Sized from
@@ -329,13 +330,13 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         layer.setLayoutParams(new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        ImageButton previous = circleButton(K7_SECONDARY_MAX_DP, android.R.drawable.ic_media_previous);
+        ImageButton previous = inlaidButton(K7_SECONDARY_MAX_DP, android.R.drawable.ic_media_previous);
         previous.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToPrevious));
-        playPauseButton = circleButton(K7_PRIMARY_MAX_DP, android.R.drawable.ic_media_pause);
+        playPauseButton = inlaidButton(K7_PRIMARY_MAX_DP, android.R.drawable.ic_media_pause);
         playPauseButton.setOnClickListener(v -> withTransportControls(
             lastIsPlaying ? MediaController.TransportControls::pause : MediaController.TransportControls::play
         ));
-        ImageButton next = circleButton(K7_SECONDARY_MAX_DP, android.R.drawable.ic_media_next);
+        ImageButton next = inlaidButton(K7_SECONDARY_MAX_DP, android.R.drawable.ic_media_next);
         next.setOnClickListener(v -> withTransportControls(MediaController.TransportControls::skipToNext));
         ImageButton[] buttons = { previous, playPauseButton, next };
         for (ImageButton button : buttons) {
@@ -458,6 +459,31 @@ public class LockScreenVisualizerActivity extends AppCompatActivity
         row.addView(next, controlMargins(secondaryDiameterDp, gapDp));
 
         return row;
+    }
+
+    /** A transport button that reads as pressed into the cassette's label: a dark glass key, a
+     *  thin light rim catching the light along its lower edge, the icon in cream like the label's
+     *  own lettering. Same framework media icons as circleButton(). */
+    private ImageButton inlaidButton(int diameterDp, int iconRes) {
+        float density = getResources().getDisplayMetrics().density;
+        int rim = Math.max(1, Math.round(density));
+
+        GradientDrawable lightEdge = new GradientDrawable();
+        lightEdge.setShape(GradientDrawable.OVAL);
+        lightEdge.setColor(Color.argb(60, 255, 255, 255));
+
+        GradientDrawable key = new GradientDrawable();
+        key.setShape(GradientDrawable.OVAL);
+        key.setColor(Color.argb(230, 22, 20, 26));
+        key.setStroke(rim, Color.argb(150, 0, 0, 0));
+
+        LayerDrawable inlay = new LayerDrawable(new android.graphics.drawable.Drawable[] { lightEdge, key });
+        inlay.setLayerInset(1, 0, 0, 0, rim);
+
+        ImageButton button = circleButton(diameterDp, iconRes);
+        button.setBackground(inlay);
+        button.setColorFilter(Color.rgb(233, 230, 223));
+        return button;
     }
 
     /** A translucent circle behind a framework media icon — no new drawable resources needed, the

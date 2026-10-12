@@ -51,15 +51,18 @@ final class LockScreenVisualizerPreference {
      *  value completely (unlike EdgeConfig.style, it is never checked against a fallback there). */
     static String getStyle(Context context) {
         String stored = prefs(context).getString(KEY_STYLE, DEFAULT_STYLE);
+        // The lock screen keeps a single cassette: the former "cassette" choice is now K7 Classique.
+        if (STYLE_CASSETTE.equals(stored)) return STYLE_K7_CLASSIQUE;
         return isKnownStyle(stored) ? stored : DEFAULT_STYLE;
     }
 
     static void setStyle(Context context, String style) {
+        if (STYLE_CASSETTE.equals(style)) style = STYLE_K7_CLASSIQUE;
         prefs(context).edit().putString(KEY_STYLE, isKnownStyle(style) ? style : DEFAULT_STYLE).apply();
     }
 
     private static boolean isKnownStyle(String style) {
-        return STYLE_BARS.equals(style) || STYLE_CASSETTE.equals(style) || STYLE_VINYL.equals(style)
+        return STYLE_BARS.equals(style) || STYLE_VINYL.equals(style)
             || STYLE_BALADEUR.equals(style) || STYLE_K7_CLASSIQUE.equals(style);
     }
 

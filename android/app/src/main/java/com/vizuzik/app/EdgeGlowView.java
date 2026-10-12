@@ -256,9 +256,11 @@ final class EdgeGlowView extends View {
     // size, then cut with an ellipsis.
     private static final float K7_TEXT_MIN_SCALE = 0.75f;
     private static final float K7_TEXT_MAX_WIDTH_CLASSIQUE = 238f;
-    // Half way down the cassette's bottom section (the trapezoid, y 150 to 192): where the
-    // transport buttons sit in the K7 styles — see k7ControlCenters().
-    private static final float K7_CONTROLS_Y = 171f;
+    // Where the transport buttons sit on the K7 label: in the free band between the window's
+    // bottom (y 106) and the label's (y 142), inlaid under the title/artist strip — see
+    // k7ControlCenters().
+    private static final float K7_CONTROLS_Y = 125f;
+    private static final float K7_CONTROLS_SPACING = 40f;
     // Where the tape comes up from each corner roller, to the pack it winds on — see
     // buildK7TapePath().
     private static final float K7_TAPE_ROLLER_A_X = 29.6f;
@@ -3121,9 +3123,9 @@ final class EdgeGlowView extends View {
 
     /**
      * Where LockScreenVisualizerActivity puts the transport buttons in the two K7 styles: on the
-     * cassette's own bottom section (the trapezoid), rather than at a fixed distance from the
-     * screen's edge — the three centres, previous/play-pause/next, as view coordinates in out
-     * (x, y pairs). Held upright, the illustration's quarter turn puts that section down the left
+     * cassette's label, in the free band under the window, rather than at a fixed distance from
+     * the screen's edge — the three centres, previous/play-pause/next, as view coordinates in out
+     * (x, y pairs). Held upright, the illustration's quarter turn puts that band down the left
      * side of the screen, so the three then stand in a column there. Returns the pixels per
      * viewBox unit the buttons are sized from, or 0 if the screen's size isn't known yet.
      */
@@ -3131,11 +3133,11 @@ final class EdgeGlowView extends View {
         Matrix matrix = new Matrix();
         float scale = k7Scale(matrix);
         if (scale <= 0f) return 0f;
-        out[0] = 114f;
+        out[0] = 160f - K7_CONTROLS_SPACING;
         out[1] = K7_CONTROLS_Y;
         out[2] = 160f;
         out[3] = K7_CONTROLS_Y;
-        out[4] = 206f;
+        out[4] = 160f + K7_CONTROLS_SPACING;
         out[5] = K7_CONTROLS_Y;
         matrix.mapPoints(out);
         return scale;

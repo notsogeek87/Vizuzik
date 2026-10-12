@@ -809,7 +809,7 @@ function setLockScreenVisualizerEnabled(enabled) {
 // keeping its own localStorage key rather than folding it into readEdgeSettingsFromForm().
 const LOCKSCREEN_VISUALIZER_STYLE_KEY = "vizuzik:lockScreenVisualizerStyle";
 const LOCKSCREEN_VISUALIZER_STYLES = [
-  "bars", "cassette", "vinyl", "baladeur", "k7-classique",
+  "bars", "vinyl", "baladeur", "k7-classique",
 ];
 // "vinyl" ("Disque"): the default style once the lock-screen visualizer itself defaults to on.
 const LOCKSCREEN_VISUALIZER_DEFAULT_STYLE = "vinyl";
@@ -821,6 +821,8 @@ function isLockScreenVisualizerStyle(value) {
 function readLockScreenVisualizerStyle() {
   try {
     const stored = localStorage.getItem(LOCKSCREEN_VISUALIZER_STYLE_KEY);
+    // The lock screen keeps a single cassette: the former "cassette" choice is now this one.
+    if (stored === "cassette") return "k7-classique";
     return isLockScreenVisualizerStyle(stored) ? stored : LOCKSCREEN_VISUALIZER_DEFAULT_STYLE;
   } catch (err) {
     return LOCKSCREEN_VISUALIZER_DEFAULT_STYLE;
