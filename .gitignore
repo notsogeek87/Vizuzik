@@ -1,2 +1,7 @@
 node_modules/
 dist/
+
+# Secrets de signature : ne jamais commiter (le debug.keystore standard reste versionné)
+*.jks
+keystore.properties
+key.properties
