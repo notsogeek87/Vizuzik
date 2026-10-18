@@ -2434,6 +2434,9 @@ body[data-mode="platine"][data-state="playing"] .platine__platter {
     width: calc(var(--u) * 2.8);
     height: calc(var(--u) * 2);
     aspect-ratio: auto;
+    /* Nudged up from the stack's centre: the title, progress bar and buttons below it make the
+       deck look low otherwise. A visual shift only, so nothing else reflows. */
+    top: calc(var(--u) * -0.12);
   }
 
   body[data-mode="platine"] .platine__plinth {
