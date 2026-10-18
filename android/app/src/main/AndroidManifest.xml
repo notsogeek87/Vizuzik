@@ -189,6 +189,9 @@
          session (see TrackedSessionAudioSource), which is the app's single audio source.
          DeezerMediaPlugin.requestAudioPermission() asks for it at runtime. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Needed to attach the Visualizer to the global output mix (session 0), the fallback for
+         music apps that never announce their own audio session. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Without this, PackageManager#getApplicationInfo(...) / getLaunchIntentForPackage(...)
          can fail on Android 11+ package-visibility restrictions, breaking the install detection

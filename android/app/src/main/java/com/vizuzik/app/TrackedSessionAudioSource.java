@@ -88,6 +88,24 @@ final class TrackedSessionAudioSource {
 
     private final AudioSessionRegistry.Listener registryListener = this::onSessionChanged;
 
+    // Many players (YouTube Music, Tidal, browsers…) never broadcast their audio session, so the
+    // registry stays empty and nothing would attach: the bars froze. While something plays and no
+    // session is known, fall back to the global output mix (session 0), which needs
+    // MODIFY_AUDIO_SETTINGS on top of RECORD_AUDIO. A real session found later replaces it.
+    private final DeezerMediaBridge.Listener playbackListener = nowPlaying -> {
+        Handler handler = this.workerHandler;
+        if (handler == null) return;
+        boolean playing = nowPlaying != null && nowPlaying.isPlaying;
+        handler.post(() -> {
+            if (playing) {
+                if (AudioSessionRegistry.getInstance().currentSessionId() <= 0) attach(0);
+            } else if (this.attachedSessionId == 0) {
+                releaseVisualizer();
+                listener.onSourceLost();
+            }
+        });
+    };
+
     private final Visualizer.OnDataCaptureListener captureListener = new Visualizer.OnDataCaptureListener() {
         @Override
         public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
@@ -130,7 +148,10 @@ final class TrackedSessionAudioSource {
         AudioSessionRegistry registry = AudioSessionRegistry.getInstance();
         registry.start(appContext);
         registry.addListener(registryListener);
+        DeezerMediaBridge.getInstance().addListener(playbackListener);
         onSessionChanged(registry.currentSessionId());
+        DeezerMediaBridge.NowPlaying current = DeezerMediaBridge.getInstance().getLastNowPlaying();
+        if (current != null) playbackListener.onNowPlayingChanged(current);
     }
 
     /** Re-runs the attach decision for whatever session is open right now — see
@@ -141,6 +162,7 @@ final class TrackedSessionAudioSource {
 
     void stop() {
         AudioSessionRegistry.getInstance().removeListener(registryListener);
+        DeezerMediaBridge.getInstance().removeListener(playbackListener);
         if (workerHandler != null) {
             workerHandler.post(this::releaseVisualizer);
         }
@@ -159,6 +181,9 @@ final class TrackedSessionAudioSource {
         if (handler == null) return; // stop() already ran.
         if (sessionId <= 0) {
             handler.post(this::onSessionClosed);
+            // The specific session is gone but the music may still play: use the global mix.
+            DeezerMediaBridge.NowPlaying np = DeezerMediaBridge.getInstance().getLastNowPlaying();
+            if (np != null && np.isPlaying) handler.post(() -> attach(0));
         } else {
             handler.post(() -> attach(sessionId));
         }
@@ -167,6 +192,7 @@ final class TrackedSessionAudioSource {
     /** Runs on workerHandler's thread. */
     private void onSessionClosed() {
         if (attachedSessionId == -1) return; // Nothing was attached in the first place.
+        if (attachedSessionId == 0) return; // Global-mix fallback: ends with playback, not here.
         releaseVisualizer();
         listener.onSourceLost();
     }
