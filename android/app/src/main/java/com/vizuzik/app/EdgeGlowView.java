@@ -1176,7 +1176,20 @@ final class EdgeGlowView extends View {
         // A tracked app's window the accessibility service has just seen on screen is "on
         // screen" whatever the usage events say about who is in front: in split-screen they name
         // the navigation app, and "only over the music app" then hid the overlay beside Deezer.
-        boolean trackedWindowVisible = NowPlayerScreenState.trackedWindowBounds() != null;
+        // ...but only a window that is not the whole screen can be "beside" another app. A
+        // full-screen tracked window the usage events say has been left is simply gone: believing
+        // it for the rest of the accessibility service's next scan (and its staleness window) was
+        // most of the lag between leaving Deezer and the overlay letting go. So that answer is
+        // cleared on the spot, rather than waiting for the service to notice.
+        android.graphics.Rect trackedBounds = NowPlayerScreenState.trackedWindowBounds();
+        if (trackedBounds != null && foregroundKnown && !trackedInForeground
+            && displayWidth > 0 && displayHeight > 0
+            && trackedBounds.width() >= displayWidth * 0.95f
+            && trackedBounds.height() >= displayHeight * 0.9f) {
+            NowPlayerScreenState.publish(false, null, null);
+            trackedBounds = null;
+        }
+        boolean trackedWindowVisible = trackedBounds != null;
         suppressed = !calibrating
             && ((onlyOverMusicApp && foregroundKnown && !trackedAppOnScreen && !trackedWindowVisible)
                 || explicitlyHidden);
