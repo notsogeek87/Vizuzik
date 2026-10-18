@@ -1647,11 +1647,14 @@ final class EdgeGlowView extends View {
     }
 
     /** The last cover the accessibility service measured, with the display and window it was
-     *  measured against — see artRect(). Only ever reused on that same screen. */
-    private Rect lastMeasuredArt;
-    private Rect lastMeasuredWindow;
-    private float lastMeasuredDisplayW;
-    private float lastMeasuredDisplayH;
+     *  measured against — see artRect(). Only ever reused on that same screen. Static on purpose:
+     *  leaving the music app stops playback, which takes the overlay service down, and the view
+     *  that comes back with it is a brand-new instance — a per-view memory was always empty
+     *  exactly when it was needed. */
+    private static Rect lastMeasuredArt;
+    private static Rect lastMeasuredWindow;
+    private static float lastMeasuredDisplayW;
+    private static float lastMeasuredDisplayH;
 
     private ArtRect artRect() {
         // The screen's size is normally refreshed on the slow timer, but the anchor can be asked
