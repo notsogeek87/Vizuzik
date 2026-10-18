@@ -1646,6 +1646,13 @@ final class EdgeGlowView extends View {
         if (displayHeight > 0 && getHeight() >= displayHeight - 1) viewLocation[1] = 0;
     }
 
+    /** The last cover the accessibility service measured, with the display and window it was
+     *  measured against — see artRect(). Only ever reused on that same screen. */
+    private Rect lastMeasuredArt;
+    private Rect lastMeasuredWindow;
+    private float lastMeasuredDisplayW;
+    private float lastMeasuredDisplayH;
+
     private ArtRect artRect() {
         // The screen's size is normally refreshed on the slow timer, but the anchor can be asked
         // for before the first of those has run — the calibration handle is put up in the same
@@ -1694,6 +1701,29 @@ final class EdgeGlowView extends View {
                     refreshOrigin();
                     float cx = measured.exactCenterX();
                     float cy = measured.exactCenterY();
+                    // Kept for the next reopening — see below.
+                    lastMeasuredArt = new Rect(measured);
+                    Rect window = NowPlayerScreenState.trackedWindowBounds();
+                    lastMeasuredWindow = window != null ? new Rect(window) : null;
+                    lastMeasuredDisplayW = screenW;
+                    lastMeasuredDisplayH = screenH;
+                    return new ArtRect(cx - viewLocation[0], cy - viewLocation[1], half, cx, cy);
+                }
+            }
+            // Reopening the music app: until the accessibility service has walked the tree again
+            // there is no measurement, and the model below draws the disc somewhere visibly wrong
+            // (bottom-left) for the moment that takes. The cover has not moved since it was last
+            // measured on this same screen, so that position is held until a fresh one replaces it.
+            Rect last = lastMeasuredArt;
+            if (last != null && lastMeasuredDisplayW == screenW && lastMeasuredDisplayH == screenH) {
+                Rect window = NowPlayerScreenState.trackedWindowBounds();
+                Rect lastWindow = lastMeasuredWindow;
+                boolean sameWindow = window == null || (lastWindow != null && window.equals(lastWindow));
+                float half = Math.min(last.width(), last.height()) * 0.5f;
+                if (sameWindow && half > 0) {
+                    refreshOrigin();
+                    float cx = last.exactCenterX();
+                    float cy = last.exactCenterY();
                     return new ArtRect(cx - viewLocation[0], cy - viewLocation[1], half, cx, cy);
                 }
             }
