@@ -2430,13 +2430,13 @@ body[data-mode="platine"][data-state="playing"] .platine__platter {
    things on the two axes. */
 @media (orientation: landscape) and (min-height: 600px) {
   body[data-mode="platine"] .stage {
-    --u: clamp(160px, 25vh, 230px);
+    --u: clamp(150px, 22.5vh, 215px);
     width: calc(var(--u) * 2.8);
     height: calc(var(--u) * 2);
     aspect-ratio: auto;
-    /* Nudged up from the stack's centre: the title, progress bar and buttons below it make the
-       deck look low otherwise. A visual shift only, so nothing else reflows. */
-    top: calc(var(--u) * -0.12);
+    /* Pushed down so the deck sits nearer the middle of a landscape screen; a margin
+       rather than an offset, so the title below follows instead of being covered. */
+    margin-top: calc(var(--u) * 0.3);
   }
 
   body[data-mode="platine"] .platine__plinth {
