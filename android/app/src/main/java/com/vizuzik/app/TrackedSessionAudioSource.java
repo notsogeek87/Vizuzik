@@ -92,19 +92,7 @@ final class TrackedSessionAudioSource {
     // registry stays empty and nothing would attach: the bars froze. While something plays and no
     // session is known, fall back to the global output mix (session 0), which needs
     // MODIFY_AUDIO_SETTINGS on top of RECORD_AUDIO. A real session found later replaces it.
-    private final DeezerMediaBridge.Listener playbackListener = nowPlaying -> {
-        Handler handler = this.workerHandler;
-        if (handler == null) return;
-        boolean playing = nowPlaying != null && nowPlaying.isPlaying;
-        handler.post(() -> {
-            if (playing) {
-                if (AudioSessionRegistry.getInstance().currentSessionId() <= 0) attach(0);
-            } else if (this.attachedSessionId == 0) {
-                releaseVisualizer();
-                this.listener.onSourceLost();
-            }
-        });
-    };
+    private final DeezerMediaBridge.Listener playbackListener = this::onPlaybackChanged;
 
     private final Visualizer.OnDataCaptureListener captureListener = new Visualizer.OnDataCaptureListener() {
         @Override
@@ -134,6 +122,20 @@ final class TrackedSessionAudioSource {
         for (int i = 0; i < BAND_COUNT; i++) {
             bandFrequencies[i] = MIN_FREQ * Math.pow(ratio, i / (double) (BAND_COUNT - 1));
         }
+    }
+
+    private void onPlaybackChanged(DeezerMediaBridge.NowPlaying nowPlaying) {
+        Handler handler = workerHandler;
+        if (handler == null) return;
+        boolean playing = nowPlaying != null && nowPlaying.isPlaying;
+        handler.post(() -> {
+            if (playing) {
+                if (AudioSessionRegistry.getInstance().currentSessionId() <= 0) attach(0);
+            } else if (attachedSessionId == 0) {
+                releaseVisualizer();
+                listener.onSourceLost();
+            }
+        });
     }
 
     /** Attaches straight away to whatever session the registry already knows about — the normal
