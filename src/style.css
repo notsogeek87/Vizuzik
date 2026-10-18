@@ -2140,13 +2140,6 @@ body[data-mode="platine"] .stage {
   width: var(--st);
 }
 
-/* Landscape on a tablet or a big screen: the deck takes more of the room. */
-@media (orientation: landscape) and (min-height: 600px) {
-  body[data-mode="platine"] .stage {
-    --st: clamp(366px, 56vh, 500px);
-  }
-}
-
 body[data-mode="platine"] .platine {
   display: block;
   position: absolute;
@@ -2161,7 +2154,10 @@ body[data-mode="platine"] .platine-arm {
   width: 0;
   height: 0;
   z-index: 3;
-  --arm: calc(12.575deg + var(--progress, 0) * 14.55deg);
+  --reach: 1.054;
+  --a0: 12.575deg;
+  --ad: 14.55deg;
+  --arm: calc(var(--a0) + var(--progress, 0) * var(--ad));
   transform: rotate(var(--arm));
   transition: transform 0.9s var(--ease-out);
 }
@@ -2365,7 +2361,7 @@ body[data-mode="platine"][data-state="playing"] .platine__platter {
   left: calc(var(--u) * -0.03);
   top: calc(var(--u) * -0.02);
   width: calc(var(--u) * 0.06);
-  height: calc(var(--u) * 0.92);
+  height: calc(var(--u) * (var(--reach) - 0.13));
   border-radius: 99px;
   background: rgba(0, 0, 0, 0.35);
   filter: blur(3px);
@@ -2401,7 +2397,7 @@ body[data-mode="platine"][data-state="playing"] .platine__platter {
   left: calc(var(--u) * -0.02);
   top: 0;
   width: calc(var(--u) * 0.04);
-  height: calc(var(--u) * 0.854);
+  height: calc(var(--u) * (var(--reach) - 0.2));
   border-radius: 99px;
   background: linear-gradient(90deg, #8c8f95, #f4f5f7 42%, #b4b7bd 62%, #6c6f75);
 }
@@ -2409,7 +2405,7 @@ body[data-mode="platine"][data-state="playing"] .platine__platter {
 .platine-arm__head {
   position: absolute;
   left: calc(var(--u) * -0.0375);
-  top: calc(var(--u) * 0.84);
+  top: calc(var(--u) * (var(--reach) - 0.214));
   width: calc(var(--u) * 0.075);
   height: calc(var(--u) * 0.16);
   border-radius: 6px 6px 3px 3px;
@@ -2420,11 +2416,121 @@ body[data-mode="platine"][data-state="playing"] .platine__platter {
 .platine-arm__cartridge {
   position: absolute;
   left: calc(var(--u) * -0.025);
-  top: calc(var(--u) * 1.004);
+  top: calc(var(--u) * (var(--reach) - 0.05));
   width: calc(var(--u) * 0.05);
   height: calc(var(--u) * 0.05);
   border-radius: 2px;
   background: rgb(var(--c1));
+}
+
+/* Landscape on a tablet or a big screen: the deck turns rectangular, like a real hi-fi
+   turntable seen from above — wood top, platter on the left, tonearm top right, knob and buttons
+   bottom right, a couple of feet peeking out below. u is still half the *height*; the width is
+   2.8u. Positions are in u from the stage's top-left, since % would now mean two different
+   things on the two axes. */
+@media (orientation: landscape) and (min-height: 600px) {
+  body[data-mode="platine"] .stage {
+    --u: clamp(160px, 25vh, 230px);
+    width: calc(var(--u) * 2.8);
+    height: calc(var(--u) * 2);
+    aspect-ratio: auto;
+  }
+
+  body[data-mode="platine"] .platine__plinth {
+    border-radius: 1.2%;
+  }
+
+  /* The photo's top surface is the wood itself: no black deck inset. */
+  body[data-mode="platine"] .platine__deck {
+    display: none;
+  }
+
+  /* Feet. */
+  body[data-mode="platine"] .platine__plinth::before,
+  body[data-mode="platine"] .platine__plinth::after {
+    content: "";
+    position: absolute;
+    bottom: calc(var(--u) * -0.07);
+    width: calc(var(--u) * 0.2);
+    height: calc(var(--u) * 0.09);
+    border-radius: 0 0 40% 40% / 0 0 80% 80%;
+    background: linear-gradient(90deg, #0b0b0d, #2d2d32 45%, #0b0b0d);
+    z-index: -1;
+  }
+
+  body[data-mode="platine"] .platine__plinth::before {
+    left: 6%;
+  }
+
+  body[data-mode="platine"] .platine__plinth::after {
+    right: 6%;
+  }
+
+  body[data-mode="platine"][data-mode] .disc {
+    left: calc(var(--u) * 1.09);
+    top: var(--u);
+    width: calc(var(--u) * 1.64);
+    height: calc(var(--u) * 1.64);
+    margin: calc(var(--u) * -0.82) 0 0 calc(var(--u) * -0.82);
+  }
+
+  /* Platter: brushed-aluminium rim around a dark rubber mat with concentric rings. */
+  body[data-mode="platine"] .platine__platter {
+    left: calc(var(--u) * 1.09);
+    top: var(--u);
+    width: calc(var(--u) * 1.84);
+    height: calc(var(--u) * 1.84);
+    margin: calc(var(--u) * -0.92) 0 0 calc(var(--u) * -0.92);
+    background:
+      radial-gradient(circle closest-side, #1a1a1d 0 95%, transparent 95.4%),
+      conic-gradient(#f2f3f5, #9a9da3 20%, #e4e6ea 45%, #8d9096 70%, #f2f3f5);
+  }
+
+  body[data-mode="platine"] .platine__platter::after {
+    background: repeating-radial-gradient(circle closest-side, rgba(255, 255, 255, 0.07) 0 1.5px, transparent 1.5px 9px);
+    -webkit-mask: radial-gradient(circle closest-side, #000 0 94%, transparent 95%);
+    mask: radial-gradient(circle closest-side, #000 0 94%, transparent 95%);
+  }
+
+  body[data-mode="platine"] .platine-arm {
+    left: calc(var(--u) * 2.2);
+    top: calc(var(--u) * 0.35);
+    --reach: 1.4;
+    --a0: 26.3deg;
+    --ad: 13.55deg;
+  }
+
+  /* The pitch fader becomes a round silver knob, bottom right, with its two buttons above it. */
+  body[data-mode="platine"] .platine__fader {
+    left: calc(var(--u) * 2.3);
+    top: calc(var(--u) * 1.45);
+    width: calc(var(--u) * 0.34);
+    height: calc(var(--u) * 0.34);
+    border-radius: 50%;
+    background:
+      repeating-conic-gradient(rgba(0, 0, 0, 0.18) 0 3deg, transparent 3deg 9deg),
+      radial-gradient(circle at 35% 30%, #fafafb, #b9bcc2 55%, #6f7278);
+    box-shadow: 0 calc(var(--u) * 0.03) calc(var(--u) * 0.06) rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  }
+
+  body[data-mode="platine"] .platine__fader::after,
+  body[data-mode="platine"] .platine__fader-knob {
+    display: none;
+  }
+
+  body[data-mode="platine"] .platine__button {
+    top: calc(var(--u) * 1.15);
+    width: calc(var(--u) * 0.11);
+    height: calc(var(--u) * 0.11);
+  }
+
+  body[data-mode="platine"] .platine__button--a {
+    left: calc(var(--u) * 2.3);
+  }
+
+  body[data-mode="platine"] .platine__button--b {
+    left: calc(var(--u) * 2.5);
+  }
 }
 
 /* ============================================================ baladeur mode */
