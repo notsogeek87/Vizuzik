@@ -97,6 +97,7 @@ const MODE_LABELS = {
   cassette: "Cassette",
   "k7-classique": "K7 Classique",
   baladeur: "Baladeur",
+  platine: "Platine vinyle",
 };
 
 let isPlaying = false;

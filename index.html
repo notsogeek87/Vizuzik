@@ -631,6 +631,12 @@
           <rect x="7" y="11.4" width="10" height="3.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.3" />
           <path d="M8 19.4l1-2.4h6l1 2.4" fill="none" stroke="currentColor" stroke-width="1.3" />
         </svg>
+        <svg class="icon icon-platine" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.6" y="3.6" width="18.8" height="16.8" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <circle cx="10.4" cy="12.6" r="5" fill="none" stroke="currentColor" stroke-width="1.4" />
+          <circle cx="10.4" cy="12.6" r="1.1" />
+          <path d="M17.6 6.2l-3.4 8.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
         <svg class="icon icon-baladeur" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2.6" y="2.6" width="18.8" height="18.8" rx="6" fill="none" stroke="currentColor" stroke-width="1.6" />
           <circle cx="12" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4" />
@@ -641,6 +647,12 @@
 
     <main id="player" class="player" hidden>
       <div id="stage" class="stage">
+        <!-- Platine mode only (hidden in every other mode, see .platine in style.css): the plinth
+             and platter sit behind the real spinning .disc, the tonearm in front of it. -->
+        <div class="platine" aria-hidden="true">
+          <div class="platine__plinth"></div>
+          <div class="platine__platter"></div>
+        </div>
         <div id="disc" class="disc">
           <div class="disc__spin">
             <div id="cover" class="cover"></div>
@@ -648,6 +660,12 @@
           </div>
           <div class="disc__sheen"></div>
           <div class="disc__label"></div>
+        </div>
+        <div class="platine-arm" aria-hidden="true">
+          <span class="platine-arm__base"></span>
+          <span class="platine-arm__counterweight"></span>
+          <span class="platine-arm__bar"></span>
+          <span class="platine-arm__head"></span>
         </div>
       </div>
 

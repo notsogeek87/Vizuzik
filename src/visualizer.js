@@ -24,11 +24,13 @@
 //   baladeur - a portable-player illustration around the real transport controls, drawn once in
 //              CSS/HTML rather than here (see index.html and style.css), same reasoning as
 //              cassette: this engine draws nothing for it either
+//   platine  - a vinyl on a turntable, drawn in CSS/HTML around the real spinning disc (see
+//              .platine in style.css); the tonearm follows --progress. Nothing drawn here
 //
 // Everything is drawn additively and then bloomed by blitting the frame back over itself
 // through a blur, which is what gives the neon "lit from within" look at almost no cost.
 
-export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette", "k7-classique", "baladeur"];
+export const VISUAL_STYLES = ["cover", "bars", "radial", "aurora", "nebula", "cocoon", "cassette", "k7-classique", "baladeur", "platine"];
 
 // Matches TrackedSessionAudioSource's BAND_COUNT on the native side so live levels map 1:1 with
 // no interpolation needed.
@@ -464,7 +466,8 @@ export class Visualizer {
       this.style === "cocoon" ||
       this.style === "cassette" ||
       this.style === "k7-classique" ||
-      this.style === "baladeur"
+      this.style === "baladeur" ||
+      this.style === "platine"
     )
       return;
     const count = Math.round((this.style === "nebula" ? 10 : 6) * this.quality);
@@ -528,6 +531,7 @@ export class Visualizer {
       case "cassette":
       case "k7-classique":
       case "baladeur":
+      case "platine":
         // Nothing to draw: the CSS layer carries the whole scene, and .fx is hidden in these
         // modes anyway (see body[data-mode="cassette"], body[data-mode="baladeur"] .fx in
         // style.css).

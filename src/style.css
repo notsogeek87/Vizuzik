@@ -1184,6 +1184,7 @@ body[data-mode="nebula"] .mode-toggle .icon-nebula,
 body[data-mode="cocoon"] .mode-toggle .icon-cocoon,
 body[data-mode="cassette"] .mode-toggle .icon-cassette,
 body[data-mode="k7-classique"] .mode-toggle .icon-k7-classique,
+body[data-mode="platine"] .mode-toggle .icon-platine,
 body[data-mode="baladeur"] .mode-toggle .icon-baladeur {
   display: block;
   animation: icon-pop 0.45s var(--ease-spring);
@@ -2116,6 +2117,140 @@ body[data-mode="cassette"] .progress__times {
   margin-top: 3px;
   font-size: 0.62rem;
 }
+
+
+/* ============================================================ platine mode */
+
+/* A vinyl on a turntable: the real spinning .disc (grooves, label, artwork as the record's
+   label colours) sits on a platter inside a plinth, and the tonearm — in front of it — travels
+   from the outer groove to the inner one as --progress (0..1, written every frame by main.js)
+   goes up. Lives inside .stage so it follows the disc wherever the layout puts it; everything
+   here is hidden in every other mode. */
+.platine,
+.platine-arm {
+  display: none;
+  pointer-events: none;
+  --st: min(78vw, 366px);
+}
+
+body[data-mode="platine"] .platine {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+
+body[data-mode="platine"] .platine-arm {
+  display: block;
+  position: absolute;
+  inset: auto;
+  left: 88%;
+  top: 6%;
+  width: 0;
+  height: 0;
+}
+
+body[data-mode="platine"][data-mode] .disc {
+  width: 72%;
+  height: 72%;
+}
+
+.platine__plinth {
+  position: absolute;
+  inset: -4% -9%;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 38%, rgba(0, 0, 0, 0.35)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 2px, rgba(0, 0, 0, 0.03) 2px 4px),
+    linear-gradient(160deg, #2b2724, #15120f);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 26px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 calc(24px + var(--level) * 24px) rgba(var(--c1), calc(0.12 + var(--beat) * 0.3));
+}
+
+/* The platter under the record: a metal ring with a strobe-dot edge that turns with it. */
+.platine__platter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80%;
+  height: 80%;
+  margin: -40% 0 0 -40%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 0 86%, rgba(0, 0, 0, 0.5) 86% 87%, transparent 87%),
+    repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 1.2deg, transparent 1.2deg 6deg),
+    radial-gradient(circle, #3b3b40 0 90%, #1b1b1f 100%);
+  -webkit-mask: radial-gradient(circle, #000 0 99%, transparent 100%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6), inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+  animation: spin 16s linear infinite;
+  animation-play-state: paused;
+}
+
+body[data-mode="platine"][data-state="playing"] .platine__platter {
+  animation-play-state: running;
+}
+
+/* Tonearm: pivots at (88%, 6%) of the stage; 0deg points straight down. Outer groove ≈ 10°,
+   inner groove ≈ 52° for a 66%-long arm over a 72%-wide record. Paused, it lifts a few
+   degrees off the record, the way a hand would. */
+.platine-arm {
+  --arm: calc(10.35deg + var(--progress, 0) * 41.65deg);
+  z-index: 3;
+  transform-origin: 0 0;
+  transform: rotate(var(--arm));
+  transition: transform 0.9s var(--ease-out);
+  filter: drop-shadow(4px 8px 7px rgba(0, 0, 0, 0.5));
+}
+
+body[data-mode="platine"]:not([data-state="playing"]) .platine-arm {
+  transform: rotate(calc(var(--arm) - 7deg));
+}
+
+.platine-arm__bar {
+  position: absolute;
+  left: calc(var(--st) * -0.009);
+  top: 0;
+  width: calc(var(--st) * 0.018);
+  height: calc(var(--st) * 0.66);
+  border-radius: 99px;
+  background: linear-gradient(90deg, #8a8d93, #e9eaee 45%, #6f7278);
+}
+
+.platine-arm__head {
+  position: absolute;
+  left: calc(var(--st) * -0.03);
+  top: calc(var(--st) * 0.63);
+  width: calc(var(--st) * 0.06);
+  height: calc(var(--st) * 0.09);
+  border-radius: 4px 4px 7px 7px;
+  background: linear-gradient(90deg, #17171a, #3a3a40 50%, #17171a);
+  border-top: 2px solid rgba(var(--c1), 0.9);
+}
+
+.platine-arm__base {
+  position: absolute;
+  left: calc(var(--st) * -0.045);
+  top: calc(var(--st) * -0.045);
+  width: calc(var(--st) * 0.09);
+  height: calc(var(--st) * 0.09);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f1f1f4, #6d7076 60%, #2c2d31);
+  box-shadow: 0 0 0 calc(var(--st) * 0.012) rgba(0, 0, 0, 0.35);
+}
+
+.platine-arm__counterweight {
+  position: absolute;
+  left: calc(var(--st) * -0.026);
+  top: calc(var(--st) * -0.1);
+  width: calc(var(--st) * 0.052);
+  height: calc(var(--st) * 0.07);
+  border-radius: 6px;
+  background: linear-gradient(90deg, #4d5056, #b9bcc3 50%, #4d5056);
+}
+
+/* Its own illustration around the real disc, like baladeur: keep the stage and the controls. */
 
 /* ============================================================ baladeur mode */
 
