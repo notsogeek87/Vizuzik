@@ -101,7 +101,7 @@ final class TrackedSessionAudioSource {
                 if (AudioSessionRegistry.getInstance().currentSessionId() <= 0) attach(0);
             } else if (this.attachedSessionId == 0) {
                 releaseVisualizer();
-                listener.onSourceLost();
+                this.listener.onSourceLost();
             }
         });
     };
