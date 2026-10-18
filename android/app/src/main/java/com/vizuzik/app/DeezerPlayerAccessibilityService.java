@@ -121,7 +121,11 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
     // announces the player being left for another app, or the split-screen divider being dragged
     // — and a "yes" nobody ever corrects is exactly the disc left over an app it was never
     // measured for. Cheap by construction: it only runs while the answer is yes.
-    private static final long POLL_WHILE_ON_PLAYER_MS = 1000;
+    //
+    // Also what bounds how long the overlay lingers after the player is left: the scan that finds
+    // the tracked window gone is the one that publishes the "no" — so this is, with the grace below,
+    // the delay between leaving Deezer and the overlay letting go.
+    private static final long POLL_WHILE_ON_PLAYER_MS = 250;
     // An artwork candidate has to be roughly square to be the cover rather than a blurred
     // full-bleed backdrop that happens to be centred and tall.
     private static final float MIN_ARTWORK_ASPECT = 0.85f;
@@ -192,14 +196,24 @@ public final class DeezerPlayerAccessibilityService extends AccessibilityService
         // moment no large artwork, or no window at all, is found. Believing that instantly lets
         // go of the disc and shows Deezer's own cover for a few frames. A real exit from the
         // player outlasts this grace, so it only delays the hand-back, it never prevents it.
-        if (lastPlayerAtMs != 0 && now - lastPlayerAtMs < PLAYER_LOSS_GRACE_MS && heldWindow != null) {
+        // ...unless the usage events already say another app resumed: then it is no track change,
+        // it is a real exit, and holding the disc for the rest of the grace is pure lag.
+        if (lastPlayerAtMs != 0 && now - lastPlayerAtMs < PLAYER_LOSS_GRACE_MS && heldWindow != null
+            && !anotherAppIsInFront()) {
             NowPlayerScreenState.publish(true, heldWindow, heldArtwork);
             return true;
         }
         return false;
     }
 
-    private static final long PLAYER_LOSS_GRACE_MS = 900;
+    private static final long PLAYER_LOSS_GRACE_MS = 500;
+
+    /** Whether the usage events name a non-music app as the one in front. False when unknown —
+     *  without usage access the grace simply applies in full, as before. */
+    private boolean anotherAppIsInFront() {
+        String foreground = ForegroundApp.currentForegroundPackage(this);
+        return foreground != null && !MusicApps.isKnownPackage(foreground);
+    }
     private long lastPlayerAtMs;
     private android.graphics.Rect heldWindow;
     private android.graphics.Rect heldArtwork;

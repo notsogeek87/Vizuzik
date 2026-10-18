@@ -16,11 +16,11 @@ import android.os.SystemClock;
  */
 final class NowPlayerScreenState {
 
-    /** How long a published rectangle stays believable. The service re-scans about once a second
+    /** How long a published rectangle stays believable. The service re-scans about every quarter second
      *  while the player is up; past this, nothing is left to say the window is still where it
      *  was (events from a tracked app that has left the screen are never delivered), so a stale
      *  rectangle must read as no rectangle rather than as a place to draw. */
-    private static final long BOUNDS_MAX_AGE_MS = 3000;
+    private static final long BOUNDS_MAX_AGE_MS = 900;
 
     private static volatile boolean onPlayerScreen;
     private static volatile boolean serviceConnected;

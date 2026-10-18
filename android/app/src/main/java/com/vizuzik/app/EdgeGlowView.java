@@ -563,7 +563,7 @@ final class EdgeGlowView extends View {
     // their fallback the moment it goes, and a switch that trails a second behind the app it is
     // reacting to reads as the overlay being stuck rather than as it following. Three times a
     // second costs one cheap incremental query of the usage-event stream (see ForegroundApp).
-    private static final long FOREGROUND_CHECK_MS = 300;
+    private static final long FOREGROUND_CHECK_MS = 150;
     /** The screen's size, and the "usage access" grant: neither changes on the scale above. */
     private static final long DISPLAY_CHECK_MS = 1_000;
     private static final long USAGE_ACCESS_CHECK_MS = 5_000;
@@ -1165,7 +1165,7 @@ final class EdgeGlowView extends View {
         // Read whether or not there is a hide list to check it against: the diagnostics panel's
         // whole job is to say which app the overlay thinks is in front, and an answer that only
         // exists when a setting happens to be on would be missing exactly when it's needed.
-        // currentPackage() is the same 300ms-throttled latch isTrackedAppInForeground() just used,
+        // currentPackage() is the same 150ms-throttled latch isTrackedAppInForeground() just used,
         // so asking it again here costs a field read.
         String foreground = foregroundKnown ? ForegroundApp.currentForegroundPackage(context) : null;
         lastForegroundPackage = foreground != null ? foreground : "";

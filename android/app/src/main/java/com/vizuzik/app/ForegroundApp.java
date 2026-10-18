@@ -33,7 +33,7 @@ final class ForegroundApp {
     // at all — so this can be asked often, and it has to be: leaving the music app drops the
     // styles drawn on its cover back to their fallback, and that has to happen with the app
     // switch rather than a beat behind it.
-    private static final long POLL_INTERVAL_MS = 300;
+    private static final long POLL_INTERVAL_MS = 150;
     private static final long FIRST_LOOKBACK_MS = 24 * 60 * 60 * 1000L;
     /** How far back the second opinion looks — long enough to have recorded the app someone is
      *  sitting in, short enough that yesterday's session says nothing about right now. */
