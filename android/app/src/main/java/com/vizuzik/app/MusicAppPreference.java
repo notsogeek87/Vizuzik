@@ -14,6 +14,18 @@ final class MusicAppPreference {
     private static final String PREFS_NAME = "vizuzik";
     private static final String KEY_PACKAGE = "musicAppPackage";
 
+    private static final String KEY_AUTO = "musicAppAuto";
+
+    /** True (the default) when Vizuzik follows whichever app is playing, whatever it is; the
+     *  stored package is then only "the app followed right now", kept for ForegroundApp. */
+    static boolean isAuto(Context context) {
+        return prefs(context).getBoolean(KEY_AUTO, true);
+    }
+
+    static void setAuto(Context context, boolean auto) {
+        prefs(context).edit().putBoolean(KEY_AUTO, auto).apply();
+    }
+
     static String getPackage(Context context) {
         return prefs(context).getString(KEY_PACKAGE, null);
     }

@@ -19,5 +19,11 @@ final class MusicApps {
         return DEEZER_PACKAGE.equals(packageName) || SPOTIFY_PACKAGE.equals(packageName);
     }
 
+    /** Any app other than Vizuzik itself: every music app publishes a MediaSession and the audio
+     *  session broadcast, so none needs to be listed. */
+    static boolean isTrackable(android.content.Context context, String packageName) {
+        return packageName != null && !packageName.equals(context.getPackageName());
+    }
+
     private MusicApps() {}
 }

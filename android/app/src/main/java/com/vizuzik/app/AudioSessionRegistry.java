@@ -61,6 +61,7 @@ final class AudioSessionRegistry {
     private final LinkedHashSet<Integer> openSessions = new LinkedHashSet<>();
     private volatile int sessionId = -1;
     private boolean started;
+    private Context appContext;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -74,6 +75,7 @@ final class AudioSessionRegistry {
     /** Idempotent — called from whichever component happens to come up first in this process. */
     synchronized void start(Context context) {
         if (started) return;
+        appContext = context.getApplicationContext();
         IntentFilter filter = new IntentFilter();
         filter.addAction(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION);
         filter.addAction(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION);
@@ -106,7 +108,9 @@ final class AudioSessionRegistry {
     private void onSessionEvent(Intent intent) {
         int id = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, -1);
         String packageName = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME);
-        if (id <= 0 || packageName == null || !MusicApps.isKnownPackage(packageName)) return;
+        if (id <= 0 || packageName == null || (appContext != null
+            ? !MusicApps.isTrackable(appContext, packageName)
+            : !MusicApps.isKnownPackage(packageName))) return;
 
         int updated;
         synchronized (this) {

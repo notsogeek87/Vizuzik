@@ -17,9 +17,8 @@ import java.util.List;
  * Android also requires in order to read other apps' active MediaSessions. Notifications
  * themselves are ignored; only the tracked app's media session (title/artist/art/playback state
  * and transport controls) is followed, via DeezerMediaBridge. Which app that is comes from
- * MusicAppPreference — Deezer or Spotify, whichever the web layer resolved at launch. Before
- * that choice is known, any session from either known app matches, so something still shows up
- * immediately on the (common) case where only one of the two is installed.
+ * MusicAppPreference: by default (auto) any music app, preferring the one currently playing;
+ * a specific package only if one was explicitly chosen.
  */
 public class NowPlayingListenerService extends NotificationListenerService {
 
@@ -71,6 +70,7 @@ public class NowPlayingListenerService extends NotificationListenerService {
         if (mediaSessionManager != null) {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionsChangedListener);
         }
+        rewatch(null);
         detachController();
         // clear() before removeListener(): EdgeOverlayController needs this "nothing playing"
         // notification to stop OverlayEdgeGlowService — if it were unregistered first, it would
@@ -95,21 +95,43 @@ public class NowPlayingListenerService extends NotificationListenerService {
         // Notifications themselves are not used; only media sessions are.
     }
 
+    // Sessions of non-active apps we watch so that one starting to play takes over (a session's
+    // state change does not fire OnActiveSessionsChanged).
+    private final java.util.Map<MediaController, MediaController.Callback> watchers = new java.util.HashMap<>();
+
     private void updateActiveSession(List<MediaController> controllers) {
+        boolean auto = MusicAppPreference.isAuto(this);
         String targetPackage = MusicAppPreference.getPackage(this);
         MediaController matched = null;
         if (controllers != null) {
-            for (MediaController controller : controllers) {
-                String packageName = controller.getPackageName();
-                if (packageName == null) continue;
-                boolean matches = targetPackage != null
-                    ? packageName.equals(targetPackage)
-                    : MusicApps.isKnownPackage(packageName);
-                if (matches) {
-                    matched = controller;
-                    break;
+            if (auto) {
+                // Any music app: the one playing wins, then the one already followed, then the
+                // first other session.
+                MediaController fallback = null;
+                for (MediaController controller : controllers) {
+                    if (!MusicApps.isTrackable(this, controller.getPackageName())) continue;
+                    PlaybackState state = controller.getPlaybackState();
+                    if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
+                        matched = controller;
+                        break;
+                    }
+                    if (activeController != null && controller.getSessionToken().equals(activeController.getSessionToken())) {
+                        fallback = controller;
+                    } else if (fallback == null) {
+                        fallback = controller;
+                    }
+                }
+                if (matched == null) matched = fallback;
+            } else {
+                for (MediaController controller : controllers) {
+                    String packageName = controller.getPackageName();
+                    if (packageName != null && packageName.equals(targetPackage)) {
+                        matched = controller;
+                        break;
+                    }
                 }
             }
+            rewatch(auto ? controllers : null);
         }
 
         if (matched == null) {
@@ -127,6 +149,7 @@ public class NowPlayingListenerService extends NotificationListenerService {
 
         detachController();
         activeController = matched;
+        if (auto) MusicAppPreference.setPackage(this, matched.getPackageName());
         DeezerMediaBridge.getInstance().setController(activeController);
 
         controllerCallback = new MediaController.Callback() {
@@ -170,6 +193,31 @@ public class NowPlayingListenerService extends NotificationListenerService {
             DeezerMediaBridge.canSeek(state)
         );
         DeezerMediaBridge.getInstance().updateNowPlaying(nowPlaying);
+    }
+
+    private void rewatch(List<MediaController> controllers) {
+        for (java.util.Map.Entry<MediaController, MediaController.Callback> e : watchers.entrySet()) {
+            e.getKey().unregisterCallback(e.getValue());
+        }
+        watchers.clear();
+        if (controllers == null || mediaSessionManager == null) return;
+        for (MediaController controller : controllers) {
+            if (!MusicApps.isTrackable(this, controller.getPackageName())) continue;
+            MediaController.Callback cb = new MediaController.Callback() {
+                @Override
+                public void onPlaybackStateChanged(PlaybackState state) {
+                    if (state == null || state.getState() != PlaybackState.STATE_PLAYING) return;
+                    if (activeController != null && controller.getSessionToken().equals(activeController.getSessionToken())) return;
+                    try {
+                        updateActiveSession(mediaSessionManager.getActiveSessions(
+                            new ComponentName(NowPlayingListenerService.this, NowPlayingListenerService.class)));
+                    } catch (SecurityException ignored) {
+                    }
+                }
+            };
+            controller.registerCallback(cb);
+            watchers.put(controller, cb);
+        }
     }
 
     private void detachController() {

@@ -62,6 +62,9 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         foreground = true;
+        // Re-asserted on every return to the foreground: the screen must never time out while
+        // Vizuzik is open, whatever happened to the window in between.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         EdgeOverlayController.getInstance().sync();
     }
 

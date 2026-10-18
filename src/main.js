@@ -84,9 +84,6 @@ const els = {
   grantAccess: document.getElementById("grant-access"),
   recheckAccess: document.getElementById("recheck-access"),
   permissionHint: document.getElementById("permission-hint"),
-  appSelect: document.getElementById("app-select"),
-  selectDeezer: document.getElementById("select-deezer"),
-  selectSpotify: document.getElementById("select-spotify"),
 };
 
 const root = document.documentElement;
@@ -307,74 +304,10 @@ function focusForRemote(el) {
 
 /* ------------------------------------------------------------------ music app selection */
 
-// Vizuzik can follow either Deezer or Spotify. Resolved once at startup: whichever of the two
-// is actually installed decides it outright, and a person is only asked when both are — the
-// one case Vizuzik genuinely can't guess. The answer is remembered, same pattern as the capture
-// consent below, so it's asked at most once per install.
-const MUSIC_APP_KEY = "vizuzik:musicApp";
-
-function readMusicApp() {
-  try {
-    const stored = localStorage.getItem(MUSIC_APP_KEY);
-    return stored === "deezer" || stored === "spotify" ? stored : null;
-  } catch (err) {
-    return null;
-  }
-}
-
-function rememberMusicApp(app) {
-  try {
-    localStorage.setItem(MUSIC_APP_KEY, app);
-  } catch (err) {
-    /* see readMusicApp() */
-  }
-}
-
-/** Shows the app-select screen and resolves once the user taps one of the two buttons. */
-function askMusicApp() {
-  return new Promise((resolve) => {
-    els.appSelect.hidden = false;
-    focusForRemote(els.selectDeezer);
-    const pick = (app) => {
-      els.selectDeezer.removeEventListener("click", onDeezer);
-      els.selectSpotify.removeEventListener("click", onSpotify);
-      els.appSelect.hidden = true;
-      resolve(app);
-    };
-    const onDeezer = () => pick("deezer");
-    const onSpotify = () => pick("spotify");
-    els.selectDeezer.addEventListener("click", onDeezer);
-    els.selectSpotify.addEventListener("click", onSpotify);
-  });
-}
-
-/**
- * Resolves which app to track and launch: the stored choice if it's still installed, the one
- * installed app if there's only one, null if neither is, and the app-select screen only when
- * both are present and nothing was chosen yet.
- */
-async function resolveMusicApp() {
-  let detected;
-  try {
-    detected = await DeezerMedia.detectMusicApps();
-  } catch (err) {
-    // Older native build without detectMusicApps(): behave exactly as before, Deezer-only.
-    return "deezer";
-  }
-  const { deezerInstalled, spotifyInstalled } = detected;
-  const stored = readMusicApp();
-  if (stored === "deezer" && deezerInstalled) return "deezer";
-  if (stored === "spotify" && spotifyInstalled) return "spotify";
-
-  let resolved;
-  if (deezerInstalled && !spotifyInstalled) resolved = "deezer";
-  else if (spotifyInstalled && !deezerInstalled) resolved = "spotify";
-  else if (!deezerInstalled && !spotifyInstalled) resolved = null;
-  else resolved = await askMusicApp();
-
-  if (resolved) rememberMusicApp(resolved);
-  return resolved;
-}
+// Vizuzik follows whichever music app is playing — Deezer, Spotify, YouTube Music, Tidal,
+// Apple Music, Amazon Music, a local player… any app publishing a media session. No choice to
+// make and nothing to ask: the native side picks the playing session by itself ("auto").
+const MUSIC_APP_AUTO = "auto";
 
 /* ------------------------------------------------------------------ audio source */
 
@@ -2285,17 +2218,14 @@ window.addEventListener("resize", scheduleFocusRefresh);
 
 applyDisplayMode(false);
 (async () => {
-  // Settled before anything renders: showScreen()/askMusicApp() below use isTv to decide
+  // Settled before anything renders: showScreen() below uses isTv to decide
   // whether to plant the initial D-pad focus.
   await detectTvPlatform();
   // Which app to follow has to be settled first: the native now-playing listener needs it
   // before refresh() can report anything meaningful.
-  const app = await resolveMusicApp();
-  if (app) {
-    // Awaited: refresh() below reads the now-playing session natively, and that lookup needs
-    // to already know which app to look for.
-    await DeezerMedia.setMusicAppTarget({ app }).catch(() => {});
-  }
+  // Awaited: refresh() below reads the now-playing session natively, and that lookup needs to
+  // already know the mode. Also resets any single-app choice stored by an older version.
+  await DeezerMedia.setMusicAppTarget({ app: MUSIC_APP_AUTO }).catch(() => {});
   await refresh().catch(() => {});
   // Awaited, and in this order: the sweep decides what to ask for from these flags, so reading
   // them first is what keeps it from offering the overlay explainer to someone who granted it
@@ -2323,7 +2253,7 @@ applyDisplayMode(false);
   // Deliberately does NOT open Deezer/Spotify itself when there is no session at all — Vizuzik
   // is a companion display, not something that switches the user to another app on its own; the
   // "empty" screen simply waits until a track starts there by itself.
-  if (app && !els.player.hidden && !isPlaying) {
+  if (!els.player.hidden && !isPlaying) {
     // A session for the tracked app is already there (it kept running in the background, still
     // holding the last track) — just paused. Resuming it straight from here means Vizuzik never
     // has to leave the screen at all.

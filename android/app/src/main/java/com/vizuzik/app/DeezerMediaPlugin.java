@@ -141,11 +141,19 @@ public class DeezerMediaPlugin extends Plugin implements DeezerMediaBridge.Liste
      */
     @PluginMethod
     public void setMusicAppTarget(PluginCall call) {
-        String packageName = MusicApps.packageForKey(call.getString("app"));
+        String app = call.getString("app");
+        if (app == null || "auto".equals(app)) {
+            // Default: follow whichever music app is playing, any of them.
+            MusicAppPreference.setAuto(getContext(), true);
+            call.resolve();
+            return;
+        }
+        String packageName = MusicApps.packageForKey(app);
         if (packageName == null) {
             call.reject("app inconnu");
             return;
         }
+        MusicAppPreference.setAuto(getContext(), false);
         MusicAppPreference.setPackage(getContext(), packageName);
         call.resolve();
     }
