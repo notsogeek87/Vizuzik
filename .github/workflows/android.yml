@@ -105,8 +105,10 @@ jobs:
       - name: Déterminer le tag de release debug
         id: reltag
         if: "!(github.event_name == 'push' && github.ref_name == 'main')"
+        env:
+          HEAD_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
-          BRANCH="${{ github.head_ref || github.ref_name }}"
+          BRANCH="$HEAD_BRANCH"
           SAFE_BRANCH=$(echo "$BRANCH" | tr '/' '-')
           echo "tag=debug-$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
@@ -115,12 +117,14 @@ jobs:
         if: "!(github.event_name == 'push' && github.ref_name == 'main')"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REL_TAG: ${{ steps.reltag.outputs.tag }}
+          REL_BRANCH: ${{ steps.reltag.outputs.branch }}
         run: |
-          TAG="${{ steps.reltag.outputs.tag }}"
+          TAG="$REL_TAG"
           gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" \
             "${{ steps.apk.outputs.path }}" \
-            --title "Vizuzik — APK debug (${{ steps.reltag.outputs.branch }})" \
+            --title "Vizuzik — APK debug ($REL_BRANCH)" \
             --notes "Build automatique non signé, run #${{ github.run_number }} (${{ github.sha }})." \
             --prerelease \
             --target "${{ github.sha }}"
